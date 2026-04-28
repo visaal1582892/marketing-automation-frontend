@@ -27,12 +27,18 @@ export const userStorage = {
 
 const api = axios.create({
   baseURL: apiBaseUrl,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    // ngrok may return an interstitial HTML page for browser requests.
+    // This header forces direct API responses so GET calls don't break.
+    'ngrok-skip-browser-warning': 'true',
+  },
   timeout: 20000,
 })
 
 // Attach JWT to every outgoing request.
 api.interceptors.request.use((config) => {
+  config.headers['ngrok-skip-browser-warning'] = 'true'
   const token = tokenStorage.get()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
