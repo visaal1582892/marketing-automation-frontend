@@ -1,0 +1,507 @@
+﻿import { useEffect, useState } from 'react'
+import campaignsApi from '../api/campaigns'
+import Icon from './Icon'
+import PriorityEditor from './PriorityEditor'
+import { useAuth } from '../auth/AuthContext'
+import { useToast } from './Toast'
+
+/**
+ * Slide-in drawer that shows the *complete* request brief for a campaign.
+ *
+ * Used everywhere a manager / member needs to see the full context of a
+ * request (approvals, QC review, intervention, accept-task) — so people
+ * can make informed decisions without leaving the page.
+ */
+export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChanged }) {
+  const [campaign, setCampaign] = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState(null)
+
+  // Marketing Head / Admin can edit priority directly from the brief.
+  const { isMarketingManager, isAdmin } = useAuth()
+  const toast = useToast()
+  const canEditPriority = isMarketingManager || isAdmin
+
+  const handlePriorityChange = (updated) => {
+    setCampaign(prev => prev ? { ...prev, ...updated } : updated)
+    toast.success?.(`Priority updated to ${updated.priority}.`)
+    onCampaignChanged?.(updated)
+  }
+
+  useEffect(() => {
+    if (!campaignId) return
+    setLoading(true)
+    setError(null)
+    campaignsApi.getById(campaignId)
+      .then(res => setCampaign(res.data))
+      .catch(() => setError('Failed to load request details.'))
+      .finally(() => setLoading(false))
+  }, [campaignId])
+
+  // Lock background scroll while the drawer is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      <div className="flex-1 bg-slate-900/40 transition" onClick={onClose} aria-hidden="true" />
+      <aside className="w-full max-w-2xl bg-slate-50 shadow-2xl overflow-y-auto flex flex-col">
+        <DrawerHeader
+          campaign={campaign}
+          onClose={onClose}
+          canEditPriority={canEditPriority}
+          onPriorityChanged={handlePriorityChange}
+          onPriorityError={(msg) => toast.error?.(msg)}
+        />
+        <div className="flex-1 px-5 py-4 space-y-4">
+          {loading ? (
+            <p className="text-center text-slate-400 py-12 text-sm">Loading full brief…</p>
+          ) : error ? (
+            <p className="text-center text-red-500 py-12 text-sm">{error}</p>
+          ) : campaign ? (
+            <RequestBriefBody campaign={campaign} />
+          ) : null}
+        </div>
+      </aside>
+    </div>
+  )
+}
+
+// ─── Compact header summary used inside confirmation modals ───────────────────
+
+/**
+ * One-glance summary card for use *inside* an action modal (approve, reject,
+ * accept, submit, etc.) — supplements the modal with the most-decision-
+ * relevant brief facts so the actor doesn't have to open the full drawer.
+ */
+export function RequestSummaryCard({ campaign }) {
+  if (!campaign) return null
+  const deliverables = campaign.deliverables?.length ?? null
+  return (
+    <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700 space-y-1.5 ring-1 ring-slate-200">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-mono text-slate-400">#{campaign.campaignId}</span>
+        <span className="font-semibold text-slate-800">{campaign.requirementTypeName || '—'}</span>
+        <PriorityBadge v={campaign.priority} />
+        {campaign.flaggedInconsistency && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200">
+            <Icon name="alertCircle" className="h-3 w-3" /> Inconsistent
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+        <div><span className="text-slate-400">By:</span> <span className="font-medium">{campaign.requestorName || '—'}</span></div>
+        <div><span className="text-slate-400">Dept:</span> <span className="font-medium">{campaign.departmentName || '—'}</span></div>
+        <div><span className="text-slate-400">Budget:</span> <span className="font-medium">{fmtEnum(campaign.budgetTier) || '—'}</span></div>
+        <div><span className="text-slate-400">Deliverables:</span> <span className="font-medium">{deliverables ?? '—'}</span></div>
+      </div>
+      {campaign.keyMessage && (
+        <p className="text-slate-600 text-xs line-clamp-2 mt-1 italic">"{campaign.keyMessage}"</p>
+      )}
+    </div>
+  )
+}
+
+// ─── Internals ───────────────────────────────────────────────────────────────
+
+function DrawerHeader({ campaign, onClose, canEditPriority, onPriorityChanged, onPriorityError }) {
+  // Hide the editor UI on terminal states — the server would reject the edit
+  // anyway, so don't tease the user with a control that won't work.
+  const editablePriority = canEditPriority
+    && campaign
+    && !['COMPLETED', 'REJECTED'].includes(campaign.status)
+
+  return (
+    <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-5 py-4 flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-mono text-slate-400">
+            Request #{campaign?.campaignId ?? '—'}
+          </span>
+          {campaign && <StatusBadge status={campaign.status} />}
+          {campaign && (
+            editablePriority ? (
+              <PriorityEditor
+                campaignId={campaign.campaignId}
+                value={campaign.priority}
+                editable
+                onChanged={onPriorityChanged}
+                onError={onPriorityError}
+              />
+            ) : (
+              <PriorityBadge v={campaign.priority} />
+            )
+          )}
+          {campaign?.flaggedInconsistency && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200">
+              <Icon name="alertCircle" className="h-3 w-3" /> Inconsistent
+            </span>
+          )}
+        </div>
+        <h3 className="mt-1.5 text-base font-bold text-slate-900 truncate">
+          {campaign?.requirementTypeName || 'Request Brief'}
+        </h3>
+        <p className="text-xs text-slate-500 truncate">
+          {campaign?.requestorName || '—'} • {campaign?.departmentName || '—'}
+          {campaign?.createdAt && ` • ${fmtDateTime(campaign.createdAt)}`}
+        </p>
+      </div>
+      <button
+        onClick={onClose}
+        className="rounded p-1.5 text-slate-400 hover:bg-slate-100 transition shrink-0"
+        aria-label="Close brief"
+      >
+        <Icon name="x" className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
+function RequestBriefBody({ campaign: c }) {
+  return (
+    <>
+      {/* Inline alerts */}
+      {c.inconsistencyReason && (
+        <div className="flex items-start gap-2 rounded-lg bg-rose-50 p-2.5 text-xs text-rose-800 ring-1 ring-rose-200">
+          <Icon name="alertCircle" className="h-4 w-4 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold">Inconsistency Detected</div>
+            <div>{c.inconsistencyReason}</div>
+          </div>
+        </div>
+      )}
+      {c.routingNotes && (
+        <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 ring-1 ring-amber-200">
+          <Icon name="alertCircle" className="h-4 w-4 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold">Routing Note</div>
+            <div>{c.routingNotes}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Approval audit trail */}
+      <ApprovalTrail c={c} />
+
+      {/* Brief */}
+      <Section title="Request Details">
+        <Detail label="Business Objective" value={fmtEnum(c.businessObjective)} />
+        <Detail label="Target Location"    value={fmtTargetLocation(c.targetLocation)} />
+        <Detail label="Audience"           value={c.audienceName} />
+        <Detail label="Language"           value={fmtEnum(c.language)} />
+        <Detail label="Tone"               value={fmtEnum(c.tone)} />
+        <Detail label="Supporting Proof"   value={fmtEnum(c.supportingProof)} />
+        <Detail label="Has Offer"          value={c.hasOffer} />
+        {c.hasOffer === 'YES' && <Detail label="Offer Type" value={c.offerTypeName} />}
+        <Detail label="Priority"           value={c.priority} />
+        <Detail label="Budget Tier"        value={fmtEnum(c.budgetTier)} />
+        <Detail label="Vendor Required"    value={c.vendorRequired} />
+        {c.vendorRequired === 'YES' && <Detail label="Vendor Type" value={fmtEnum(c.vendorType)} />}
+        <Detail label="KPI"                value={fmtEnum(c.kpiType)} />
+        <Detail label="Expected Output"    value={fmtEnum(c.expectedOutput)} />
+        <Detail label="Key Message"        value={c.keyMessage} span={3} />
+      </Section>
+
+      {/* Deliverables */}
+      {c.deliverables?.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 px-4 py-2.5 flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-slate-800">Deliverables</h4>
+            <span className="text-xs text-slate-500">{c.deliverables.length}</span>
+          </div>
+          <table className="min-w-full divide-y divide-slate-100 text-xs">
+            <thead className="bg-slate-50">
+              <tr>
+                {['Task', 'Platform', 'Format', 'Qty'].map(h => (
+                  <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {c.deliverables.map(d => (
+                <tr key={d.specId} className="hover:bg-slate-50/60">
+                  <td className="px-3 py-2 font-medium text-slate-800">{d.granularTaskName || d.granularTaskId}</td>
+                  <td className="px-3 py-2 text-slate-600">{d.platformName || '—'}</td>
+                  <td className="px-3 py-2 text-slate-600">{d.formatName || '—'}</td>
+                  <td className="px-3 py-2 text-slate-600">{d.quantity || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Work Tasks */}
+      {c.workTasks?.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 px-4 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold text-slate-800">Work tasks</h4>
+              <span className="text-xs text-slate-500">{c.workTasks.length}</span>
+            </div>
+            <p className="mt-1 text-xs text-slate-500 leading-snug">
+              Assignment, timing, and any <span className="font-medium text-slate-600">task questionnaire</span> answers
+              (from the request form or updated by the assignee).
+            </p>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {c.workTasks.map(t => (
+              <div key={t.taskId} className="px-4 py-2.5 space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-mono text-slate-400">#{t.taskId}</span>
+                    <span className="text-xs font-semibold text-slate-800">{t.granularTaskName || 'Task'}</span>
+                    <TaskBadge status={t.status} />
+                    {t.reworkCount > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 ring-1 ring-orange-200"
+                        title={`Reworked ${t.reworkCount} time${t.reworkCount === 1 ? '' : 's'}`}>
+                        <Icon name="refresh" className="h-2.5 w-2.5" />
+                        {t.reworkCount}× rework
+                      </span>
+                    )}
+                  </div>
+                  {parseAssetUrls(t.assetUrl).length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {parseAssetUrls(t.assetUrl).map((url, i, arr) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                          className="text-brand-600 hover:underline text-xs flex items-center gap-1">
+                          <Icon name="fileText" className="h-3 w-3" />
+                          {arr.length > 1 ? `File ${i + 1}` : 'Submitted file'}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {t.assigneeName ? `Assigned to ${t.assigneeName}` : 'Unassigned'}
+                  {t.totalTimeLoggedMinutes != null && ` • ${t.totalTimeLoggedMinutes} min logged`}
+                </div>
+                <TaskTimestamps task={t} />
+                {t.submissionNotes && (
+                  <div className="rounded-md bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
+                    <span className="text-slate-400 font-medium">Submission notes:</span> {t.submissionNotes}
+                  </div>
+                )}
+                <TaskQuestionnaireBrief items={t.questionnaire} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ─── Tiny subcomponents (kept local for portability) ──────────────────────────
+
+function Section({ title, children }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="border-b border-slate-100 px-4 py-2.5">
+        <h4 className="text-sm font-semibold text-slate-800">{title}</h4>
+      </div>
+      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{children}</div>
+    </div>
+  )
+}
+
+function Detail({ label, value, span = 1 }) {
+  return (
+    <div className={span === 2 ? 'sm:col-span-2' : span === 3 ? 'sm:col-span-3 lg:col-span-3' : ''}>
+      <div className="text-xs text-slate-400 uppercase tracking-wide">{label}</div>
+      <div className="text-xs text-slate-700 font-medium break-words">{value || '—'}</div>
+    </div>
+  )
+}
+
+function StatusBadge({ status }) {
+  const STYLES = {
+    PENDING_DEPT_APPROVAL:      'bg-yellow-50 text-yellow-700 ring-yellow-200',
+    PENDING_MARKETING_APPROVAL: 'bg-orange-50 text-orange-700 ring-orange-200',
+    PENDING_INTERVENTION:       'bg-amber-50 text-amber-700 ring-amber-200',
+    IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
+    QC_REVIEW:                  'bg-purple-50 text-purple-700 ring-purple-200',
+    COMPLETED:                  'bg-green-50 text-green-700 ring-green-200',
+    REJECTED:                   'bg-red-50 text-red-700 ring-red-200',
+  }
+  const LABELS = {
+    PENDING_DEPT_APPROVAL:      'Pending Dept Approval',
+    PENDING_MARKETING_APPROVAL: 'Pending Marketing Approval',
+    PENDING_INTERVENTION:       'Pending Intervention',
+    IN_PROGRESS:                'In Progress',
+    QC_REVIEW:                  'QC Review',
+    COMPLETED:                  'Completed',
+    REJECTED:                   'Rejected',
+  }
+  const cls = STYLES[status] || 'bg-slate-100 text-slate-600'
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{LABELS[status] || status}</span>
+}
+
+function TaskBadge({ status }) {
+  const TASK_STYLES = {
+    ASSIGNED:    'bg-blue-50 text-blue-700 ring-blue-200',
+    IN_PROGRESS: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    REWORK:      'bg-amber-50 text-amber-700 ring-amber-200',
+    QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
+    COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
+  }
+  const TASK_LABELS = {
+    ASSIGNED: 'Assigned', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
+    QC_REVIEW: 'In QC',   COMPLETED: 'Completed',
+  }
+  const cls = TASK_STYLES[status] || 'bg-slate-100 text-slate-600'
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{TASK_LABELS[status] || status}</span>
+}
+
+function PriorityBadge({ v }) {
+  const m = { HIGH: 'bg-red-50 text-red-700 ring-red-200', MEDIUM: 'bg-yellow-50 text-yellow-700 ring-yellow-200', LOW: 'bg-green-50 text-green-700 ring-green-200' }
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || '—'}</span>
+}
+
+function ApprovalTrail({ c }) {
+  // Don't render the trail at all if no decisions have been made yet — keeps
+  // the drawer clean while a request is still freshly submitted.
+  const hasAny = c.deptDecision || c.marketingDecision || c.interventionDecision
+  if (!hasAny) return null
+
+  const Stage = ({ label, decision, byName, at }) => (
+    <div className="flex items-center gap-2 flex-wrap text-xs">
+      <span className="text-slate-400 w-[110px] shrink-0">{label}</span>
+      {decision === 'APPROVED' && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+          <Icon name="check" className="h-3 w-3" /> Approved
+        </span>
+      )}
+      {decision === 'REJECTED' && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200">
+          <Icon name="x" className="h-3 w-3" /> Rejected
+        </span>
+      )}
+      {!decision && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+          Pending
+        </span>
+      )}
+      {byName && <span className="text-slate-600">by <span className="font-medium">{byName}</span></span>}
+      {at && <span className="text-slate-400">• {fmtDateTime(at)}</span>}
+    </div>
+  )
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="border-b border-slate-100 px-4 py-2.5">
+        <h4 className="text-sm font-semibold text-slate-800">Approval Trail</h4>
+      </div>
+      <div className="p-4 space-y-2">
+        <Stage
+          label="Department"
+          decision={c.deptDecision}
+          byName={c.deptDecisionByName}
+          at={c.deptDecisionAt}
+        />
+        <Stage
+          label="Marketing"
+          decision={c.marketingDecision}
+          byName={c.marketingDecisionByName}
+          at={c.marketingDecisionAt}
+        />
+        {c.interventionDecision && (
+          // Manager intervention rejection — recorded in its own audit slot
+          // so the original marketing-stage approval row is preserved.
+          <Stage
+            label="Intervention"
+            decision={c.interventionDecision}
+            byName={c.interventionDecisionByName}
+            at={c.interventionDecisionAt}
+          />
+        )}
+        {c.rejectionReason && (
+          c.deptDecision === 'REJECTED' ||
+          c.marketingDecision === 'REJECTED' ||
+          c.interventionDecision === 'REJECTED'
+        ) && (
+          <div className="mt-2 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-800 ring-1 ring-rose-200">
+            <span className="font-semibold">Rejection reason:</span> {c.rejectionReason}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Renders requestor/worker answers for dynamic questions on this work task (from campaign API). */
+function TaskQuestionnaireBrief({ items }) {
+  if (!items?.length) return null
+  return (
+    <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-2.5 space-y-2">
+      <div className="text-xs font-semibold uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+        <Icon name="clipboard" className="h-3 w-3 shrink-0" />
+        Task-specific Q&amp;A
+      </div>
+      <ul className="space-y-2.5">
+        {items.map((row) => (
+          <li key={row.questionId} className="text-xs">
+            <div className="text-slate-600 font-medium leading-snug">{row.questionText}</div>
+            <div className="text-slate-900 mt-0.5 whitespace-pre-wrap break-words">
+              {row.answerDisplay ?? '—'}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function TaskTimestamps({ task }) {
+  const steps = [
+    { key: 'assigned',  icon: 'inbox', label: 'Assigned',  ts: task.assignedAt || task.createdAt },
+    { key: 'accepted',  icon: 'play',  label: 'Accepted',  ts: task.acceptedAt },
+    { key: 'submitted', icon: 'send',  label: 'Submitted', ts: task.submittedAt },
+    { key: 'approved',  icon: 'check', label: 'Approved',  ts: task.completedAt },
+  ]
+  return (
+    <div className="rounded-md bg-slate-50 px-2.5 py-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+      {steps.map(s => (
+        <div key={s.key} className="flex items-center gap-1">
+          <Icon name={s.icon} className={`h-3 w-3 ${s.ts ? 'text-emerald-600' : 'text-slate-300'}`} />
+          <span className={`font-medium ${s.ts ? 'text-slate-700' : 'text-slate-400'}`}>{s.label}:</span>
+          <span className={s.ts ? 'text-slate-600' : 'text-slate-400'}>
+            {s.ts
+              ? new Date(s.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+              : '—'}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Parses task.assetUrl which may be a JSON array or a plain URL string. */
+function parseAssetUrls(assetUrl) {
+  if (!assetUrl) return []
+  try {
+    const parsed = JSON.parse(assetUrl)
+    if (Array.isArray(parsed)) return parsed
+  } catch { /* not JSON — plain URL */ }
+  return [assetUrl]
+}
+
+function fmtEnum(v) {
+  return v ? String(v).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : ''
+}
+function fmtDateTime(d) {
+  return d ? new Date(d).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : ''
+}
+/** target_location is stored as a JSON-string of city names — pretty-print it. */
+function fmtTargetLocation(raw) {
+  if (!raw) return ''
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return parsed.join(', ')
+  } catch { /* fall through — raw was not JSON */ }
+  return raw
+}

@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/* MedPlus Brand Theme                                                */
+/*   • brand   = MedPlus red       (primary, derived from #C2181D)    */
+/*   • accent  = MedPlus green     (success / cross, from #32A94C)    */
+/*   • surface = warm-neutral grays for backgrounds                   */
+/* ------------------------------------------------------------------ */
+@theme {
+  /* Brand red palette */
+  --color-brand-50:  #fef2f2;
+  --color-brand-100: #fde3e3;
+  --color-brand-200: #fbcaca;
+  --color-brand-300: #f7a3a3;
+  --color-brand-400: #ef6f6f;
+  --color-brand-500: #e24545;
+  --color-brand-600: #c2181d;   /* primary brand */
+  --color-brand-700: #a31418;
+  --color-brand-800: #871418;
+  --color-brand-900: #71161a;
+  --color-brand-950: #3d0709;
+
+  /* Accent green palette (the medical cross) */
+  --color-accent-50:  #f0faf2;
+  --color-accent-100: #dcf3e0;
+  --color-accent-200: #bbe7c4;
+  --color-accent-300: #88d39a;
+  --color-accent-400: #54b96e;
+  --color-accent-500: #32a94c;   /* primary accent */
+  --color-accent-600: #268a3c;
+  --color-accent-700: #206d31;
+  --color-accent-800: #1d572a;
+  --color-accent-900: #194724;
+  --color-accent-950: #0a2611;
+
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ------------------------------------------------------------------ */
+/* Base reset — industry-standard type scale                          */
+/*   :root  = 16px  (Tailwind rem anchor: text-sm=14px, text-base=16px, …) */
+/*   body   = 15px  (comfortable reading baseline for B2B dashboards)  */
+/*   line-height 1.6 = WCAG-friendly leading                           */
+/* ------------------------------------------------------------------ */
+:root { font-size: 16px; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  background-color: #f8fafc; /* slate-50 */
+  color: #0f172a;            /* slate-900 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Inputs default to body density unless overridden */
+input, select, textarea, button { font-size: inherit; }
+
+/* Subtle scrollbar */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Selection follows the brand */
+::selection {
+  background-color: #fde3e3;
+  color: #71161a;
+}
