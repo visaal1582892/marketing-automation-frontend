@@ -9,8 +9,8 @@ export default function LoginPage() {
   const location = useLocation()
   const from = location.state?.from?.pathname || '/dashboard'
 
-  const [email, setEmail]       = useState('admin@medplus.com')
-  const [password, setPassword] = useState('password123')
+  const [email, setEmail]       = useState('')
+  const [password, setPassword] = useState('')
   const [showPwd, setShowPwd]   = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]       = useState(
@@ -170,11 +170,6 @@ export default function LoginPage() {
               {submitting ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
-
-          <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs text-slate-600">
-            <div className="font-semibold text-slate-700">Default admin credentials</div>
-            <div className="mt-0.5 font-mono text-slate-500">admin@medplus.com / password123</div>
-          </div>
 
           <p className="mt-7 text-center text-xs text-slate-400 lg:hidden">
             © {new Date().getFullYear()} MedPlus Health Services
