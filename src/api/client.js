@@ -2,6 +2,13 @@ import axios from 'axios'
 
 const TOKEN_KEY = 'ma_token'
 const USER_KEY  = 'ma_user'
+const DEFAULT_BACKEND_URL = 'https://parking-polio-robbing.ngrok-free.dev'
+
+const configuredBaseUrl = (import.meta.env.VITE_API_BASE_URL || DEFAULT_BACKEND_URL).trim()
+const normalisedBaseUrl = configuredBaseUrl.replace(/\/+$/, '')
+const apiBaseUrl = normalisedBaseUrl.endsWith('/api')
+  ? normalisedBaseUrl
+  : `${normalisedBaseUrl}/api`
 
 export const tokenStorage = {
   get:  () => localStorage.getItem(TOKEN_KEY),
@@ -19,7 +26,7 @@ export const userStorage = {
 }
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: apiBaseUrl,
   headers: { 'Content-Type': 'application/json' },
   timeout: 20000,
 })
