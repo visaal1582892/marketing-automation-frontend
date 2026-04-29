@@ -13,11 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPwd, setShowPwd]   = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError]       = useState(
-    new URLSearchParams(location.search).get('reason') === 'forbidden'
-      ? 'Your session does not have permission for that page. Please sign in as an admin.'
-      : ''
-  )
+  const [error, setError]       = useState('')
 
   if (isAuthenticated) navigate(from, { replace: true })
 

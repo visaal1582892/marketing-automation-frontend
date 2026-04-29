@@ -58,7 +58,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, onSaved }) 
   const blank = {
     fullName: '', email: '', password: '',
     roleId: '', departmentId: '',
-    skillLevel: 'JUNIOR', maxWorkloadCapacity: 10, status: 'ACTIVE',
+    skillLevel: 'JUNIOR', status: 'ACTIVE',
   }
   const [form, setForm] = useState(blank)
   const [saving, setSaving] = useState(false)
@@ -74,7 +74,6 @@ function UserFormModal({ open, onClose, initial, roles, departments, onSaved }) 
           roleId: initial.roleId || '',
           departmentId: initial.departmentId || '',
           skillLevel: initial.skillLevel || 'JUNIOR',
-          maxWorkloadCapacity: initial.maxWorkloadCapacity ?? 10,
           status: initial.status || 'ACTIVE',
         })
       } else {
@@ -118,9 +117,9 @@ function UserFormModal({ open, onClose, initial, roles, departments, onSaved }) 
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit User' : 'Add User'} maxWidth="max-w-2xl">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {/* Full Name */}
-          <div className="col-span-2 sm:col-span-1">
+          <div className="sm:col-span-1">
             <label className={labelCls}>Full Name *</label>
             <input
               required
@@ -132,7 +131,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, onSaved }) 
           </div>
 
           {/* Email */}
-          <div className="col-span-2 sm:col-span-1">
+          <div className="sm:col-span-1">
             <label className={labelCls}>Email *</label>
             <input
               required
@@ -145,7 +144,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, onSaved }) 
           </div>
 
           {/* Password */}
-          <div className="col-span-2 sm:col-span-1">
+          <div className="sm:col-span-1">
             <label className={labelCls}>
               Password {isEdit ? '(leave blank to keep current)' : '*'}
             </label>
@@ -169,7 +168,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, onSaved }) 
           </div>
 
           {/* Role */}
-          <div className="col-span-2 sm:col-span-1">
+          <div className="sm:col-span-1">
             <label className={labelCls}>Role</label>
             <select
               className={inputCls}
@@ -184,7 +183,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, onSaved }) 
           </div>
 
           {/* Department */}
-          <div className="col-span-2 sm:col-span-1">
+          <div className="sm:col-span-1">
             <label className={labelCls}>Department</label>
             <select
               className={inputCls}
@@ -199,7 +198,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, onSaved }) 
           </div>
 
           {/* Skill Level */}
-          <div className="col-span-2 sm:col-span-1">
+          <div className="sm:col-span-1">
             <label className={labelCls}>Skill Level</label>
             <select
               className={inputCls}
@@ -210,19 +209,6 @@ function UserFormModal({ open, onClose, initial, roles, departments, onSaved }) 
                 <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
               ))}
             </select>
-          </div>
-
-          {/* Max Workload */}
-          <div className="col-span-2 sm:col-span-1">
-            <label className={labelCls}>Max Workload Capacity</label>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              className={inputCls}
-              value={form.maxWorkloadCapacity}
-              onChange={e => set('maxWorkloadCapacity', Number(e.target.value))}
-            />
           </div>
 
           {/* Status (edit only) */}
@@ -242,20 +228,20 @@ function UserFormModal({ open, onClose, initial, roles, departments, onSaved }) 
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <div className="flex flex-col-reverse gap-2 pt-2 border-t border-slate-100 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium
-                       text-slate-700 transition hover:bg-slate-50"
+            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium
+                       text-slate-700 transition hover:bg-slate-50 sm:w-auto"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white
-                       shadow-sm transition hover:bg-brand-700 disabled:opacity-60"
+            className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white
+                       shadow-sm transition hover:bg-brand-700 disabled:opacity-60 sm:w-auto"
           >
             {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create User'}
           </button>
@@ -407,8 +393,8 @@ export default function UserManagementPage() {
   return (
     <div className="space-y-3">
       {/* ── Add button row ── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-slate-500">
             {filtered.length} of {users.length} user{users.length !== 1 ? 's' : ''}
           </span>
@@ -424,8 +410,8 @@ export default function UserManagementPage() {
         </div>
         <button
           onClick={() => setEditing(false)}
-          className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-1.5 text-sm
-                     font-medium text-white shadow-sm transition hover:bg-brand-700"
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-1.5 text-sm
+                     font-medium text-white shadow-sm transition hover:bg-brand-700 sm:w-auto"
         >
           <Icon name="plus" className="h-4 w-4" />
           Add User
@@ -440,7 +426,7 @@ export default function UserManagementPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[1150px] text-sm">
               <thead className="border-b border-slate-200 bg-slate-50">
                 {/* ── Column labels ── */}
                 <tr>
@@ -451,7 +437,7 @@ export default function UserManagementPage() {
                   <th className={th}>Department</th>
                   <th className={th}>Password</th>
                   <th className={th}>Skill</th>
-                  <th className="px-3 pt-3 pb-1 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Capacity</th>
+                  <th className="px-3 pt-3 pb-1 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Active Tasks</th>
                   <th className={th}>Status</th>
                   <th className="px-3 pt-3 pb-1 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
                 </tr>
@@ -502,12 +488,8 @@ export default function UserManagementPage() {
                       <td className="px-3 py-2.5 text-slate-500 capitalize">
                         {u.skillLevel ? u.skillLevel.charAt(0) + u.skillLevel.slice(1).toLowerCase() : '—'}
                       </td>
-                      <td className="px-3 py-2.5 text-center">
-                        <span className="text-slate-600">
-                          {u.currentActiveTasks ?? 0}
-                          <span className="text-slate-300"> / </span>
-                          {u.maxWorkloadCapacity ?? '—'}
-                        </span>
+                      <td className="px-3 py-2.5 text-center text-slate-600">
+                        {u.currentActiveTasks ?? 0}
                       </td>
                       <td className="px-3 py-2.5">
                         <StatusBadge status={u.status} />
@@ -562,19 +544,19 @@ export default function UserManagementPage() {
             <span className="font-semibold text-slate-800">{deleting?.fullName}</span>?
             This action cannot be undone.
           </p>
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
             <button
               onClick={() => setDeleting(null)}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm
-                         font-medium text-slate-700 transition hover:bg-slate-50"
+              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm
+                         font-medium text-slate-700 transition hover:bg-slate-50 sm:w-auto"
             >
               Cancel
             </button>
             <button
               onClick={handleDelete}
               disabled={deleteLoading}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white
-                         shadow-sm transition hover:bg-red-700 disabled:opacity-60"
+              className="w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white
+                         shadow-sm transition hover:bg-red-700 disabled:opacity-60 sm:w-auto"
             >
               {deleteLoading ? 'Deleting…' : 'Delete'}
             </button>

@@ -41,6 +41,13 @@ const campaignsApi = {
   historyMarketing: () => api.get(`${BASE}/history/marketing`),
 
   /**
+   * Requestor (owner) appends new task deliverables to an existing campaign,
+   * including task-specific questionnaire answers.
+   * specs: [{ granularTaskId, questionnaireAnswers: [{questionId, answerValue}] }]
+   */
+  addTasks: (id, specs) => api.post(`${BASE}/${id}/add-tasks`, specs),
+
+  /**
    * Marketing Head or Admin edits campaign fields (priority, keyMessage, budgetTier).
    * Server re-evaluates the inconsistency flag automatically.
    */

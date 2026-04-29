@@ -246,9 +246,7 @@ function InterventionCard({ campaign, busy, onRetry, onOverride, onReject, onVie
 
 function OverrideModal({ campaign, users, form, setForm, saving, onCancel, onConfirm }) {
   const candidates = useMemo(() =>
-    users
-      .filter(u => u.maxWorkloadCapacity > 0)
-      .sort((a, b) => (a.currentActiveTasks || 0) - (b.currentActiveTasks || 0)),
+    [...users].sort((a, b) => (a.currentActiveTasks || 0) - (b.currentActiveTasks || 0)),
     [users])
 
   const deliverables = (campaign.deliverables || [])
@@ -302,7 +300,7 @@ function OverrideModal({ campaign, users, form, setForm, saving, onCancel, onCon
             <option value="">Select user…</option>
             {candidates.map(u => (
               <option key={u.userId} value={u.userId}>
-                {u.fullName} — {u.roleName || '—'} ({u.currentActiveTasks ?? 0}/{u.maxWorkloadCapacity})
+                {u.fullName} — {u.roleName || '—'} ({u.currentActiveTasks ?? 0} active tasks)
               </option>
             ))}
           </select>

@@ -12,10 +12,13 @@ const managerApi = {
   taskHistory:  (id)      => api.get(`${BASE}/tasks/${id}/history`),
 
   // ── Capacity / Hold (Module 2-B redesign) ─────────────────────────────────
-  campaignCapacity: (campaignId) => api.get(`${BASE}/campaigns/${campaignId}/capacity`),
-  holdTask:   (taskId) => api.post(`${BASE}/tasks/${taskId}/hold`),
-  unholdTask: (taskId) => api.post(`${BASE}/tasks/${taskId}/unhold`),
-  heldTasks:  ()       => api.get(`${BASE}/tasks/held`),
+  campaignCapacity:     (campaignId) => api.get(`${BASE}/campaigns/${campaignId}/capacity`),
+  holdTask:             (taskId)     => api.post(`${BASE}/tasks/${taskId}/hold`),
+  unholdTask:           (taskId)     => api.post(`${BASE}/tasks/${taskId}/unhold`),
+  cancelTask:           (taskId)     => api.post(`${BASE}/tasks/${taskId}/cancel`),
+  heldTasks:            ()           => api.get(`${BASE}/tasks/held`),
+  eligibleUsersForTask: (taskId)     => api.get(`${BASE}/tasks/${taskId}/eligible-users`),
+  assignHeldTask:       (taskId, userId) => api.post(`${BASE}/tasks/${taskId}/assign`, { userId }),
 
   // ── Capacity dashboard ─────────────────────────────────────────────────────
   capacity: (roleId) => api.get(`${BASE}/capacity`, { params: roleId ? { roleId } : {} }),

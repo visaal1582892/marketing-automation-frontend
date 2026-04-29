@@ -371,11 +371,11 @@ function BusyTeamModal({ campaign: c, report, holdingTaskId, onHoldTask, onAppro
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-100">
                 <Icon name="alertCircle" className="h-4 w-4 text-amber-600" />
               </span>
-              <h3 className="text-base font-semibold text-slate-900">Team Capacity Full</h3>
+              <h3 className="text-base font-semibold text-slate-900">No Team Members Available</h3>
             </div>
             <p className="mt-1 text-xs text-slate-500 ml-9">
-              Some roles needed for <span className="font-medium text-slate-700">#{c.campaignId} — {c.requirementTypeName}</span> have no available slots.
-              Hold a low-priority task below to free a slot, then approve.
+              Some roles needed for <span className="font-medium text-slate-700">#{c.campaignId} — {c.requirementTypeName}</span> have no active members.
+              Please add users to the required roles, then approve.
             </p>
           </div>
           <button onClick={onClose} className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 transition">
@@ -415,7 +415,7 @@ function BusyTeamModal({ campaign: c, report, holdingTaskId, onHoldTask, onAppro
             <button
               onClick={onApprove}
               disabled={!report.canRoute}
-              title={report.canRoute ? 'Capacity is available — approve now' : 'Free at least one slot first'}
+              title={report.canRoute ? 'Team members available — approve now' : 'Add team members to required roles first'}
               className={`flex items-center gap-1.5 rounded-lg px-5 py-2 text-sm font-semibold text-white transition
                 ${report.canRoute
                   ? 'bg-green-600 hover:bg-green-700'
@@ -450,7 +450,7 @@ function RoleCapacityCard({ role, holdingTaskId, onHoldTask }) {
             {role.blocked ? 'Blocked' : 'Available'}
           </span>
           <span className="text-xs text-slate-500">
-            Needs {role.requiredSlots} slot{role.requiredSlots !== 1 ? 's' : ''} · {role.availableSlots} free
+              Needs {role.requiredSlots} assignee{role.requiredSlots !== 1 ? 's' : ''} · {role.availableSlots} member{role.availableSlots !== 1 ? 's' : ''} available
           </span>
         </div>
         <Icon
@@ -481,8 +481,6 @@ function RoleCapacityCard({ role, holdingTaskId, onHoldTask }) {
 
 function UserRow({ user, holdingTaskId, onHoldTask }) {
   const [showTasks, setShowTasks] = useState(false)
-  const free = (user.maxWorkloadCapacity || 0) - (user.currentActiveTasks || 0)
-  const isFull = free <= 0
   const holdableTasks = user.openTasks || []
 
   return (
@@ -496,9 +494,7 @@ function UserRow({ user, holdingTaskId, onHoldTask }) {
           <div className="min-w-0">
             <div className="text-sm font-medium text-slate-800 truncate">{user.fullName}</div>
             <div className="text-xs text-slate-500">
-              {user.currentActiveTasks ?? 0}/{user.maxWorkloadCapacity ?? 0} tasks
-              {isFull && <span className="ml-1 text-rose-600 font-medium">· Full</span>}
-              {!isFull && <span className="ml-1 text-emerald-600 font-medium">· {free} free</span>}
+              {user.currentActiveTasks ?? 0} active task{(user.currentActiveTasks ?? 0) !== 1 ? 's' : ''}
             </div>
           </div>
         </div>

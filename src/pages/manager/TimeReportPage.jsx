@@ -76,9 +76,9 @@ export default function TimeReportPage() {
 
   const exportCsv = () => {
     if (rows.length === 0) return
-    const headers = ['User', 'Role', 'Active', 'Capacity', 'Total', 'Completed', 'In Flight', 'Minutes Logged']
+    const headers = ['User', 'Role', 'Active Tasks', 'Total', 'Completed', 'In Flight', 'Minutes Logged']
     const lines = [headers.join(',')].concat(rows.map(r => [
-      escape(r.full_name), escape(r.role_name), r.current_active_tasks ?? 0, r.max_workload_capacity ?? 0,
+      escape(r.full_name), escape(r.role_name), r.current_active_tasks ?? 0,
       r.total_tasks ?? 0, r.completed_tasks ?? 0, r.in_flight_tasks ?? 0, r.minutes_logged ?? 0,
     ].join(',')))
     const csv = lines.join('\n')
@@ -156,7 +156,7 @@ export default function TimeReportPage() {
           <thead className="bg-slate-50">
             {/* Column headers */}
             <tr>
-              {['User', 'Role', 'Workload', 'Total', 'Completed', 'In Flight', 'Time Logged'].map(h => (
+              {['User', 'Role', 'Active Tasks', 'Total', 'Completed', 'In Flight', 'Time Logged'].map(h => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
               ))}
             </tr>
@@ -238,11 +238,8 @@ export default function TimeReportPage() {
               <tr key={r.user_id} className="hover:bg-slate-50/60">
                 <td className="px-4 py-2.5 font-medium text-slate-800">{r.full_name}</td>
                 <td className="px-4 py-2.5 text-slate-600">{r.role_name || '—'}</td>
-                <td className="px-4 py-2.5">
-                  <CapacityBar
-                    active={Number(r.current_active_tasks ?? 0)}
-                    cap={Number(r.max_workload_capacity ?? 0)}
-                  />
+                <td className="px-4 py-2.5 text-slate-700 tabular-nums">
+                  {r.current_active_tasks ?? 0}
                 </td>
                 <td className="px-4 py-2.5 text-slate-700 tabular-nums">{r.total_tasks ?? 0}</td>
                 <td className="px-4 py-2.5 text-emerald-700 tabular-nums">{r.completed_tasks ?? 0}</td>

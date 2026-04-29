@@ -5,15 +5,23 @@ import api from './client'
  * `slug` matches the backend path under /api/master/{slug}.
  */
 export const MASTER_RESOURCES = [
-  { slug: 'departments',       label: 'Departments',       icon: 'building',  prefix: 'DEPT' },
-  { slug: 'roles',             label: 'Roles',             icon: 'shield',    prefix: 'ROLE' },
-  { slug: 'requirement-types', label: 'Requirement Types', icon: 'clipboard', prefix: 'REQ'  },
-  { slug: 'task-types',        label: 'Task Types',        icon: 'list',      prefix: 'TASK' },
-  { slug: 'regions',           label: 'Regions',           icon: 'globe',     prefix: 'REG'  },
-  { slug: 'audiences',         label: 'Audiences',         icon: 'users',     prefix: 'AUD'  },
-  { slug: 'platforms',         label: 'Platforms',         icon: 'megaphone', prefix: 'PLAT' },
-  { slug: 'creative-formats',  label: 'Creative Formats',  icon: 'image',     prefix: 'FMT'  },
-  { slug: 'offer-types',       label: 'Offer Types',       icon: 'megaphone', prefix: 'OFR'  },
+  // Structural / configuration
+  { slug: 'departments',         label: 'Departments',         icon: 'building'  },
+  { slug: 'roles',               label: 'Roles',               icon: 'shield'    },
+  { slug: 'requirement-types',   label: 'Requirement Types',   icon: 'clipboard' },
+  { slug: 'task-types',          label: 'Task Types',          icon: 'list'      },
+  { slug: 'regions',             label: 'Regions',             icon: 'globe'     },
+  // Form field dropdowns — all master-table driven
+  { slug: 'audiences',           label: 'Audience Types',      icon: 'users'     },
+  { slug: 'business-objectives', label: 'Business Objectives', icon: 'target'    },
+  { slug: 'languages',           label: 'Languages',           icon: 'globe'     },
+  { slug: 'tones',               label: 'Tone / Style',        icon: 'mic'       },
+  { slug: 'offer-types',         label: 'Offer Types',         icon: 'tag'       },
+  { slug: 'supporting-proofs',   label: 'Supporting Proofs',   icon: 'fileText'  },
+  { slug: 'budget-tiers',        label: 'Budget Tiers',        icon: 'dollar'    },
+  { slug: 'vendor-types',        label: 'Vendor Types',        icon: 'truck'     },
+  { slug: 'kpi-types',           label: 'KPI Types',           icon: 'barChart'  },
+  { slug: 'expected-outputs',    label: 'Expected Outputs',    icon: 'download'  },
 ]
 
 export const findResource = (slug) =>

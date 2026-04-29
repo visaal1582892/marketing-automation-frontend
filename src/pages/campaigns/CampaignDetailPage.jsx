@@ -59,7 +59,7 @@ export default function CampaignDetailPage() {
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           onClick={() => navigate(-1)}
           className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900"
@@ -108,55 +108,59 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
-      {/* Brief */}
-      <Section title="Brief">
-        <Detail label="Business Objective" value={fmtEnum(c.businessObjective)} />
-        <Detail label="Target Location"    value={c.targetLocation} />
-        <Detail label="Audience"           value={c.audienceName} />
-        <Detail label="Language"           value={fmtEnum(c.language)} />
-        <Detail label="Tone"               value={fmtEnum(c.tone)} />
-        <Detail label="Key Message"        value={c.keyMessage} span={2} />
-        <Detail label="Supporting Proof"   value={fmtEnum(c.supportingProof)} />
-        <Detail label="Has Offer"          value={c.hasOffer} />
-        {c.hasOffer === 'YES' && <Detail label="Offer Type" value={c.offerTypeName} />}
-        <Detail label="Budget"             value={fmtEnum(c.budgetTier)} />
-        <Detail label="Vendor Required"    value={c.vendorRequired} />
-        {c.vendorRequired === 'YES' && <Detail label="Vendor Type" value={fmtEnum(c.vendorType)} />}
-        <Detail label="KPI"                value={fmtEnum(c.kpiType)} />
-        <Detail label="Expected Output"    value={fmtEnum(c.expectedOutput)} />
-      </Section>
+      {/* ── Section 1: Campaign Overview ── */}
+      <BriefSection title="Campaign Overview">
+        {/* Row 1: type + objective fills row cleanly */}
+        <Detail label="Requirement Type"   value={c.requirementTypeName} />
+        <Detail label="Business Objective" value={c.businessObjective} span={2} />
+        {/* Row 2: location spans full width so multiple cities don't get clipped */}
+        <Detail label="Target Location"    value={fmtTargetLocation(c.targetLocation)} span={3} />
+        {/* Row 3: audience trio */}
+        <Detail label="Audience Type"      value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
+        <Detail label="Language"           value={fmtMultiValue(c.language)} />
+        <Detail label="Tone / Style"       value={fmtMultiValue(c.tone)} />
+      </BriefSection>
+
+      {/* ── Section 2: Message & Offer ── */}
+      <BriefSection title="Message & Offer">
+        <Detail label="Key Message"      value={c.keyMessage}                         span={3} />
+        <Detail label="Supporting Proof" value={c.supportingProof} />
+        <Detail label="Has Offer"        value={c.hasOffer} />
+        <Detail label="Offer Type"       value={c.offerTypeId || c.offerTypeName} />
+      </BriefSection>
+
+      {/* ── Section 3: Budget & Goals ── */}
+      <BriefSection title="Budget & Goals">
+        <Detail label="Budget Tier"     value={c.budgetTier} />
+        <Detail label="KPI Type"        value={c.kpiType} />
+        <Detail label="Expected Output" value={c.expectedOutput} />
+        <Detail label="Vendor Required" value={c.vendorRequired} />
+        <Detail label="Vendor Type"     value={fmtMultiValue(c.vendorType)} span={2} />
+      </BriefSection>
 
       {/* Deliverables */}
       {c.deliverables?.length > 0 && (
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-3">
+          <div className="border-b border-slate-100 px-5 py-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-800">Deliverables</h3>
+            <span className="text-xs text-slate-500">{c.deliverables.length}</span>
           </div>
-          <table className="min-w-full divide-y divide-slate-100 text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                {['Task', 'Platform', 'Format', 'Quantity'].map(h => (
-                  <th key={h} className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {c.deliverables.map(d => (
-                <tr key={d.specId} className="hover:bg-slate-50/60">
-                  <td className="px-4 py-2 font-medium text-slate-800">{d.granularTaskName || d.granularTaskId}</td>
-                  <td className="px-4 py-2 text-slate-600">{d.platformName || '—'}</td>
-                  <td className="px-4 py-2 text-slate-600">{d.formatName || '—'}</td>
-                  <td className="px-4 py-2 text-slate-600">{d.quantity || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul className="divide-y divide-slate-100">
+            {c.deliverables.map((d, i) => (
+              <li key={d.specId ?? i} className="flex items-center gap-3 px-5 py-3">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-700 shrink-0">
+                  {i + 1}
+                </span>
+                <span className="text-sm font-medium text-slate-800">{d.granularTaskName || d.granularTaskId}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
       {/* Work Tasks */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3 flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3">
           <h3 className="text-sm font-semibold text-slate-800">Work Tasks</h3>
           <span className="text-xs text-slate-500">{c.workTasks?.length || 0} created</span>
         </div>
@@ -165,7 +169,8 @@ export default function CampaignDetailPage() {
         ) : (
           <div className="divide-y divide-slate-100">
             {c.workTasks.map(t => (
-              <div key={t.taskId} className="px-5 py-3 space-y-2">
+              <div key={t.taskId} className="px-5 py-4 space-y-2.5">
+                {/* Task header */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex-1 min-w-[200px]">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -174,20 +179,45 @@ export default function CampaignDetailPage() {
                         {t.granularTaskName || 'Task'}
                       </span>
                       <TaskBadge status={t.status} />
+                      {t.reworkCount > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 ring-1 ring-orange-200">
+                          <Icon name="refresh" className="h-2.5 w-2.5" />
+                          {t.reworkCount}× rework
+                        </span>
+                      )}
                     </div>
                     <div className="mt-0.5 text-xs text-slate-500">
                       {t.assigneeName ? `Assigned to ${t.assigneeName}` : 'Unassigned'}
                       {t.totalTimeLoggedMinutes != null && ` • ${t.totalTimeLoggedMinutes} min logged`}
                     </div>
                   </div>
-                  {t.assetUrl && (
-                    <a href={t.assetUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline text-xs flex items-center gap-1">
-                      <Icon name="fileText" className="h-3.5 w-3.5" /> View asset
-                    </a>
+                  {/* Asset links */}
+                  {parseAssetUrls(t.assetUrl).length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {parseAssetUrls(t.assetUrl).map((url, i, arr) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                          className="text-brand-600 hover:underline text-xs flex items-center gap-1">
+                          <Icon name="fileText" className="h-3.5 w-3.5" />
+                          {arr.length > 1 ? `File ${i + 1}` : 'View submitted file'}
+                        </a>
+                      ))}
+                    </div>
                   )}
                 </div>
 
+                {/* Timeline */}
                 <TaskTimestamps task={t} />
+
+                {/* Submission notes */}
+                {t.submissionNotes && (
+                  <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700 ring-1 ring-slate-100">
+                    <span className="text-slate-400 font-medium">Submission notes: </span>
+                    {t.submissionNotes}
+                  </div>
+                )}
+
+                {/* Task-specific Q&A */}
+                <TaskQuestionnaireBrief items={t.questionnaire} />
               </div>
             ))}
           </div>
@@ -197,15 +227,30 @@ export default function CampaignDetailPage() {
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Shared sub-components ────────────────────────────────────────────────────
 
+/** Card section for work-task blocks (full-width header + content). */
 function Section({ title, children }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="border-b border-slate-100 px-5 py-3">
         <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
       </div>
-      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="p-5">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/** Brief section — compact header with a 3-column detail grid underneath. */
+function BriefSection({ title, children }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="border-b border-slate-100 bg-slate-50 px-5 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</span>
+      </div>
+      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
         {children}
       </div>
     </div>
@@ -213,10 +258,31 @@ function Section({ title, children }) {
 }
 
 function Detail({ label, value, span = 1 }) {
+  const cls = span === 3 ? 'sm:col-span-2 lg:col-span-3' : span === 2 ? 'sm:col-span-2' : ''
   return (
-    <div className={span === 2 ? 'sm:col-span-2' : span === 3 ? 'sm:col-span-3' : ''}>
-      <div className="text-xs text-slate-400 uppercase tracking-wide">{label}</div>
-      <div className="text-sm text-slate-700 font-medium">{value || '—'}</div>
+    <div className={cls}>
+      <div className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">{label}</div>
+      <div className="text-sm text-slate-800 font-medium break-words">{value || '—'}</div>
+    </div>
+  )
+}
+
+function TaskQuestionnaireBrief({ items }) {
+  if (!items?.length) return null
+  return (
+    <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-2.5 space-y-2">
+      <div className="text-xs font-semibold uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+        <Icon name="clipboard" className="h-3 w-3 shrink-0" />
+        Task-specific Q&amp;A
+      </div>
+      <ul className="space-y-2.5">
+        {items.map((row) => (
+          <li key={row.questionId} className="text-xs">
+            <div className="text-slate-600 font-medium leading-snug">{row.questionText}</div>
+            <div className="text-slate-900 mt-0.5 break-words">{row.answerDisplay ?? '—'}</div>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -234,13 +300,38 @@ function PriorityBadge({ v }) {
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || '—'}</span>
 }
 
-function fmtEnum(v) { return v ? String(v).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '' }
-function fmtDate(d) { return d ? new Date(d).toLocaleString('en-IN') : '' }
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Parses target_location (stored as JSON array or plain string) into readable text. */
+function fmtTargetLocation(raw) {
+  if (!raw) return ''
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return parsed.join(', ')
+  } catch { /* fall through */ }
+  return raw
+}
 
 /**
- * Renders the four lifecycle timestamps for a work task in a compact row.
- * Steps that haven't happened yet appear greyed out with an em-dash.
+ * Multi-select fields are stored as comma-separated display names.
+ * Renders them as a readable comma-joined string.
  */
+function fmtMultiValue(v) {
+  if (!v) return ''
+  return String(v).split(',').map(s => s.trim()).filter(Boolean).join(', ')
+}
+
+function fmtDate(d) { return d ? new Date(d).toLocaleString('en-IN') : '' }
+
+function parseAssetUrls(assetUrl) {
+  if (!assetUrl) return []
+  try {
+    const parsed = JSON.parse(assetUrl)
+    if (Array.isArray(parsed)) return parsed
+  } catch { /* plain URL */ }
+  return [assetUrl]
+}
+
 function TaskTimestamps({ task }) {
   const steps = [
     { key: 'assigned',  icon: 'inbox', label: 'Assigned',  ts: task.assignedAt || task.createdAt },

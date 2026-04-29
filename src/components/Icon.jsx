@@ -217,6 +217,49 @@ const PATHS = {
       <path d="M5 21h14" />
     </>
   ),
+  target: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" />
+    </>
+  ),
+  mic: (
+    <>
+      <rect x="9" y="2" width="6" height="11" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0" />
+      <path d="M12 21v-4" />
+      <path d="M8 21h8" />
+    </>
+  ),
+  dollar: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v10" />
+      <path d="M15 9.5a3 3 0 0 0-6 0c0 1.7 1.3 2.4 3 3s3 1.3 3 3a3 3 0 0 1-6 0" />
+    </>
+  ),
+  tag: (
+    <>
+      <path d="M20.6 9.7L13.3 2.4A2 2 0 0 0 11.9 2H4a2 2 0 0 0-2 2v7.9a2 2 0 0 0 .6 1.4l7.3 7.3a2 2 0 0 0 2.8 0l8-8a2 2 0 0 0 0-2.9z" />
+      <circle cx="7.5" cy="7.5" r="1.5" fill="currentColor" />
+    </>
+  ),
+  truck: (
+    <>
+      <rect x="1" y="3" width="15" height="13" rx="1" />
+      <path d="M16 8h4l3 5v3h-7V8z" />
+      <circle cx="5.5" cy="18.5" r="2.5" />
+      <circle cx="18.5" cy="18.5" r="2.5" />
+    </>
+  ),
+  barChart: (
+    <>
+      <rect x="3" y="12" width="4" height="9" />
+      <rect x="10" y="7" width="4" height="14" />
+      <rect x="17" y="3" width="4" height="18" />
+    </>
+  ),
 }
 
 export default function Icon({ name, className = 'h-5 w-5', strokeWidth = 1.7 }) {

@@ -162,7 +162,7 @@ export default function MasterTablePage() {
               {/* Column filters */}
               <tr className="border-y border-slate-100 bg-slate-50/40">
                 <th className="px-4 py-2">
-                  <FilterInput value={fId} onChange={setFId} placeholder={`${resource.prefix}-…`} />
+                  <FilterInput value={fId} onChange={setFId} placeholder="Filter ID…" />
                 </th>
                 <th className="px-4 py-2">
                   <FilterInput value={fName} onChange={setFName} placeholder="Search name" icon="search" />
@@ -203,7 +203,7 @@ export default function MasterTablePage() {
           <div className="space-y-2 p-3">
             <FilterInput value={fName} onChange={setFName} placeholder="Search name" icon="search" />
             <div className="grid grid-cols-2 gap-2">
-              <FilterInput value={fId} onChange={setFId} placeholder={`${resource.prefix}-…`} />
+                  <FilterInput value={fId} onChange={setFId} placeholder="Filter ID…" />
               <FilterSelect value={fStatus} onChange={setFStatus}
                 options={[['all','All'],['active','Active'],['inactive','Inactive']]} />
             </div>

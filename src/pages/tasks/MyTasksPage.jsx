@@ -29,10 +29,15 @@ export default function MyTasksPage() {
 
   // Full-brief drawer (any task → click "View brief")
   const [briefCampaignId, setBriefCampaignId] = useState(null)
+  const [briefTaskId,     setBriefTaskId]     = useState(null)
 
   // Pre-fetched campaign summary for the Submit-for-QC modal so the worker
   // sees full request context while writing submission notes.
   const [submittingCampaign, setSubmittingCampaign] = useState(null)
+
+  // Task-specific dynamic questions and worker's current answers
+  const [taskQuestions, setTaskQuestions] = useState([])
+  const [taskAnswers,   setTaskAnswers]   = useState({}) // { [questionId]: string }
 
   // `load()` blanks the list to "Loading…" — used only on first mount /
   // route change. `refresh()` silently swaps tasks without flicker so the
@@ -156,9 +161,11 @@ export default function MyTasksPage() {
     }
   }
 
-  const openSubmit = (task) => {
+  const openSubmit = async (task) => {
     setSubmitting(task)
     setSubmittingCampaign(null)
+    setTaskQuestions([])
+    setTaskAnswers({})
     // Pre-fill notes from the previous submission so the worker can amend them.
     setSubmitForm({ submissionNotes: task.submissionNotes || '' })
 
@@ -177,13 +184,52 @@ export default function MyTasksPage() {
     campaignsApi.getById(task.campaignId)
       .then(res => setSubmittingCampaign(res.data))
       .catch(() => { /* show task-only modal */ })
+
+    // Fetch task-specific questions and any previously saved answers
+    try {
+      const [qRes, aRes] = await Promise.all([
+        tasksApi.getQuestions(task.taskId),
+        tasksApi.getAnswers(task.taskId),
+      ])
+      setTaskQuestions(qRes.data || [])
+      const answerMap = {}
+      for (const a of (aRes.data || [])) {
+        answerMap[a.questionId] = a.answerValue
+      }
+      setTaskAnswers(answerMap)
+    } catch {
+      /* questions are optional — the modal still works without them */
+    }
   }
 
   const submitForQc = async () => {
     if (!submitting) return
+
+    // Validate required questions
+    const missing = taskQuestions.filter(q => {
+      if (!q.isRequired) return false
+      const val = taskAnswers[q.questionId]
+      return !val || (typeof val === 'string' && val.trim() === '') ||
+             (val === '[]')
+    })
+    if (missing.length > 0) {
+      showToast(`Please answer ${missing.length} required question${missing.length > 1 ? 's' : ''}.`, 'error')
+      return
+    }
+
     const uploadedUrls = fileItems.filter(f => f.status === 'done').map(f => f.url)
     setSavingId(submitting.taskId)
     try {
+      // Save question answers first (if any exist)
+      if (taskQuestions.length > 0) {
+        const answers = Object.entries(taskAnswers)
+          .filter(([, v]) => v !== undefined && v !== null && v !== '')
+          .map(([questionId, answerValue]) => ({ questionId, answerValue }))
+        if (answers.length > 0) {
+          await tasksApi.submitAnswers(submitting.taskId, answers)
+        }
+      }
+
       await tasksApi.complete(submitting.taskId, {
         submissionNotes: submitForm.submissionNotes,
         assetUrls: uploadedUrls,
@@ -191,6 +237,8 @@ export default function MyTasksPage() {
       showToast('Submitted for QC review.', 'success')
       setSubmitting(null)
       setFileItems([])
+      setTaskQuestions([])
+      setTaskAnswers({})
       refresh()
     } catch (e) {
       const msg = e?.response?.data?.message || 'Could not submit task'
@@ -279,7 +327,7 @@ export default function MyTasksPage() {
               hasInFlight={inFlightTaskId != null}
               onAccept={() => accept(t)}
               onSubmit={() => openSubmit(t)}
-              onView={() => setBriefCampaignId(t.campaignId)}
+              onView={() => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}
             />
           ))}
         </div>
@@ -295,9 +343,15 @@ export default function MyTasksPage() {
           onAddFiles={addFiles}
           onRemoveFile={removeFileItem}
           onRetryFile={retryFileItem}
-          onCancel={() => { setSubmitting(null); setSubmittingCampaign(null); setFileItems([]) }}
+          questions={taskQuestions}
+          answers={taskAnswers}
+          onAnswerChange={(qId, val) => setTaskAnswers(prev => ({ ...prev, [qId]: val }))}
+          onCancel={() => {
+            setSubmitting(null); setSubmittingCampaign(null)
+            setFileItems([]); setTaskQuestions([]); setTaskAnswers({})
+          }}
           onConfirm={submitForQc}
-          onViewBrief={() => setBriefCampaignId(submitting.campaignId)}
+          onViewBrief={() => { setBriefCampaignId(submitting.campaignId); setBriefTaskId(submitting.taskId) }}
           saving={savingId === submitting.taskId}
         />
       )}
@@ -305,7 +359,8 @@ export default function MyTasksPage() {
       {briefCampaignId && (
         <RequestBriefDrawer
           campaignId={briefCampaignId}
-          onClose={() => setBriefCampaignId(null)}
+          filterTaskId={briefTaskId}
+          onClose={() => { setBriefCampaignId(null); setBriefTaskId(null) }}
           onCampaignChanged={(updated) => {
             // Mirror priority changes (and any other campaign-level edits made
             // from inside the drawer) onto every task that belongs to that
@@ -516,9 +571,75 @@ const ACCEPTED_FILE_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ].join(',')
 
+// ─── Question field renderer ──────────────────────────────────────────────────
+function QuestionField({ question, value, onChange }) {
+  const { questionText, fieldType, options, isRequired } = question
+  const labelCls  = 'block text-xs font-medium text-slate-600 mb-1'
+  const controlCls = 'w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500'
+
+  let parsedOptions = []
+  if (options) {
+    try { parsedOptions = JSON.parse(options) } catch { /* ignore */ }
+  }
+
+  const getChecked = (opt) => {
+    try { return JSON.parse(value || '[]').includes(opt) } catch { return false }
+  }
+  const toggleOption = (opt) => {
+    let current = []
+    try { current = JSON.parse(value || '[]') } catch { /* ignore */ }
+    const next = current.includes(opt) ? current.filter(x => x !== opt) : [...current, opt]
+    onChange(JSON.stringify(next))
+  }
+
+  return (
+    <div>
+      <label className={labelCls}>
+        {questionText}
+        {isRequired && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      {fieldType === 'TEXT' && (
+        <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} className={controlCls} />
+      )}
+      {fieldType === 'NUMBER' && (
+        <input type="number" value={value || ''} onChange={e => onChange(e.target.value)} className={controlCls} />
+      )}
+      {fieldType === 'TEXTAREA' && (
+        <textarea rows={3} value={value || ''} onChange={e => onChange(e.target.value)} className={`${controlCls} resize-none`} />
+      )}
+      {fieldType === 'DATE' && (
+        <input type="date" value={value || ''} onChange={e => onChange(e.target.value)} className={controlCls} />
+      )}
+      {fieldType === 'DROPDOWN' && (
+        <select value={value || ''} onChange={e => onChange(e.target.value)} className={controlCls}>
+          <option value="">Select…</option>
+          {parsedOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+      )}
+      {fieldType === 'MULTISELECT' && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 space-y-1.5">
+          {parsedOptions.map(opt => (
+            <label key={opt} className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={getChecked(opt)}
+                onChange={() => toggleOption(opt)}
+                className="h-3.5 w-3.5 rounded border-slate-300 accent-brand-600"
+              />
+              <span className="text-sm text-slate-700">{opt}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Submit-for-QC modal ──────────────────────────────────────────────────────
 function SubmitModal({
   task, campaign, form, setForm,
   fileItems, onAddFiles, onRemoveFile, onRetryFile,
+  questions = [], answers = {}, onAnswerChange,
   onCancel, onConfirm, onViewBrief, saving,
 }) {
   const uploading  = fileItems.some(f => f.status === 'uploading')
@@ -558,6 +679,29 @@ function SubmitModal({
             className="text-xs text-brand-600 hover:underline flex items-center gap-1">
             <Icon name="eye" className="h-3 w-3" /> View full request brief
           </button>
+
+          {/* ── Task-specific questions ── */}
+          {questions.length > 0 && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4 space-y-4">
+              <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <Icon name="clipboard" className="h-4 w-4 text-brand-500" />
+                Task Questions
+                {questions.some(q => q.isRequired) && (
+                  <span className="text-xs font-normal text-slate-400">
+                    ({questions.filter(q => q.isRequired).length} required)
+                  </span>
+                )}
+              </h4>
+              {questions.map(q => (
+                <QuestionField
+                  key={q.questionId}
+                  question={q}
+                  value={answers[q.questionId] || ''}
+                  onChange={val => onAnswerChange(q.questionId, val)}
+                />
+              ))}
+            </div>
+          )}
 
           {/* ── File upload zone ── */}
           <div>

@@ -12,7 +12,7 @@ import { useToast } from './Toast'
  * request (approvals, QC review, intervention, accept-task) — so people
  * can make informed decisions without leaving the page.
  */
-export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChanged }) {
+export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChanged, filterTaskId }) {
   const [campaign, setCampaign] = useState(null)
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState(null)
@@ -61,7 +61,7 @@ export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChan
           ) : error ? (
             <p className="text-center text-red-500 py-12 text-sm">{error}</p>
           ) : campaign ? (
-            <RequestBriefBody campaign={campaign} />
+            <RequestBriefBody campaign={campaign} filterTaskId={filterTaskId} />
           ) : null}
         </div>
       </aside>
@@ -94,7 +94,7 @@ export function RequestSummaryCard({ campaign }) {
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
         <div><span className="text-slate-400">By:</span> <span className="font-medium">{campaign.requestorName || '—'}</span></div>
         <div><span className="text-slate-400">Dept:</span> <span className="font-medium">{campaign.departmentName || '—'}</span></div>
-        <div><span className="text-slate-400">Budget:</span> <span className="font-medium">{fmtEnum(campaign.budgetTier) || '—'}</span></div>
+        <div><span className="text-slate-400">Budget:</span> <span className="font-medium">{campaign.budgetTier || '—'}</span></div>
         <div><span className="text-slate-400">Deliverables:</span> <span className="font-medium">{deliverables ?? '—'}</span></div>
       </div>
       {campaign.keyMessage && (
@@ -159,7 +159,11 @@ function DrawerHeader({ campaign, onClose, canEditPriority, onPriorityChanged, o
   )
 }
 
-function RequestBriefBody({ campaign: c }) {
+function RequestBriefBody({ campaign: c, filterTaskId }) {
+  // When opened from a worker's task card, only show their specific task.
+  const visibleTasks = filterTaskId
+    ? (c.workTasks || []).filter(t => String(t.taskId) === String(filterTaskId))
+    : (c.workTasks || [])
   return (
     <>
       {/* Inline alerts */}
@@ -185,23 +189,31 @@ function RequestBriefBody({ campaign: c }) {
       {/* Approval audit trail */}
       <ApprovalTrail c={c} />
 
-      {/* Brief */}
-      <Section title="Request Details">
-        <Detail label="Business Objective" value={fmtEnum(c.businessObjective)} />
-        <Detail label="Target Location"    value={fmtTargetLocation(c.targetLocation)} />
-        <Detail label="Audience"           value={c.audienceName} />
-        <Detail label="Language"           value={fmtEnum(c.language)} />
-        <Detail label="Tone"               value={fmtEnum(c.tone)} />
-        <Detail label="Supporting Proof"   value={fmtEnum(c.supportingProof)} />
-        <Detail label="Has Offer"          value={c.hasOffer} />
-        {c.hasOffer === 'YES' && <Detail label="Offer Type" value={c.offerTypeName} />}
-        <Detail label="Priority"           value={c.priority} />
-        <Detail label="Budget Tier"        value={fmtEnum(c.budgetTier)} />
-        <Detail label="Vendor Required"    value={c.vendorRequired} />
-        {c.vendorRequired === 'YES' && <Detail label="Vendor Type" value={fmtEnum(c.vendorType)} />}
-        <Detail label="KPI"                value={fmtEnum(c.kpiType)} />
-        <Detail label="Expected Output"    value={fmtEnum(c.expectedOutput)} />
-        <Detail label="Key Message"        value={c.keyMessage} span={3} />
+      {/* ── Campaign Overview ── */}
+      <Section title="Campaign Overview">
+        <Detail label="Requirement Type"   value={c.requirementTypeName} />
+        <Detail label="Business Objective" value={c.businessObjective} span={2} />
+        <Detail label="Target Location"    value={fmtTargetLocation(c.targetLocation)} span={3} />
+        <Detail label="Audience Type"      value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
+        <Detail label="Language"           value={fmtMultiValue(c.language)} />
+        <Detail label="Tone / Style"       value={fmtMultiValue(c.tone)} />
+      </Section>
+
+      {/* ── Message & Offer ── */}
+      <Section title="Message & Offer">
+        <Detail label="Key Message"      value={c.keyMessage}      span={3} />
+        <Detail label="Supporting Proof" value={c.supportingProof} />
+        <Detail label="Has Offer"        value={c.hasOffer} />
+        <Detail label="Offer Type"       value={c.offerTypeId || c.offerTypeName} />
+      </Section>
+
+      {/* ── Budget & Goals ── */}
+      <Section title="Budget & Goals">
+        <Detail label="Budget Tier"     value={c.budgetTier} />
+        <Detail label="KPI Type"        value={c.kpiType} />
+        <Detail label="Expected Output" value={c.expectedOutput} />
+        <Detail label="Vendor Required" value={c.vendorRequired} />
+        <Detail label="Vendor Type"     value={fmtMultiValue(c.vendorType)} span={2} />
       </Section>
 
       {/* Deliverables */}
@@ -211,43 +223,38 @@ function RequestBriefBody({ campaign: c }) {
             <h4 className="text-sm font-semibold text-slate-800">Deliverables</h4>
             <span className="text-xs text-slate-500">{c.deliverables.length}</span>
           </div>
-          <table className="min-w-full divide-y divide-slate-100 text-xs">
-            <thead className="bg-slate-50">
-              <tr>
-                {['Task', 'Platform', 'Format', 'Qty'].map(h => (
-                  <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {c.deliverables.map(d => (
-                <tr key={d.specId} className="hover:bg-slate-50/60">
-                  <td className="px-3 py-2 font-medium text-slate-800">{d.granularTaskName || d.granularTaskId}</td>
-                  <td className="px-3 py-2 text-slate-600">{d.platformName || '—'}</td>
-                  <td className="px-3 py-2 text-slate-600">{d.formatName || '—'}</td>
-                  <td className="px-3 py-2 text-slate-600">{d.quantity || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul className="divide-y divide-slate-100">
+            {c.deliverables.map((d, i) => (
+              <li key={d.specId ?? i} className="flex items-center gap-3 px-4 py-2.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-700 shrink-0">
+                  {i + 1}
+                </span>
+                <span className="text-sm font-medium text-slate-800">{d.granularTaskName || d.granularTaskId}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
       {/* Work Tasks */}
-      {c.workTasks?.length > 0 && (
+      {visibleTasks.length > 0 && (
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-slate-100 px-4 py-2.5">
             <div className="flex items-center justify-between gap-2">
-              <h4 className="text-sm font-semibold text-slate-800">Work tasks</h4>
-              <span className="text-xs text-slate-500">{c.workTasks.length}</span>
+              <h4 className="text-sm font-semibold text-slate-800">
+                {filterTaskId ? 'Your Task' : 'Work Tasks'}
+              </h4>
+              {!filterTaskId && <span className="text-xs text-slate-500">{visibleTasks.length}</span>}
             </div>
-            <p className="mt-1 text-xs text-slate-500 leading-snug">
-              Assignment, timing, and any <span className="font-medium text-slate-600">task questionnaire</span> answers
-              (from the request form or updated by the assignee).
-            </p>
+            {!filterTaskId && (
+              <p className="mt-1 text-xs text-slate-500 leading-snug">
+                Assignment, timing, and any <span className="font-medium text-slate-600">task questionnaire</span> answers
+                (from the request form or updated by the assignee).
+              </p>
+            )}
           </div>
           <div className="divide-y divide-slate-100">
-            {c.workTasks.map(t => (
+            {visibleTasks.map(t => (
               <div key={t.taskId} className="px-4 py-2.5 space-y-1.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -299,19 +306,22 @@ function RequestBriefBody({ campaign: c }) {
 function Section({ title, children }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-100 px-4 py-2.5">
-        <h4 className="text-sm font-semibold text-slate-800">{title}</h4>
+      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</span>
       </div>
-      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{children}</div>
+      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-3">{children}</div>
     </div>
   )
 }
 
 function Detail({ label, value, span = 1 }) {
+  const cls = span === 3 ? 'sm:col-span-2 lg:col-span-3'
+            : span === 2 ? 'sm:col-span-2'
+            : ''
   return (
-    <div className={span === 2 ? 'sm:col-span-2' : span === 3 ? 'sm:col-span-3 lg:col-span-3' : ''}>
-      <div className="text-xs text-slate-400 uppercase tracking-wide">{label}</div>
-      <div className="text-xs text-slate-700 font-medium break-words">{value || '—'}</div>
+    <div className={cls}>
+      <div className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">{label}</div>
+      <div className="text-xs text-slate-800 font-medium break-words">{value || '—'}</div>
     </div>
   )
 }
@@ -325,6 +335,7 @@ function StatusBadge({ status }) {
     QC_REVIEW:                  'bg-purple-50 text-purple-700 ring-purple-200',
     COMPLETED:                  'bg-green-50 text-green-700 ring-green-200',
     REJECTED:                   'bg-red-50 text-red-700 ring-red-200',
+    CANCELLED:                  'bg-slate-100 text-slate-500 ring-slate-200',
   }
   const LABELS = {
     PENDING_DEPT_APPROVAL:      'Pending Dept Approval',
@@ -334,6 +345,7 @@ function StatusBadge({ status }) {
     QC_REVIEW:                  'QC Review',
     COMPLETED:                  'Completed',
     REJECTED:                   'Rejected',
+    CANCELLED:                  'Cancelled',
   }
   const cls = STYLES[status] || 'bg-slate-100 text-slate-600'
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{LABELS[status] || status}</span>
@@ -346,10 +358,12 @@ function TaskBadge({ status }) {
     REWORK:      'bg-amber-50 text-amber-700 ring-amber-200',
     QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
     COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
+    HELD:        'bg-amber-50 text-amber-600 ring-amber-200',
+    CANCELLED:   'bg-slate-100 text-slate-500 ring-slate-200',
   }
   const TASK_LABELS = {
     ASSIGNED: 'Assigned', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
-    QC_REVIEW: 'In QC',   COMPLETED: 'Completed',
+    QC_REVIEW: 'In QC',   COMPLETED: 'Completed', HELD: 'Held', CANCELLED: 'Cancelled',
   }
   const cls = TASK_STYLES[status] || 'bg-slate-100 text-slate-600'
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{TASK_LABELS[status] || status}</span>
@@ -490,8 +504,13 @@ function parseAssetUrls(assetUrl) {
   return [assetUrl]
 }
 
-function fmtEnum(v) {
-  return v ? String(v).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : ''
+/**
+ * Multi-select fields are stored as comma-separated display names.
+ * Splits and re-joins to normalise spacing.
+ */
+function fmtMultiValue(v) {
+  if (!v) return ''
+  return String(v).split(',').map(s => s.trim()).filter(Boolean).join(', ')
 }
 function fmtDateTime(d) {
   return d ? new Date(d).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : ''

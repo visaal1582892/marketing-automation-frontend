@@ -6,10 +6,12 @@ import Modal from '../../components/Modal'
 import { useToast } from '../../components/Toast'
 
 const FIELD_TYPES = [
-  { value: 'TEXT',         label: 'Short Text' },
-  { value: 'TEXTAREA',     label: 'Long Text' },
-  { value: 'SELECT',       label: 'Single Select' },
-  { value: 'MULTI_SELECT', label: 'Multi Select' },
+  { value: 'TEXT',        label: 'Short Text' },
+  { value: 'NUMBER',      label: 'Number' },
+  { value: 'TEXTAREA',    label: 'Long Text' },
+  { value: 'DROPDOWN',    label: 'Single Select' },
+  { value: 'MULTISELECT', label: 'Multi Select' },
+  { value: 'DATE',        label: 'Date' },
 ]
 
 const FIELD_TYPE_LABELS = Object.fromEntries(FIELD_TYPES.map(f => [f.value, f.label]))
@@ -107,7 +109,7 @@ export default function QuestionMasterPage() {
     if (!form.questionText.trim()) { toast.error('Question text is required'); return }
 
     let optionsJson = null
-    if (form.fieldType === 'SELECT' || form.fieldType === 'MULTI_SELECT') {
+    if (form.fieldType === 'DROPDOWN' || form.fieldType === 'MULTISELECT') {
       const opts = form.options.split(',').map(s => s.trim()).filter(Boolean)
       optionsJson = opts.length ? JSON.stringify(opts) : null
     }
@@ -387,7 +389,7 @@ export default function QuestionMasterPage() {
               </label>
             </div>
           </div>
-          {(form.fieldType === 'SELECT' || form.fieldType === 'MULTI_SELECT') && (
+          {(form.fieldType === 'DROPDOWN' || form.fieldType === 'MULTISELECT') && (
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Options <span className="font-normal text-slate-400">(comma-separated)</span>
@@ -533,10 +535,12 @@ function RowActions({ onEdit, onDelete }) {
 }
 
 const FIELD_TYPE_STYLES = {
-  TEXT:         'bg-slate-100 text-slate-600',
-  TEXTAREA:     'bg-amber-50 text-amber-700',
-  SELECT:       'bg-emerald-50 text-emerald-700',
-  MULTI_SELECT: 'bg-violet-50 text-violet-700',
+  TEXT:        'bg-slate-100 text-slate-600',
+  NUMBER:      'bg-sky-50 text-sky-700',
+  TEXTAREA:    'bg-amber-50 text-amber-700',
+  DROPDOWN:    'bg-emerald-50 text-emerald-700',
+  MULTISELECT: 'bg-violet-50 text-violet-700',
+  DATE:        'bg-rose-50 text-rose-700',
 }
 
 function FieldTypeBadge({ type }) {

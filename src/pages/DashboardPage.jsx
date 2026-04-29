@@ -79,11 +79,11 @@ export default function DashboardPage() {
       ? campaigns
       : campaigns.filter(c => myId != null && Number(c.requestorId) === Number(myId))
     return {
-      total:       my.length,
-      pending:     my.filter(c => ['PENDING_DEPT_APPROVAL','PENDING_MARKETING_APPROVAL'].includes(c.status)).length,
-      inProgress:  my.filter(c => ['IN_PROGRESS','PENDING_INTERVENTION','QC_REVIEW'].includes(c.status)).length,
-      completed:   my.filter(c => c.status === 'COMPLETED').length,
-      rejected:    my.filter(c => c.status === 'REJECTED').length,
+      total:      my.length,
+      pending:    my.filter(c => ['PENDING_DEPT_APPROVAL','PENDING_MARKETING_APPROVAL'].includes(c.status)).length,
+      inProgress: my.filter(c => ['IN_PROGRESS','PENDING_INTERVENTION','QC_REVIEW'].includes(c.status)).length,
+      completed:  my.filter(c => c.status === 'COMPLETED').length,
+      cancelled:  my.filter(c => c.status === 'CANCELLED' || c.status === 'REJECTED').length,
     }
   }, [campaigns, isRequestor, user])
 
@@ -277,7 +277,7 @@ export default function DashboardPage() {
             <h2 className="text-base font-semibold text-slate-900">Admin Quick Access</h2>
             <p className="text-xs text-slate-500">Jump straight to any admin area.</p>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
               { to: '/admin/users',               icon: 'users',      label: 'User Management',   desc: 'Add or edit user accounts'      },
               { to: '/admin/master/departments',   icon: 'building',   label: 'Master Data',       desc: 'Departments, roles, types…'     },
@@ -350,14 +350,6 @@ export default function DashboardPage() {
           />
           <KpiCard
             to="/campaigns"
-            tone="amber"
-            icon="inbox"
-            label="Awaiting Approval"
-            value={myRequestCounts.pendingDept + myRequestCounts.pendingMkt}
-            cta="View →"
-          />
-          <KpiCard
-            to="/campaigns"
             tone="violet"
             icon="clock"
             label="In Progress / QC"
@@ -370,6 +362,14 @@ export default function DashboardPage() {
             icon="check"
             label="Delivered"
             value={myRequestCounts.completed}
+            cta="View →"
+          />
+          <KpiCard
+            to="/campaigns"
+            tone="rose"
+            icon="x"
+            label="Cancelled"
+            value={myRequestCounts.cancelled}
             cta="View →"
           />
         </Section>
@@ -407,7 +407,7 @@ function Section({ title, subtitle, children }) {
         <h2 className="text-base font-semibold text-slate-900">{title}</h2>
         {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
       </div>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {children}
       </div>
     </section>

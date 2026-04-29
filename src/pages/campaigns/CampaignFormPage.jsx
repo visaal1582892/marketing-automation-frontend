@@ -145,6 +145,122 @@ function Select({ name, value, onChange, options, placeholder = 'Select...', dis
   )
 }
 
+// ─── Generic multi-select dropdown ───────────────────────────────────────────
+
+function GenericMultiSelect({ name, values, onChange, options, placeholder = 'Select…', hasError }) {
+  const [open,   setOpen]   = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef(null)
+
+  const items = options.map((o) => ({
+    value: o.value ?? o.id ?? '',
+    label: o.label ?? o.name ?? '',
+  }))
+  const filtered  = search
+    ? items.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
+    : items
+  const selected  = items.filter((o) => values.includes(o.value))
+  const showSearch = items.length > 5
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const toggle = (val) => {
+    const next = values.includes(val)
+      ? values.filter((v) => v !== val)
+      : [...values, val]
+    onChange({ target: { name, value: next } })
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen((o) => !o); setSearch('') }}
+        className={`w-full flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5
+          text-sm shadow-sm transition text-left min-h-[34px]
+          ${hasError ? 'border-red-400 ring-1 ring-red-200' :
+            open ? 'border-brand-500 ring-2 ring-brand-200' : 'border-slate-300 hover:border-slate-400'}`}
+      >
+        {selected.length === 0 ? (
+          <span className="text-slate-400">{placeholder}</span>
+        ) : selected.length === 1 ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-medium text-brand-700 max-w-[80%] truncate">
+            <span className="truncate">{selected[0].label}</span>
+            <button type="button" onClick={(e) => { e.stopPropagation(); toggle(selected[0].value) }}
+              className="shrink-0 hover:text-red-600 transition leading-none">×</button>
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5">
+            <span className="inline-flex items-center rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-medium text-brand-700 max-w-[55%] truncate">
+              <span className="truncate">{selected[0].label}</span>
+            </span>
+            <span className="inline-flex items-center rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white">
+              +{selected.length - 1} more
+            </span>
+          </span>
+        )}
+        <Icon name="chevron" className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-150 ${open ? 'rotate-90' : 'rotate-0'}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+          {showSearch && (
+            <div className="p-2 border-b border-slate-100">
+              <div className="relative">
+                <Icon name="search" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search…"
+                  className="w-full rounded-md border border-slate-200 bg-slate-50 pl-8 pr-3 py-1.5
+                    text-xs placeholder-slate-400 focus:outline-none focus:border-brand-400"
+                />
+              </div>
+            </div>
+          )}
+          <div className="max-h-56 overflow-y-auto py-1">
+            {filtered.length === 0
+              ? <p className="px-3 py-2 text-xs text-slate-400 italic">No results</p>
+              : filtered.map((o) => {
+                const isChecked = values.includes(o.value)
+                return (
+                  <button key={o.value} type="button" onClick={() => toggle(o.value)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm transition text-left
+                      ${isChecked ? 'bg-brand-50' : 'hover:bg-slate-50'}`}>
+                    <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors
+                      ${isChecked ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white'}`}
+                      style={{ width: '16px', height: '16px' }}>
+                      {isChecked && (
+                        <svg viewBox="0 0 12 12" fill="none" style={{ width: '9px', height: '9px' }}>
+                          <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className={`text-sm ${isChecked ? 'text-brand-800 font-medium' : 'text-slate-700'}`}>{o.label}</span>
+                  </button>
+                )
+              })
+            }
+          </div>
+          {values.length > 0 && (
+            <div className="border-t border-slate-100 px-3 py-1.5 flex items-center justify-between">
+              <span className="text-xs text-slate-500">{values.length} selected</span>
+              <button type="button" onClick={() => setOpen(false)}
+                className="text-xs font-medium text-brand-600 hover:text-brand-700">Done</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Multi-select task picker ─────────────────────────────────────────────────
 
 function TaskMultiSelect({ tasks, selectedIds, onToggle, loading, hasError }) {
@@ -269,59 +385,6 @@ function TaskMultiSelect({ tasks, selectedIds, onToggle, loading, hasError }) {
   )
 }
 
-// ─── Per-task detail card (shown after selection) ─────────────────────────────
-
-function MiniSelect({ label, value, onChange, options, required, hasError }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-  const selected = options.find((o) => o.value === value)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  return (
-    <div ref={ref} className="relative">
-      <p className={`text-xs font-medium mb-1 ${hasError ? 'text-red-500' : 'text-slate-500'}`}>
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-      </p>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={`w-full flex items-center justify-between gap-1 rounded-lg border px-2.5 py-1.5
-          text-xs bg-white shadow-sm transition text-left
-          ${hasError ? 'border-red-400 ring-1 ring-red-100'
-            : open ? 'border-brand-400 ring-1 ring-brand-200' : 'border-slate-300 hover:border-slate-400'}`}
-      >
-        <span className={selected?.value ? 'text-slate-800 font-medium' : 'text-slate-400'}>
-          {selected ? selected.label : 'Select…'}
-        </span>
-        <Icon name="chevron" className={`h-3 w-3 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`} />
-      </button>
-      {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
-          <div className="max-h-40 overflow-y-auto py-0.5">
-            {options.map((o) => (
-              <button key={o.value} type="button"
-                onClick={() => { onChange(o.value); setOpen(false) }}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs
-                  hover:bg-brand-50 hover:text-brand-700 transition text-left
-                  ${o.value === value ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-slate-700'}`}
-              >
-                {o.label}
-                {o.value === value && <Icon name="check" className="h-3 w-3 text-brand-600 shrink-0" />}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function parseQuestionOptions(raw) {
   if (!raw) return []
   try {
@@ -334,12 +397,7 @@ function parseQuestionOptions(raw) {
 function DeliverableCard({
   task,
   spec,
-  platforms,
-  formats,
-  quantities,
-  onUpdate,
   onRemove,
-  fieldErrors,
   questions = [],
   onQuestionnaireChange,
   questionnaireFieldErrors = {},
@@ -359,8 +417,8 @@ function DeliverableCard({
   return (
     <div className="rounded-xl border border-brand-200 bg-white shadow-sm">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-brand-50 border-b border-brand-100 rounded-t-xl">
-        <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between gap-2 px-4 py-2.5 bg-brand-50 border-b border-brand-100 rounded-t-xl">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-brand-500 shrink-0" />
           <span className="text-sm font-semibold text-brand-800">{task.taskName}</span>
           {task.taskTypeName && (
@@ -380,31 +438,6 @@ function DeliverableCard({
       </div>
 
       <div className="p-4">
-        <div className="grid grid-cols-3 gap-3">
-          <MiniSelect label="Platform" required
-            value={spec.platformId || ''}
-            onChange={(v) => onUpdate(task.taskId, 'platformId', v)}
-            options={platforms}
-            hasError={!!fieldErrors?.platformId}
-          />
-          <MiniSelect label="Format" required
-            value={spec.formatId || ''}
-            onChange={(v) => onUpdate(task.taskId, 'formatId', v)}
-            options={formats}
-            hasError={!!fieldErrors?.formatId}
-          />
-          <MiniSelect label="Quantity" required
-            value={spec.quantity || ''}
-            onChange={(v) => onUpdate(task.taskId, 'quantity', v)}
-            options={quantities}
-            hasError={!!fieldErrors?.quantity}
-          />
-        </div>
-
-        {fieldErrors && Object.values(fieldErrors).some(Boolean) && (
-          <p className="mt-2 text-xs text-red-500">Please fill all required fields for this task.</p>
-        )}
-
         {questions.length > 0 && (
           <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
@@ -424,11 +457,21 @@ function DeliverableCard({
                       type="text"
                       value={answers[q.questionId] ?? ''}
                       onChange={(e) => onQuestionnaireChange(q.questionId, e.target.value)}
-                      data-has-error={qErr || undefined}
                       className={`w-full rounded-lg border px-3 py-1.5 text-sm text-slate-800 shadow-sm
                         focus:outline-none focus:ring-2 transition
                         ${qErr ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-slate-300 focus:border-brand-500 focus:ring-brand-200'}`}
                       placeholder="Your answer…"
+                    />
+                  )}
+                  {q.fieldType === 'NUMBER' && (
+                    <input
+                      type="number"
+                      value={answers[q.questionId] ?? ''}
+                      onChange={(e) => onQuestionnaireChange(q.questionId, e.target.value)}
+                      className={`w-full rounded-lg border px-3 py-1.5 text-sm text-slate-800 shadow-sm
+                        focus:outline-none focus:ring-2 transition
+                        ${qErr ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-slate-300 focus:border-brand-500 focus:ring-brand-200'}`}
+                      placeholder="0"
                     />
                   )}
                   {q.fieldType === 'TEXTAREA' && (
@@ -436,14 +479,23 @@ function DeliverableCard({
                       rows={2}
                       value={answers[q.questionId] ?? ''}
                       onChange={(e) => onQuestionnaireChange(q.questionId, e.target.value)}
-                      data-has-error={qErr || undefined}
                       className={`w-full rounded-lg border px-3 py-1.5 text-sm text-slate-800 shadow-sm resize-none
                         focus:outline-none focus:ring-2 transition
                         ${qErr ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-slate-300 focus:border-brand-500 focus:ring-brand-200'}`}
                       placeholder="Your answer…"
                     />
                   )}
-                  {q.fieldType === 'SELECT' && (
+                  {q.fieldType === 'DATE' && (
+                    <input
+                      type="date"
+                      value={answers[q.questionId] ?? ''}
+                      onChange={(e) => onQuestionnaireChange(q.questionId, e.target.value)}
+                      className={`w-full rounded-lg border px-3 py-1.5 text-sm text-slate-800 shadow-sm
+                        focus:outline-none focus:ring-2 transition
+                        ${qErr ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-slate-300 focus:border-brand-500 focus:ring-brand-200'}`}
+                    />
+                  )}
+                  {q.fieldType === 'DROPDOWN' && (
                     <select
                       value={answers[q.questionId] ?? ''}
                       onChange={(e) => onQuestionnaireChange(q.questionId, e.target.value)}
@@ -457,16 +509,16 @@ function DeliverableCard({
                       ))}
                     </select>
                   )}
-                  {q.fieldType === 'MULTI_SELECT' && (
+                  {q.fieldType === 'MULTISELECT' && (
                     <div className="flex flex-wrap gap-2">
                       {parseQuestionOptions(q.options).map((opt) => {
-                        const selected = getMultiValues(q.questionId)
-                        const checked = selected.includes(opt)
+                        const curSelected = getMultiValues(q.questionId)
+                        const checked = curSelected.includes(opt)
                         return (
                           <label
                             key={opt}
-                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs cursor-pointer
-                              ${checked ? 'border-brand-400 bg-brand-50 text-brand-800' : 'border-slate-200 bg-white text-slate-600'}`}
+                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs cursor-pointer transition
+                              ${checked ? 'border-brand-400 bg-brand-50 text-brand-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
                           >
                             <input
                               type="checkbox"
@@ -540,6 +592,7 @@ function LocationMultiSelect({ selected, onChange, hasError }) {
   const [suggestions, setSuggestions] = useState([])
   const [open,        setOpen]        = useState(false)
   const [loading,     setLoading]     = useState(false)
+  const [expanded,    setExpanded]    = useState(false)
   const ref     = useRef(null)
   const searchNominatim = useNominatim()
 
@@ -564,23 +617,39 @@ function LocationMultiSelect({ selected, onChange, hasError }) {
 
   const remove = (label) => onChange(selected.filter((s) => s !== label))
 
+  const VISIBLE_LIMIT = 2
+  const visible = expanded ? selected : selected.slice(0, VISIBLE_LIMIT)
+  const hiddenCount = selected.length - VISIBLE_LIMIT
+
   return (
     <div ref={ref} className="relative">
-      {/* Selected tags */}
+      {/* Selected tags — compact: show first 2, collapse the rest */}
       {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {selected.map((loc) => (
+        <div className="flex flex-wrap gap-1.5 mb-2 items-center">
+          {visible.map((loc) => (
             <span key={loc}
               className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-0.5
                 text-xs font-medium text-brand-800 ring-1 ring-brand-200">
               <Icon name="mapPin" className="h-3 w-3 shrink-0 text-brand-500" />
-              {loc}
+              <span className="max-w-[120px] truncate">{loc}</span>
               <button type="button" onClick={() => remove(loc)}
                 className="ml-0.5 text-brand-500 hover:text-red-500 transition">
                 <Icon name="x" className="h-3 w-3" />
               </button>
             </span>
           ))}
+          {!expanded && hiddenCount > 0 && (
+            <button type="button" onClick={() => setExpanded(true)}
+              className="inline-flex items-center rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white hover:bg-brand-700 transition">
+              +{hiddenCount} more
+            </button>
+          )}
+          {expanded && hiddenCount > 0 && (
+            <button type="button" onClick={() => setExpanded(false)}
+              className="text-xs text-slate-400 hover:text-slate-600 transition">
+              Show less
+            </button>
+          )}
         </div>
       )}
 
@@ -644,52 +713,58 @@ export default function CampaignFormPage() {
   const navigate   = useNavigate()
 
   // Master data from DB tables
-  const [depts,      setDepts]      = useState([])
-  const [reqTypes,   setReqTypes]   = useState([])
-  const [audiences,  setAudiences]  = useState([])
-  const [platforms,  setPlatforms]  = useState([])
-  const [formats,    setFormats]    = useState([])
-  const [offerTypes, setOfferTypes] = useState([])
-  const [availableTasks, setAvailableTasks] = useState([])
-  const [loadingTasks,   setLoadingTasks]   = useState(true)
+  const [depts,              setDepts]              = useState([])
+  const [reqTypes,           setReqTypes]           = useState([])
+  const [audiences,          setAudiences]          = useState([])
+  const [businessObjectives, setBusinessObjectives] = useState([])
+  const [languages,          setLanguages]          = useState([])
+  const [tones,              setTones]              = useState([])
+  const [offerTypes,         setOfferTypes]         = useState([])
+  const [supportingProofs,   setSupportingProofs]   = useState([])
+  const [budgetTierOpts,     setBudgetTierOpts]     = useState([])
+  const [vendorTypes,        setVendorTypes]        = useState([])
+  const [kpiTypeOpts,        setKpiTypeOpts]        = useState([])
+  const [expectedOutputOpts, setExpectedOutputOpts] = useState([])
+  const [availableTasks,     setAvailableTasks]     = useState([])
+  const [loadingTasks,       setLoadingTasks]       = useState(true)
 
-  // Enum options fetched from the backend (derived from Java enums)
-  const [enumOpts, setEnumOpts] = useState({
-    businessObjectives: [],
-    languages:          [],
-    supportingProofs:   [],
-    tones:              [],
-    priorities:         [],
-    budgetTiers:        [],
-    vendorTypes:        [],
-    kpiTypes:           [],
-    expectedOutputs:    [],
-    quantities:         [],
-  })
+  // Enum options — only priorities remain as Java enum (not admin-configurable)
+  const [enumOpts, setEnumOpts] = useState({ priorities: [] })
 
   const [form, setForm] = useState({
-    departmentId:      user?.departmentId || '',
-    businessObjective: '',
-    requirementTypeId: '',
-    audienceTypeId:    '',
-    language:          '',
-    hasOffer:          'NO',
-    offerTypeId:       '',
-    keyMessage:        '',
-    supportingProof:   '',
-    tone:              '',
-    priority:          'MEDIUM',
-    budgetTier:        '',
-    vendorRequired:    'NO',
-    vendorType:        '',
-    kpiType:           '',
-    expectedOutput:    '',
+    departmentId:            user?.departmentId || '',
+    businessObjective:       '',
+    businessObjectiveOther:  '',
+    requirementTypeId:       '',
+    requirementTypeOther:    '',
+    audienceTypeIds:         [],
+    audienceTypeOther:       '',
+    languages:               [],
+    languageOther:           '',
+    hasOffer:                'NO',
+    offerTypeId:             '',
+    offerTypeOther:          '',
+    keyMessage:              '',
+    supportingProof:         '',
+    supportingProofOther:    '',
+    tones:                   [],
+    toneOther:               '',
+    priority:                'MEDIUM',
+    budgetTier:              '',
+    budgetTierOther:         '',
+    vendorRequired:          'NO',
+    vendorTypeIds:           [],
+    vendorTypeOther:         '',
+    kpiType:                 '',
+    kpiTypeOther:            '',
+    expectedOutput:          '',
+    expectedOutputOther:     '',
   })
 
-  // { [taskId]: { granularTaskId, platformId, formatId, quantity, questionnaire } }
+  // { [taskId]: { granularTaskId, questionnaire } }
   const [deliverables,  setDeliverables]  = useState({})
-  /** Granular task id → questions from GET .../granular-tasks/{id}/questions */
-  const [taskQuestions, setTaskQuestions]   = useState({})
+  /** Granular task id → questions */
+  const [taskQuestions, setTaskQuestions] = useState({})
   // Selected locations array
   const [targetLocations, setTargetLocations] = useState([])
 
@@ -698,17 +773,24 @@ export default function CampaignFormPage() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    // DB-backed master data
-    masterApi.list('departments').then((d)       => setDepts(d.map(normalise))).catch(() => {})
-    masterApi.list('requirement-types').then((d) => setReqTypes(d.map(normalise))).catch(() => {})
-    masterApi.list('audiences').then((d)         => setAudiences(d.map(normalise))).catch(() => {})
-    masterApi.list('platforms').then((d)        => setPlatforms(d.map(normalise))).catch(() => {})
-    masterApi.list('creative-formats').then((d) => setFormats(d.map(normalise))).catch(() => {})
-    masterApi.list('offer-types').then((d)      => setOfferTypes(d.map(normalise))).catch(() => {})
-    masterApi.list('granular-tasks').then((d)    => setAvailableTasks(d))
+    masterApi.list('departments').then((d) => setDepts(d.map(normaliseById))).catch(() => {})
+
+    const nb = (setter) => (d) => setter([...d.map(normaliseByName), OTHER_OPTION])
+    masterApi.list('requirement-types').then(nb(setReqTypes)).catch(() => {})
+    masterApi.list('audiences').then((d) => setAudiences([...d.map(normaliseByName), OTHER_OPTION])).catch(() => {})
+    masterApi.list('business-objectives').then(nb(setBusinessObjectives)).catch(() => {})
+    masterApi.list('languages').then((d) => setLanguages([...d.map(normaliseByName), OTHER_OPTION])).catch(() => {})
+    masterApi.list('tones').then((d) => setTones([...d.map(normaliseByName), OTHER_OPTION])).catch(() => {})
+    masterApi.list('offer-types').then(nb(setOfferTypes)).catch(() => {})
+    masterApi.list('supporting-proofs').then(nb(setSupportingProofs)).catch(() => {})
+    masterApi.list('budget-tiers').then(nb(setBudgetTierOpts)).catch(() => {})
+    masterApi.list('vendor-types').then((d) => setVendorTypes([...d.map(normaliseByName), OTHER_OPTION])).catch(() => {})
+    masterApi.list('kpi-types').then(nb(setKpiTypeOpts)).catch(() => {})
+    masterApi.list('expected-outputs').then(nb(setExpectedOutputOpts)).catch(() => {})
+
+    masterApi.list('granular-tasks').then((d) => setAvailableTasks(d))
       .catch(() => {}).finally(() => setLoadingTasks(false))
 
-    // Enum options (Java enum → {value, label} pairs served by the backend)
     enumsApi.getCampaignFormOptions().then((data) => setEnumOpts(data)).catch(() => {})
   }, [])
 
@@ -743,12 +825,30 @@ export default function CampaignFormPage() {
       const next = { ...prev, [name]: value }
       // When toggling offer off, clear all offer-related fields
       if (name === 'hasOffer' && value === 'NO') {
-        next.offerTypeId     = ''
-        next.keyMessage      = ''
-        next.supportingProof = ''
+        next.offerTypeId          = ''
+        next.offerTypeOther       = ''
+        next.keyMessage           = ''
+        next.supportingProof      = ''
+        next.supportingProofOther = ''
       }
-      // When toggling vendor off, clear the selected vendor type
-      if (name === 'vendorRequired' && value === 'NO') next.vendorType = ''
+      // When toggling vendor off, clear vendor type selections
+      if (name === 'vendorRequired' && value === 'NO') {
+        next.vendorTypeIds  = []
+        next.vendorTypeOther = ''
+      }
+      // Clear "other" text when a different option is selected
+      if (name === 'businessObjective' && value !== 'Other')  next.businessObjectiveOther = ''
+      if (name === 'requirementTypeId' && value !== 'Other')  next.requirementTypeOther   = ''
+      if (name === 'offerTypeId'       && value !== 'Other')  next.offerTypeOther         = ''
+      if (name === 'supportingProof'   && value !== 'Other')  next.supportingProofOther   = ''
+      if (name === 'budgetTier'        && value !== 'Other')  next.budgetTierOther        = ''
+      if (name === 'kpiType'           && value !== 'Other')  next.kpiTypeOther           = ''
+      if (name === 'expectedOutput'    && value !== 'Other')  next.expectedOutputOther    = ''
+      // Multi-select: clear "other" text when "Other" is deselected
+      if (name === 'audienceTypeIds'   && !value.includes('Other')) next.audienceTypeOther  = ''
+      if (name === 'languages'         && !value.includes('Other')) next.languageOther      = ''
+      if (name === 'tones'             && !value.includes('Other')) next.toneOther          = ''
+      if (name === 'vendorTypeIds'     && !value.includes('Other')) next.vendorTypeOther    = ''
       return next
     })
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }))
@@ -765,9 +865,6 @@ export default function CampaignFormPage() {
         ...prev,
         [task.taskId]: {
           granularTaskId: task.taskId,
-          platformId: '',
-          formatId: '',
-          quantity: '',
           questionnaire: {},
         },
       }
@@ -799,56 +896,49 @@ export default function CampaignFormPage() {
     })
   }
 
-  const updateDeliverable = (taskId, field, value) => {
-    setDeliverables((prev) => {
-      const spec = prev[taskId] || {}
-      return { ...prev, [taskId]: { ...spec, [field]: value } }
-    })
-    setErrors((prev) => {
-      const next = { ...prev }
-      if (next.tasks?.[taskId]?.[field]) {
-        next.tasks = { ...next.tasks, [taskId]: { ...next.tasks[taskId], [field]: '' } }
-      }
-      return next
-    })
-  }
-
   const validate = () => {
     const e = {}
 
     // Section 1
-    if (!form.departmentId)        e.departmentId      = 'Required'
+    if (!form.departmentId)      e.departmentId      = 'Required'
     if (targetLocations.length === 0) e.targetLocations = 'Select at least one location'
-    if (!form.businessObjective)   e.businessObjective = 'Required'
+    if (!form.businessObjective) e.businessObjective = 'Required'
+    else if (form.businessObjective === 'Other' && !form.businessObjectiveOther?.trim())
+      e.businessObjectiveOther = 'Please specify your custom business objective'
 
     // Section 2
     if (!form.requirementTypeId) e.requirementTypeId = 'Required'
+    else if (form.requirementTypeId === 'Other' && !form.requirementTypeOther?.trim())
+      e.requirementTypeOther = 'Please specify your requirement type'
 
     // Section 3
-    if (!form.audienceTypeId) e.audienceTypeId = 'Required'
-    if (!form.language)       e.language       = 'Required'
+    if (form.audienceTypeIds.length === 0) e.audienceTypeIds = 'Select at least one audience type'
+    else if (form.audienceTypeIds.includes('Other') && !form.audienceTypeOther?.trim())
+      e.audienceTypeOther = 'Please specify the custom audience type'
+    if (form.languages.length === 0)       e.languages       = 'Select at least one language'
+    else if (form.languages.includes('Other') && !form.languageOther?.trim())
+      e.languageOther = 'Please specify the language'
 
     // Section 4 — all fields only required when there IS an offer
     if (form.hasOffer === 'YES') {
-      if (!form.offerTypeId)   e.offerTypeId   = 'Required'
+      if (!form.offerTypeId) e.offerTypeId = 'Required'
+      else if (form.offerTypeId === 'Other' && !form.offerTypeOther?.trim())
+        e.offerTypeOther = 'Please specify the offer type'
       if (!form.keyMessage?.trim()) e.keyMessage = 'Required'
-      if (!form.supportingProof)   e.supportingProof = 'Required'
+      if (!form.supportingProof)    e.supportingProof = 'Required'
+      else if (form.supportingProof === 'Other' && !form.supportingProofOther?.trim())
+        e.supportingProofOther = 'Please specify the supporting proof'
     }
-    if (!form.tone) e.tone = 'Required'
+    if (form.tones.length === 0) e.tones = 'Select at least one tone / style'
+    else if (form.tones.includes('Other') && !form.toneOther?.trim())
+      e.toneOther = 'Please specify the custom tone'
 
     // Section 5 — deliverables
     if (Object.keys(deliverables).length === 0) {
       e.deliverables = 'Select at least one deliverable'
     } else {
-      const taskErrs = {}
       const taskQaErrs = {}
       Object.entries(deliverables).forEach(([taskId, spec]) => {
-        const te = {}
-        if (!spec.platformId) te.platformId = 'Required'
-        if (!spec.formatId)   te.formatId   = 'Required'
-        if (!spec.quantity)   te.quantity   = 'Required'
-        if (Object.keys(te).length) taskErrs[taskId] = te
-
         const qs = taskQuestions[taskId] || []
         const ans = spec.questionnaire || {}
         const qaFields = {}
@@ -856,7 +946,7 @@ export default function CampaignFormPage() {
           if (!(q.required ?? q.isRequired)) continue
           const raw = ans[q.questionId]
           let empty = true
-          if (q.fieldType === 'MULTI_SELECT') {
+          if (q.fieldType === 'MULTISELECT') {
             try {
               const a = JSON.parse(raw || '[]')
               empty = !Array.isArray(a) || a.length === 0
@@ -870,20 +960,28 @@ export default function CampaignFormPage() {
         }
         if (Object.keys(qaFields).length) taskQaErrs[taskId] = qaFields
       })
-      if (Object.keys(taskErrs).length) e.tasks = taskErrs
       if (Object.keys(taskQaErrs).length) e.taskQa = taskQaErrs
     }
 
     // Section 6
-    if (!form.priority)  e.priority  = 'Required'
+    if (!form.priority) e.priority = 'Required'
 
     // Section 7
     if (!form.budgetTier) e.budgetTier = 'Required'
-    if (form.vendorRequired === 'YES' && !form.vendorType) e.vendorType = 'Required'
+    else if (form.budgetTier === 'Other' && !form.budgetTierOther?.trim())
+      e.budgetTierOther = 'Please specify the budget tier'
+    if (form.vendorRequired === 'YES' && form.vendorTypeIds.length === 0)
+      e.vendorTypeIds = 'Select at least one vendor type'
+    else if (form.vendorRequired === 'YES' && form.vendorTypeIds.includes('Other') && !form.vendorTypeOther?.trim())
+      e.vendorTypeOther = 'Please specify the vendor type'
 
     // Section 8
-    if (!form.kpiType)       e.kpiType       = 'Required'
+    if (!form.kpiType) e.kpiType = 'Required'
+    else if (form.kpiType === 'Other' && !form.kpiTypeOther?.trim())
+      e.kpiTypeOther = 'Please specify the KPI type'
     if (!form.expectedOutput) e.expectedOutput = 'Required'
+    else if (form.expectedOutput === 'Other' && !form.expectedOutputOther?.trim())
+      e.expectedOutputOther = 'Please specify the expected output'
 
     setErrors(e)
     return Object.keys(e).length === 0
@@ -908,15 +1006,34 @@ export default function CampaignFormPage() {
     setSubmitting(true)
     console.log('[Form] Sending payload to backend...')
     try {
-      // Replace empty strings with null so Java enum deserialisation doesn't choke
-      const cleanForm = Object.fromEntries(
-        Object.entries(form).map(([k, v]) => [k, v === '' ? null : v])
-      )
+      // Resolve "Other" free-text values for single-select fields
+      const resolve = (val, other) => val === 'Other' ? (other?.trim() || null) : (val || null)
+      // Resolve "Other" for multi-select: replace 'Other' sentinel with the custom text
+      const resolveMulti = (arr, other) => {
+        const result = arr.filter((v) => v !== 'Other')
+        if (arr.includes('Other') && other?.trim()) result.push(other.trim())
+        return result.join(',') || null
+      }
+
       const payload = {
-        ...cleanForm,
-        targetLocation: JSON.stringify(targetLocations),
-        offerType:  form.hasOffer === 'YES' ? form.offerType || null : null,
-        vendorType: form.vendorRequired === 'YES' ? form.vendorType || null : null,
+        departmentId:      form.departmentId || null,
+        businessObjective: resolve(form.businessObjective, form.businessObjectiveOther),
+        requirementTypeId: resolve(form.requirementTypeId, form.requirementTypeOther),
+        // multi-select fields stored as comma-separated display names
+        audienceTypeId:    resolveMulti(form.audienceTypeIds, form.audienceTypeOther),
+        language:          resolveMulti(form.languages,       form.languageOther),
+        tone:              resolveMulti(form.tones,           form.toneOther),
+        hasOffer:          form.hasOffer,
+        offerTypeId:       form.hasOffer === 'YES' ? resolve(form.offerTypeId, form.offerTypeOther) : null,
+        keyMessage:        form.hasOffer === 'YES' ? form.keyMessage || null : null,
+        supportingProof:   form.hasOffer === 'YES' ? resolve(form.supportingProof, form.supportingProofOther) : null,
+        priority:          form.priority || null,
+        budgetTier:        resolve(form.budgetTier, form.budgetTierOther),
+        vendorRequired:    form.vendorRequired,
+        vendorType:        form.vendorRequired === 'YES' ? resolveMulti(form.vendorTypeIds, form.vendorTypeOther) : null,
+        kpiType:           resolve(form.kpiType, form.kpiTypeOther),
+        expectedOutput:    resolve(form.expectedOutput, form.expectedOutputOther),
+        targetLocation:    JSON.stringify(targetLocations),
         taskSpecs:  Object.values(deliverables).map((d) => {
           const qn = d.questionnaire || {}
           const questionnaireAnswers = Object.entries(qn)
@@ -933,9 +1050,6 @@ export default function CampaignFormPage() {
             .map(([questionId, answerValue]) => ({ questionId, answerValue }))
           return {
             granularTaskId: d.granularTaskId,
-            platformId:     d.platformId || null,
-            formatId:       d.formatId   || null,
-            quantity:       d.quantity   || null,
             ...(questionnaireAnswers.length > 0 ? { questionnaireAnswers } : {}),
           }
         }),
@@ -943,7 +1057,7 @@ export default function CampaignFormPage() {
       console.log('[Form] Payload:', payload)
       const result = await campaignsApi.create(payload)
       console.log('[Form] Success:', result)
-      showToast('Request submitted successfully! Awaiting department approval.', 'success')
+      showToast('Request submitted successfully!', 'success')
       setTimeout(() => navigate('/campaigns', { state: { justSubmitted: true } }), 1000)
     } catch (err) {
       console.error('[Form] Submit error:', err, 'status:', err?.response?.status, 'data:', err?.response?.data)
@@ -960,14 +1074,11 @@ export default function CampaignFormPage() {
   }
 
   const selectedTaskIds = Object.keys(deliverables)
-  const platOpts = [{ value: '', label: 'Select platform…' }, ...platforms]
-  const fmtOpts  = [{ value: '', label: 'Select format…' },  ...formats]
-  const qtyOpts  = [{ value: '', label: 'Select quantity…' }, ...enumOpts.quantities]
 
   return (
     <div className="mx-auto max-w-4xl space-y-3 pb-10">
       {/* Page header */}
-      <div className="flex items-center justify-between mb-1">
+      <div className="mb-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-900">New Marketing Request</h2>
           <p className="text-xs text-slate-500">
@@ -986,7 +1097,7 @@ export default function CampaignFormPage() {
         <Card>
           {/* §1 Requestor Details */}
           <SectionLabel number="1" title="Requestor Details" />
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <FormGroup label="Requestor Name">
               <input className={inputCls} value={user?.fullName || user?.email || ''} disabled />
             </FormGroup>
@@ -998,18 +1109,28 @@ export default function CampaignFormPage() {
               </div>
             </FormGroup>
 
-            <FormGroup label="Business Objective" required error={errors.businessObjective}>
-              <div data-has-error={!!errors.businessObjective || undefined}>
+            <FormGroup label="Business Objective" required error={errors.businessObjective || errors.businessObjectiveOther}>
+              <div data-has-error={!!(errors.businessObjective || errors.businessObjectiveOther) || undefined}>
                 <Select name="businessObjective" value={form.businessObjective} onChange={handleChange}
-                  options={enumOpts.businessObjectives} placeholder="Select…" hasError={!!errors.businessObjective} />
+                  options={businessObjectives} placeholder="Select…" hasError={!!errors.businessObjective} />
               </div>
+              {form.businessObjective === 'Other' && (
+                <input className={`mt-1.5 ${errors.businessObjectiveOther ? errorInputCls : inputCls}`}
+                  name="businessObjectiveOther" value={form.businessObjectiveOther} onChange={handleChange}
+                  placeholder="Specify your objective…" />
+              )}
             </FormGroup>
 
-            <FormGroup label="Requirement Type" required error={errors.requirementTypeId}>
-              <div data-has-error={!!errors.requirementTypeId || undefined}>
+            <FormGroup label="Requirement Type" required error={errors.requirementTypeId || errors.requirementTypeOther}>
+              <div data-has-error={!!(errors.requirementTypeId || errors.requirementTypeOther) || undefined}>
                 <Select name="requirementTypeId" value={form.requirementTypeId} onChange={handleChange}
                   options={reqTypes} placeholder="Select…" hasError={!!errors.requirementTypeId} />
               </div>
+              {form.requirementTypeId === 'Other' && (
+                <input className={`mt-1.5 ${errors.requirementTypeOther ? errorInputCls : inputCls}`}
+                  name="requirementTypeOther" value={form.requirementTypeOther} onChange={handleChange}
+                  placeholder="Specify the requirement type…" />
+              )}
             </FormGroup>
           </div>
 
@@ -1032,26 +1153,47 @@ export default function CampaignFormPage() {
 
           <Divider />
 
-          {/* §3 Audience */}
+          {/* §2 Audience */}
           <SectionLabel number="2" title="Target Audience" />
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <FormGroup label="Audience Type" required error={errors.audienceTypeId}>
-              <div data-has-error={!!errors.audienceTypeId || undefined}>
-                <Select name="audienceTypeId" value={form.audienceTypeId} onChange={handleChange}
-                  options={audiences} placeholder="Select…" hasError={!!errors.audienceTypeId} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <FormGroup label="Audience Type" required error={errors.audienceTypeIds || errors.audienceTypeOther}>
+              <div data-has-error={!!(errors.audienceTypeIds || errors.audienceTypeOther) || undefined}>
+                <GenericMultiSelect
+                  name="audienceTypeIds" values={form.audienceTypeIds} onChange={handleChange}
+                  options={audiences} placeholder="Select audience types…" hasError={!!errors.audienceTypeIds}
+                />
               </div>
+              {form.audienceTypeIds.includes('Other') && (
+                <input className={`mt-1.5 ${errors.audienceTypeOther ? errorInputCls : inputCls}`}
+                  name="audienceTypeOther" value={form.audienceTypeOther} onChange={handleChange}
+                  placeholder="Specify the audience…" />
+              )}
             </FormGroup>
-            <FormGroup label="Language" required error={errors.language}>
-              <div data-has-error={!!errors.language || undefined}>
-                <Select name="language" value={form.language} onChange={handleChange}
-                  options={enumOpts.languages} placeholder="Select…" hasError={!!errors.language} />
+            <FormGroup label="Language" required error={errors.languages || errors.languageOther}>
+              <div data-has-error={!!(errors.languages || errors.languageOther) || undefined}>
+                <GenericMultiSelect
+                  name="languages" values={form.languages} onChange={handleChange}
+                  options={languages} placeholder="Select languages…" hasError={!!errors.languages}
+                />
               </div>
+              {form.languages.includes('Other') && (
+                <input className={`mt-1.5 ${errors.languageOther ? errorInputCls : inputCls}`}
+                  name="languageOther" value={form.languageOther} onChange={handleChange}
+                  placeholder="Specify the language…" />
+              )}
             </FormGroup>
-            <FormGroup label="Tone / Style" required error={errors.tone}>
-              <div data-has-error={!!errors.tone || undefined}>
-                <Select name="tone" value={form.tone} onChange={handleChange}
-                  options={enumOpts.tones} placeholder="Select…" hasError={!!errors.tone} />
+            <FormGroup label="Tone / Style" required error={errors.tones || errors.toneOther}>
+              <div data-has-error={!!(errors.tones || errors.toneOther) || undefined}>
+                <GenericMultiSelect
+                  name="tones" values={form.tones} onChange={handleChange}
+                  options={tones} placeholder="Select tones…" hasError={!!errors.tones}
+                />
               </div>
+              {form.tones.includes('Other') && (
+                <input className={`mt-1.5 ${errors.toneOther ? errorInputCls : inputCls}`}
+                  name="toneOther" value={form.toneOther} onChange={handleChange}
+                  placeholder="Specify the tone / style…" />
+              )}
             </FormGroup>
           </div>
         </Card>
@@ -1059,8 +1201,8 @@ export default function CampaignFormPage() {
         {/* ── Card 2: Offer & Messaging ── */}
         <Card>
           <SectionLabel number="3" title="Offer & Messaging" />
-          <div className="flex items-start gap-4">
-            <div className="w-36 shrink-0">
+          <div className="flex flex-col items-start gap-4 sm:flex-row">
+            <div className="w-full shrink-0 sm:w-36">
               <FormGroup label="Is there an Offer?">
                 <Select name="hasOffer" value={form.hasOffer} onChange={handleChange}
                   options={[{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }]} />
@@ -1068,18 +1210,28 @@ export default function CampaignFormPage() {
             </div>
 
             {form.hasOffer === 'YES' && (
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 pl-4 border-l border-slate-100">
-                <FormGroup label="Offer Type" required error={errors.offerTypeId}>
-                  <div data-has-error={!!errors.offerTypeId || undefined}>
+              <div className="grid flex-1 grid-cols-1 gap-3 border-t border-slate-100 pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0 sm:grid-cols-3">
+                <FormGroup label="Offer Type" required error={errors.offerTypeId || errors.offerTypeOther}>
+                  <div data-has-error={!!(errors.offerTypeId || errors.offerTypeOther) || undefined}>
                     <Select name="offerTypeId" value={form.offerTypeId} onChange={handleChange}
                       options={offerTypes} placeholder="Select…" hasError={!!errors.offerTypeId} />
                   </div>
+                  {form.offerTypeId === 'Other' && (
+                    <input className={`mt-1.5 ${errors.offerTypeOther ? errorInputCls : inputCls}`}
+                      name="offerTypeOther" value={form.offerTypeOther} onChange={handleChange}
+                      placeholder="Specify the offer type…" />
+                  )}
                 </FormGroup>
-                <FormGroup label="Supporting Proof" required error={errors.supportingProof}>
-                  <div data-has-error={!!errors.supportingProof || undefined}>
+                <FormGroup label="Supporting Proof" required error={errors.supportingProof || errors.supportingProofOther}>
+                  <div data-has-error={!!(errors.supportingProof || errors.supportingProofOther) || undefined}>
                     <Select name="supportingProof" value={form.supportingProof} onChange={handleChange}
-                      options={enumOpts.supportingProofs} placeholder="Select…" hasError={!!errors.supportingProof} />
+                      options={supportingProofs} placeholder="Select…" hasError={!!errors.supportingProof} />
                   </div>
+                  {form.supportingProof === 'Other' && (
+                    <input className={`mt-1.5 ${errors.supportingProofOther ? errorInputCls : inputCls}`}
+                      name="supportingProofOther" value={form.supportingProofOther} onChange={handleChange}
+                      placeholder="Specify the supporting proof…" />
+                  )}
                 </FormGroup>
                 <FormGroup label="Key Message" required error={errors.keyMessage}>
                   <textarea
@@ -1128,12 +1280,7 @@ export default function CampaignFormPage() {
                     key={taskId}
                     task={task}
                     spec={deliverables[taskId]}
-                    platforms={platOpts}
-                    formats={fmtOpts}
-                    quantities={qtyOpts}
-                    onUpdate={updateDeliverable}
                     onRemove={(id) => toggleTask({ taskId: id })}
-                    fieldErrors={errors.tasks?.[taskId]}
                     questions={taskQuestions[taskId] || []}
                     onQuestionnaireChange={(qid, val) => updateDeliverableQuestionnaire(taskId, qid, val)}
                     questionnaireFieldErrors={errors.taskQa?.[taskId] || {}}
@@ -1147,29 +1294,41 @@ export default function CampaignFormPage() {
         {/* ── Card 4: Timelines · Budget · KPIs ── */}
         <Card>
           <SectionLabel number="5" title="Timelines & Priority" />
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <FormGroup label="Priority" required error={errors.priority}>
               <div data-has-error={!!errors.priority || undefined}>
                 <Select name="priority" value={form.priority} onChange={handleChange}
                   options={enumOpts.priorities} hasError={!!errors.priority} />
               </div>
             </FormGroup>
-            <FormGroup label="Budget" required error={errors.budgetTier}>
-              <div data-has-error={!!errors.budgetTier || undefined}>
+            <FormGroup label="Budget" required error={errors.budgetTier || errors.budgetTierOther}>
+              <div data-has-error={!!(errors.budgetTier || errors.budgetTierOther) || undefined}>
                 <Select name="budgetTier" value={form.budgetTier} onChange={handleChange}
-                  options={enumOpts.budgetTiers} placeholder="Select…" hasError={!!errors.budgetTier} />
+                  options={budgetTierOpts} placeholder="Select…" hasError={!!errors.budgetTier} />
               </div>
+              {form.budgetTier === 'Other' && (
+                <input className={`mt-1.5 ${errors.budgetTierOther ? errorInputCls : inputCls}`}
+                  name="budgetTierOther" value={form.budgetTierOther} onChange={handleChange}
+                  placeholder="Specify the budget…" />
+              )}
             </FormGroup>
             <FormGroup label="Vendor Required?">
               <Select name="vendorRequired" value={form.vendorRequired} onChange={handleChange}
                 options={[{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }]} />
             </FormGroup>
             {form.vendorRequired === 'YES' && (
-              <FormGroup label="Vendor Type" required error={errors.vendorType}>
-                <div data-has-error={!!errors.vendorType || undefined}>
-                  <Select name="vendorType" value={form.vendorType} onChange={handleChange}
-                    options={enumOpts.vendorTypes} placeholder="Select…" hasError={!!errors.vendorType} />
+              <FormGroup label="Vendor Type" required error={errors.vendorTypeIds || errors.vendorTypeOther}>
+                <div data-has-error={!!(errors.vendorTypeIds || errors.vendorTypeOther) || undefined}>
+                  <GenericMultiSelect
+                    name="vendorTypeIds" values={form.vendorTypeIds} onChange={handleChange}
+                    options={vendorTypes} placeholder="Select vendor types…" hasError={!!errors.vendorTypeIds}
+                  />
                 </div>
+                {form.vendorTypeIds.includes('Other') && (
+                  <input className={`mt-1.5 ${errors.vendorTypeOther ? errorInputCls : inputCls}`}
+                    name="vendorTypeOther" value={form.vendorTypeOther} onChange={handleChange}
+                    placeholder="Specify the vendor type…" />
+                )}
               </FormGroup>
             )}
           </div>
@@ -1177,18 +1336,28 @@ export default function CampaignFormPage() {
           <Divider />
 
           <SectionLabel number="6" title="Success Metrics (KPIs)" />
-          <div className="grid grid-cols-2 gap-3">
-            <FormGroup label="KPI Type" required error={errors.kpiType}>
-              <div data-has-error={!!errors.kpiType || undefined}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormGroup label="KPI Type" required error={errors.kpiType || errors.kpiTypeOther}>
+              <div data-has-error={!!(errors.kpiType || errors.kpiTypeOther) || undefined}>
                 <Select name="kpiType" value={form.kpiType} onChange={handleChange}
-                  options={enumOpts.kpiTypes} placeholder="Select…" hasError={!!errors.kpiType} />
+                  options={kpiTypeOpts} placeholder="Select…" hasError={!!errors.kpiType} />
               </div>
+              {form.kpiType === 'Other' && (
+                <input className={`mt-1.5 ${errors.kpiTypeOther ? errorInputCls : inputCls}`}
+                  name="kpiTypeOther" value={form.kpiTypeOther} onChange={handleChange}
+                  placeholder="Specify the KPI…" />
+              )}
             </FormGroup>
-            <FormGroup label="Expected Output" required error={errors.expectedOutput}>
-              <div data-has-error={!!errors.expectedOutput || undefined}>
+            <FormGroup label="Expected Output" required error={errors.expectedOutput || errors.expectedOutputOther}>
+              <div data-has-error={!!(errors.expectedOutput || errors.expectedOutputOther) || undefined}>
                 <Select name="expectedOutput" value={form.expectedOutput} onChange={handleChange}
-                  options={enumOpts.expectedOutputs} placeholder="Select…" hasError={!!errors.expectedOutput} />
+                  options={expectedOutputOpts} placeholder="Select…" hasError={!!errors.expectedOutput} />
               </div>
+              {form.expectedOutput === 'Other' && (
+                <input className={`mt-1.5 ${errors.expectedOutputOther ? errorInputCls : inputCls}`}
+                  name="expectedOutputOther" value={form.expectedOutputOther} onChange={handleChange}
+                  placeholder="Specify the expected output…" />
+              )}
             </FormGroup>
           </div>
         </Card>
@@ -1206,18 +1375,17 @@ export default function CampaignFormPage() {
                 {errors.businessObjective && <li>Business Objective is required</li>}
                 {errors.requirementTypeId && <li>Requirement Type is required</li>}
                 {errors.targetLocations  && <li>{errors.targetLocations}</li>}
-                {errors.audienceTypeId   && <li>Audience Type is required</li>}
-                {errors.language         && <li>Language is required</li>}
-                {errors.tone             && <li>Tone / Style is required</li>}
+                {errors.audienceTypeIds  && <li>{errors.audienceTypeIds}</li>}
+                {errors.languages        && <li>{errors.languages}</li>}
+                {errors.tones            && <li>{errors.tones}</li>}
                 {errors.offerTypeId      && <li>Offer Type is required</li>}
                 {errors.keyMessage       && <li>Key Message is required</li>}
                 {errors.supportingProof  && <li>Supporting Proof is required</li>}
                 {errors.deliverables     && <li>{errors.deliverables}</li>}
-                {errors.tasks && <li>Each selected task needs Platform, Format, and Quantity</li>}
                 {errors.taskQa && <li>Answer all required task-specific questions under Deliverables</li>}
                 {errors.priority         && <li>Priority is required</li>}
                 {errors.budgetTier       && <li>Budget Tier is required</li>}
-                {errors.vendorType       && <li>Vendor Type is required when vendor is needed</li>}
+                {errors.vendorTypeIds    && <li>{errors.vendorTypeIds}</li>}
                 {errors.kpiType          && <li>KPI Type is required</li>}
                 {errors.expectedOutput   && <li>Expected Output is required</li>}
               </ul>
@@ -1226,14 +1394,14 @@ export default function CampaignFormPage() {
         )}
 
         {/* Submit */}
-        <div className="flex justify-end gap-3 pt-1">
+        <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end sm:gap-3">
           <button type="button" onClick={() => navigate('/campaigns')}
-            className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+            className="w-full rounded-lg border border-slate-300 px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition sm:w-auto">
             Cancel
           </button>
           <button type="submit" disabled={submitting}
-            className="rounded-lg bg-brand-600 px-6 py-2 text-sm font-semibold text-white
-              hover:bg-brand-700 disabled:opacity-60 transition flex items-center gap-2">
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-6 py-2 text-sm font-semibold text-white
+              hover:bg-brand-700 disabled:opacity-60 transition sm:w-auto">
             {submitting ? (
               <>
                 <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -1252,6 +1420,18 @@ export default function CampaignFormPage() {
   )
 }
 
-function normalise(item) {
+/** Departments still use the DB id as the submitted value. */
+function normaliseById(item) {
   return { value: item.id, label: item.name }
 }
+
+/**
+ * All form-field dropdowns now store the display name directly.
+ * The backend no longer uses FK IDs for these fields.
+ */
+function normaliseByName(item) {
+  return { value: item.name, label: item.name }
+}
+
+/** Sentinel option appended to every list that supports free-text "Other". */
+const OTHER_OPTION = { value: 'Other', label: 'Other (specify below)' }

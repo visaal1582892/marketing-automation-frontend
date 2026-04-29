@@ -46,7 +46,7 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Centralised 401/403 handling.
+// Centralised 401 handling.
 api.interceptors.response.use(
   (res) => res,
   (err) => {
@@ -58,16 +58,10 @@ api.interceptors.response.use(
         if (!window.location.pathname.startsWith('/login')) {
           window.location.assign('/login')
         }
-      } else if (err.response.status === 403) {
-        // Authenticated but wrong role — the stored session may be stale.
-        // Clear it and redirect to login so the user can re-authenticate
-        // as the correct account.
-        tokenStorage.clear()
-        userStorage.clear()
-        if (!window.location.pathname.startsWith('/login')) {
-          window.location.assign('/login?reason=forbidden')
-        }
       }
+      // 403 (Forbidden) means authenticated but not permitted for this specific
+      // action. Do NOT clear the session — the user is still logged in. Let the
+      // calling code handle or surface the error (e.g. toast / console warning).
     }
     return Promise.reject(err)
   },

@@ -110,7 +110,7 @@ export default function DeptApprovalPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200">
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200">
         <Tab
           label={`Pending (${pending.length})`}
           icon="inbox"
@@ -211,7 +211,8 @@ export default function DeptApprovalPage() {
 function PendingTable({ campaigns, onAction, onViewBrief }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
+      <div className="overflow-x-auto">
+      <table className="min-w-[900px] divide-y divide-slate-200 text-sm sm:min-w-full">
         <thead className="bg-slate-50">
           <tr>
             {['#', 'Requirement', 'Requestor', 'Department', 'Objective', 'Priority', 'Submitted', 'Actions'].map((h) => (
@@ -230,7 +231,7 @@ function PendingTable({ campaigns, onAction, onViewBrief }) {
               <td className="px-4 py-3"><PriorityBadge v={c.priority} /></td>
               <td className="px-4 py-3 text-slate-500 text-xs">{fmtDateTime(c.createdAt)}</td>
               <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => onViewBrief(c.campaignId)}
                     className="rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1"
@@ -246,6 +247,7 @@ function PendingTable({ campaigns, onAction, onViewBrief }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
@@ -258,7 +260,8 @@ export function HistoryTable({ campaigns, stage, onViewBrief }) {
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
+      <div className="overflow-x-auto">
+      <table className="min-w-[900px] divide-y divide-slate-200 text-sm sm:min-w-full">
         <thead className="bg-slate-50">
           <tr>
             {['#', 'Requirement', 'Requestor', 'Department', 'Decision', 'Decided', 'Reason / Status', ''].map((h) => (
@@ -298,6 +301,7 @@ export function HistoryTable({ campaigns, stage, onViewBrief }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
@@ -349,17 +353,17 @@ export function ActionModal({ title, campaign, action, reason, setReason, onConf
           </p>
         )}
 
-        <div className="flex justify-end gap-3 pt-1">
+        <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end sm:gap-3">
           <button
             onClick={onCancel}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+            className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition sm:w-auto"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
             disabled={saving}
-            className={`rounded-lg px-5 py-2 text-sm font-semibold text-white disabled:opacity-60 transition flex items-center gap-2 ${
+            className={`flex w-full items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold text-white disabled:opacity-60 transition sm:w-auto ${
               action === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
             }`}
           >

@@ -58,7 +58,6 @@ export default function AppLayout() {
     if (location.pathname.startsWith('/my-tasks'))                 return 'My Tasks'
     if (location.pathname.startsWith('/manager/all-requests'))     return 'All Requests'
     if (location.pathname.startsWith('/manager/qc-review'))        return 'QC Review Queue'
-    if (location.pathname.startsWith('/manager/held-tasks'))        return 'Held Tasks'
     if (location.pathname.startsWith('/manager/reports'))          return 'Time & Efficiency Reports'
     if (location.pathname === '/dashboard')                        return 'Dashboard'
     return 'Marketing Automation'
