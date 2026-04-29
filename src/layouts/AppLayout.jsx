@@ -82,7 +82,7 @@ export default function AppLayout() {
               <div className="min-w-0 leading-tight">
                 <div className="truncate text-sm font-semibold text-slate-900">MedPlus</div>
                 <div className="text-xs uppercase tracking-wider text-slate-400">
-                  Marketing Hub
+                  Brand & Buzz
                 </div>
               </div>
             </div>
