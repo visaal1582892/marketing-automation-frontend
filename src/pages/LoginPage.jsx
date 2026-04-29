@@ -44,7 +44,7 @@ export default function LoginPage() {
         </div>
 
         <div className="relative z-10 flex flex-col justify-between p-10 text-white">
-          <Logo size={42} withWordmark tone="light" tagline="Marketing Hub" />
+          <Logo size={42} withWordmark tone="light" tagline="Brand & Buzz" />
 
           <div className="max-w-md">
             <h2 className="text-3xl font-semibold leading-tight">

@@ -11,7 +11,7 @@
 export default function Logo({
   size = 36,
   withWordmark = false,
-  tagline = 'Marketing Hub',
+  tagline = 'Brand & Buzz',
   className = '',
   tone = 'dark',
 }) {
