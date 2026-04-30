@@ -4,6 +4,128 @@ import { useAuth } from '../auth/AuthContext'
 import { MASTER_RESOURCES } from '../api/masterData'
 import Icon from '../components/Icon'
 import Logo from '../components/Logo'
+import Modal from '../components/Modal'
+import { useToast } from '../components/Toast'
+import api from '../api/client'
+
+// ─── Change Password Modal ────────────────────────────────────────────────────
+function ChangePasswordModal({ open, onClose }) {
+  const toast = useToast()
+  const [form, setForm]       = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [showCur, setShowCur] = useState(false)
+  const [showNew, setShowNew] = useState(false)
+  const [saving, setSaving]   = useState(false)
+
+  useEffect(() => {
+    if (open) setForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  }, [open])
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (form.newPassword !== form.confirmPassword) {
+      toast.error('New passwords do not match.')
+      return
+    }
+    if (form.newPassword.length < 6) {
+      toast.error('New password must be at least 6 characters.')
+      return
+    }
+    setSaving(true)
+    try {
+      await api.post('/auth/change-password', {
+        currentPassword: form.currentPassword,
+        newPassword:     form.newPassword,
+      })
+      toast.success('Password changed successfully.')
+      onClose()
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to change password.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputCls = `w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm
+                    text-slate-800 placeholder-slate-400 shadow-sm outline-none pr-10
+                    focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition`
+
+  return (
+    <Modal open={open} onClose={onClose} title="Change Password" maxWidth="max-w-sm">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Current Password */}
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">Current Password</label>
+          <div className="relative">
+            <input
+              required
+              type={showCur ? 'text' : 'password'}
+              className={inputCls}
+              value={form.currentPassword}
+              onChange={e => set('currentPassword', e.target.value)}
+              placeholder="••••••••"
+            />
+            <button type="button" onClick={() => setShowCur(s => !s)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-600">
+              <Icon name={showCur ? 'eyeOff' : 'eye'} className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* New Password */}
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">New Password</label>
+          <div className="relative">
+            <input
+              required
+              type={showNew ? 'text' : 'password'}
+              className={inputCls}
+              value={form.newPassword}
+              onChange={e => set('newPassword', e.target.value)}
+              placeholder="••••••••"
+            />
+            <button type="button" onClick={() => setShowNew(s => !s)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-600">
+              <Icon name={showNew ? 'eyeOff' : 'eye'} className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Confirm New Password */}
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">Confirm New Password</label>
+          <div className="relative">
+            <input
+              required
+              type={showNew ? 'text' : 'password'}
+              className={inputCls}
+              value={form.confirmPassword}
+              onChange={e => set('confirmPassword', e.target.value)}
+              placeholder="••••••••"
+            />
+          </div>
+          {form.confirmPassword && form.newPassword !== form.confirmPassword && (
+            <p className="mt-1 text-xs text-red-500">Passwords do not match.</p>
+          )}
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose}
+            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm
+                       font-medium text-slate-700 transition hover:bg-slate-50 sm:w-auto">
+            Cancel
+          </button>
+          <button type="submit" disabled={saving}
+            className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white
+                       shadow-sm transition hover:bg-brand-700 disabled:opacity-60 sm:w-auto">
+            {saving ? 'Saving…' : 'Change Password'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
 
 const TOP_NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -16,11 +138,13 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const [collapsed, setCollapsed]   = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [menuOpen, setMenuOpen]     = useState(false)
-  const [masterOpen, setMasterOpen] = useState(true)
-  const [managerOpen, setManagerOpen] = useState(true)
+  const toast = useToast()
+  const [collapsed, setCollapsed]       = useState(false)
+  const [mobileOpen, setMobileOpen]     = useState(false)
+  const [menuOpen, setMenuOpen]         = useState(false)
+  const [masterOpen, setMasterOpen]     = useState(true)
+  const [managerOpen, setManagerOpen]   = useState(true)
+  const [changePwdOpen, setChangePwdOpen] = useState(false)
 
   const showManagerTools = isMarketingManager || isAdmin
   // "My Tasks" is only for marketing-team workers who actually execute tasks
@@ -306,9 +430,16 @@ export default function AppLayout() {
                     </div>
                   )}
                   <button
-                    onClick={handleLogout}
+                    onClick={() => { setMenuOpen(false); setChangePwdOpen(true) }}
                     className="flex w-full items-center gap-2 px-3 py-2.5 text-sm
                                text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <Icon name="lock" className="h-4 w-4" /> Change Password
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-sm
+                               text-slate-700 transition hover:bg-slate-50 border-t border-slate-100"
                   >
                     <Icon name="logout" className="h-4 w-4" /> Sign out
                   </button>
@@ -322,6 +453,8 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      <ChangePasswordModal open={changePwdOpen} onClose={() => setChangePwdOpen(false)} />
     </div>
   )
 }

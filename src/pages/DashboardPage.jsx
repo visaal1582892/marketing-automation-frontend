@@ -18,28 +18,23 @@ import Icon from '../components/Icon'
  */
 export default function DashboardPage() {
   const {
-    user, isAdmin, isRequestor, isHead, isRegionalManager,
-    isMarketingManager, isMarketingCreator,
+    user, isAdmin, isRequestor, isMarketingManager, isMarketingCreator,
   } = useAuth()
 
-  // Dept-level approver queue — Head / Regional Manager only
-  const showApproverWidgets = isHead || isRegionalManager
   // Operational pipeline view — Marketing Manager and Admin share this
   const showOpsWidgets  = isMarketingManager || isAdmin
   // Admin-only extras (quick-access links to admin pages)
   const showAdminExtras = isAdmin
   // Worker widgets — marketing-team executors only
   const showWorkerWidgets =
-    !isRequestor && !isAdmin && !isMarketingManager && !isHead && !isRegionalManager
+    !isRequestor && !isAdmin && !isMarketingManager
   // Requestor widgets — brief authors only
   const showRequestWidgets = isRequestor
 
-  const [campaigns,     setCampaigns]     = useState([])
-  const [tasks,         setTasks]         = useState([])
-  const [pendingDept,   setPendingDept]   = useState([])
-  const [deptHistory,   setDeptHistory]   = useState([])
-  const [opsQcTasks,    setOpsQcTasks]    = useState([])
-  const [opsAllTasks,   setOpsAllTasks]   = useState([])
+  const [campaigns,   setCampaigns]   = useState([])
+  const [tasks,       setTasks]       = useState([])
+  const [opsQcTasks,  setOpsQcTasks]  = useState([])
+  const [opsAllTasks, setOpsAllTasks] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -49,21 +44,18 @@ export default function DashboardPage() {
     const need = (cond, fn) => cond ? fn().catch(() => []) : Promise.resolve([])
 
     Promise.all([
-      need(showRequestWidgets,  () => campaignsApi.list().then(r => r.data || [])),
-      need(showWorkerWidgets,   () => tasksApi.listMy().then(r => r.data || [])),
-      need(showApproverWidgets, () => campaignsApi.pendingDept().then(r => r.data || [])),
-      need(showApproverWidgets, () => campaignsApi.historyDept().then(r => r.data || [])),
-      need(showOpsWidgets,      () => managerApi.pendingTasks().then(r => r.data || [])),
-      need(showOpsWidgets,      () => managerApi.allTasks().then(r => r.data || [])),
-    ]).then(([cs, ts, pd, dh, qc, at]) => {
+      need(showRequestWidgets, () => campaignsApi.list().then(r => r.data || [])),
+      need(showWorkerWidgets,  () => tasksApi.listMy().then(r => r.data || [])),
+      need(showOpsWidgets,     () => managerApi.pendingTasks().then(r => r.data || [])),
+      need(showOpsWidgets,     () => managerApi.allTasks().then(r => r.data || [])),
+    ]).then(([cs, ts, qc, at]) => {
       if (!alive) return
       setCampaigns(cs); setTasks(ts)
-      setPendingDept(pd); setDeptHistory(dh)
       setOpsQcTasks(qc); setOpsAllTasks(at)
     }).finally(() => alive && setLoading(false))
 
     return () => { alive = false }
-  }, [showWorkerWidgets, showApproverWidgets, showOpsWidgets, showRequestWidgets])
+  }, [showWorkerWidgets, showOpsWidgets, showRequestWidgets])
 
   // Derived KPIs
   const taskCounts = useMemo(() => ({
@@ -80,17 +72,11 @@ export default function DashboardPage() {
       : campaigns.filter(c => myId != null && Number(c.requestorId) === Number(myId))
     return {
       total:      my.length,
-      pending:    my.filter(c => ['PENDING_DEPT_APPROVAL','PENDING_MARKETING_APPROVAL'].includes(c.status)).length,
-      inProgress: my.filter(c => ['IN_PROGRESS','PENDING_INTERVENTION','QC_REVIEW'].includes(c.status)).length,
+      inProgress: my.filter(c => ['IN_PROGRESS','QC_REVIEW'].includes(c.status)).length,
       completed:  my.filter(c => c.status === 'COMPLETED').length,
       cancelled:  my.filter(c => c.status === 'CANCELLED' || c.status === 'REJECTED').length,
     }
   }, [campaigns, isRequestor, user])
-
-  const deptHistoryCounts = useMemo(() => ({
-    approved: deptHistory.filter(c => c.deptDecision === 'APPROVED').length,
-    rejected: deptHistory.filter(c => c.deptDecision === 'REJECTED').length,
-  }), [deptHistory])
 
   const opsCounts = useMemo(() => ({
     qcReview:   opsQcTasks.length,
@@ -157,36 +143,6 @@ export default function DashboardPage() {
 
       {loading && (
         <p className="text-center text-slate-400 py-8 text-sm">Loading dashboard…</p>
-      )}
-
-      {/* Dept-Head / Regional-Manager approval queue */}
-      {showApproverWidgets && (
-        <Section title="Approval Queues" subtitle="Requests waiting on your decision and your past calls.">
-          <KpiCard
-            to="/approvals/dept"
-            tone="amber"
-            icon="inbox"
-            label="Pending in my queue"
-            value={pendingDept.length}
-            cta="Review now →"
-          />
-          <KpiCard
-            to="/approvals/dept"
-            tone="emerald"
-            icon="check"
-            label="I've Approved"
-            value={deptHistoryCounts.approved}
-            cta="View history →"
-          />
-          <KpiCard
-            to="/approvals/dept"
-            tone="rose"
-            icon="x"
-            label="I've Rejected"
-            value={deptHistoryCounts.rejected}
-            cta="View history →"
-          />
-        </Section>
       )}
 
       {/* ── Operations Overview: Marketing Manager + Admin ───────────── */}
@@ -379,14 +335,6 @@ export default function DashboardPage() {
       {showWorkerWidgets && tasks.length > 0 && (
         <RecentTasksFeed tasks={tasks} />
       )}
-      {showApproverWidgets && deptHistory.length > 0 && (
-        <RecentDecisionsFeed
-          title="My Recent Department Decisions"
-          decisions={deptHistory.slice(0, 5)}
-          stage="dept"
-          to="/approvals/dept"
-        />
-      )}
       {showOpsWidgets && opsQcTasks.length > 0 && (
         <RecentTasksFeed
           tasks={opsQcTasks.slice(0, 5)}
@@ -474,31 +422,6 @@ function RecentTasksFeed({ tasks, title = 'Up Next', linkTo = '/my-tasks' }) {
   )
 }
 
-function RecentDecisionsFeed({ title, decisions, stage, to }) {
-  return (
-    <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-slate-200/70">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-slate-800">{title}</h2>
-        <Link to={to} className="text-xs font-medium text-brand-600 hover:underline">View all →</Link>
-      </div>
-      <ul className="mt-3 divide-y divide-slate-100">
-        {decisions.map(c => (
-          <li key={c.campaignId} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xs font-mono text-slate-400">#{c.campaignId}</span>
-              <span className="font-medium text-slate-800 truncate">{c.requirementTypeName || '—'}</span>
-              <DecisionBadge v={stage === 'marketing' ? c.marketingDecision : c.deptDecision} />
-            </div>
-            <span className="text-xs text-slate-500">
-              {fmtRelative(stage === 'marketing' ? c.marketingDecisionAt : c.deptDecisionAt)}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
-}
-
 function TaskBadge({ status }) {
   const m = {
     ASSIGNED:    'bg-blue-50 text-blue-700 ring-blue-200',
@@ -517,20 +440,6 @@ function TaskBadge({ status }) {
 function PriorityBadge({ v }) {
   const m = { HIGH: 'bg-red-50 text-red-700 ring-red-200', MEDIUM: 'bg-yellow-50 text-yellow-700 ring-yellow-200', LOW: 'bg-green-50 text-green-700 ring-green-200' }
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || '—'}</span>
-}
-
-function DecisionBadge({ v }) {
-  if (v === 'APPROVED') return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
-      <Icon name="check" className="h-3 w-3" /> Approved
-    </span>
-  )
-  if (v === 'REJECTED') return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200">
-      <Icon name="x" className="h-3 w-3" /> Rejected
-    </span>
-  )
-  return <span className="text-slate-400 text-xs">—</span>
 }
 
 function fmtRelative(d) {

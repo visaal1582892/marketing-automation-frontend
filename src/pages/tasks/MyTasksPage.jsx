@@ -343,9 +343,6 @@ export default function MyTasksPage() {
           onAddFiles={addFiles}
           onRemoveFile={removeFileItem}
           onRetryFile={retryFileItem}
-          questions={taskQuestions}
-          answers={taskAnswers}
-          onAnswerChange={(qId, val) => setTaskAnswers(prev => ({ ...prev, [qId]: val }))}
           onCancel={() => {
             setSubmitting(null); setSubmittingCampaign(null)
             setFileItems([]); setTaskQuestions([]); setTaskAnswers({})
@@ -639,7 +636,6 @@ function QuestionField({ question, value, onChange }) {
 function SubmitModal({
   task, campaign, form, setForm,
   fileItems, onAddFiles, onRemoveFile, onRetryFile,
-  questions = [], answers = {}, onAnswerChange,
   onCancel, onConfirm, onViewBrief, saving,
 }) {
   const uploading  = fileItems.some(f => f.status === 'uploading')
@@ -657,52 +653,26 @@ function SubmitModal({
       <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
-          <h3 className="text-base font-semibold text-slate-900">Submit for QC review</h3>
-          <button onClick={onCancel} className="rounded p-1 text-slate-400 hover:bg-slate-100 transition">
-            <Icon name="x" className="h-4 w-4" />
-          </button>
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">Submit for QC review</h3>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {task.granularTaskName || task.requirementTypeName || 'Task'}
+              {campaign && <span className="text-slate-400"> · {campaign.requirementTypeName || `Campaign #${task.campaignId}`}</span>}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onViewBrief}
+              className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1">
+              <Icon name="eye" className="h-3 w-3" /> Brief
+            </button>
+            <button onClick={onCancel} className="rounded p-1 text-slate-400 hover:bg-slate-100 transition">
+              <Icon name="x" className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable body */}
         <div className="overflow-y-auto px-6 py-4 space-y-4">
-          {/* Campaign / task context */}
-          {campaign ? (
-            <RequestSummaryCard campaign={campaign} />
-          ) : (
-            <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
-              <div><span className="font-medium">Task:</span> {task.granularTaskName || task.requirementTypeName}</div>
-              <div><span className="font-medium">Campaign:</span> #{task.campaignId}</div>
-            </div>
-          )}
-
-          <button type="button" onClick={onViewBrief}
-            className="text-xs text-brand-600 hover:underline flex items-center gap-1">
-            <Icon name="eye" className="h-3 w-3" /> View full request brief
-          </button>
-
-          {/* ── Task-specific questions ── */}
-          {questions.length > 0 && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4 space-y-4">
-              <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <Icon name="clipboard" className="h-4 w-4 text-brand-500" />
-                Task Questions
-                {questions.some(q => q.isRequired) && (
-                  <span className="text-xs font-normal text-slate-400">
-                    ({questions.filter(q => q.isRequired).length} required)
-                  </span>
-                )}
-              </h4>
-              {questions.map(q => (
-                <QuestionField
-                  key={q.questionId}
-                  question={q}
-                  value={answers[q.questionId] || ''}
-                  onChange={val => onAnswerChange(q.questionId, val)}
-                />
-              ))}
-            </div>
-          )}
-
           {/* ── File upload zone ── */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">

@@ -18,9 +18,39 @@ export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChan
   const [error, setError]       = useState(null)
 
   // Marketing Head / Admin can edit priority directly from the brief.
-  const { isMarketingManager, isAdmin } = useAuth()
+  const { isMarketingManager, isAdmin, isRequestor, user } = useAuth()
   const toast = useToast()
   const canEditPriority = isMarketingManager || isAdmin
+
+  // Requestor rework state
+  const [reworkTask,    setReworkTask]    = useState(null)
+  const [reworkMsg,     setReworkMsg]     = useState('')
+  const [submittingRw,  setSubmittingRw]  = useState(false)
+
+  const myUserId = user?.userId ?? user?.id
+  const canRequestRework = campaign != null && (
+    isAdmin ||
+    (isRequestor && myUserId != null && Number(campaign.requestorId) === Number(myUserId))
+  )
+
+  const handleRequestorRework = async () => {
+    if (!reworkTask || !reworkMsg.trim()) return
+    setSubmittingRw(true)
+    try {
+      await campaignsApi.requestorRework(campaign.campaignId, reworkTask.taskId, reworkMsg.trim())
+      toast.success?.('Task sent for rework.')
+      setReworkTask(null)
+      setReworkMsg('')
+      // Refresh campaign to reflect updated task statuses
+      const res = await campaignsApi.getById(campaign.campaignId)
+      setCampaign(res.data)
+      onCampaignChanged?.(res.data)
+    } catch (e) {
+      toast.error?.(e?.response?.data?.message || 'Failed to send for rework.')
+    } finally {
+      setSubmittingRw(false)
+    }
+  }
 
   const handlePriorityChange = (updated) => {
     setCampaign(prev => prev ? { ...prev, ...updated } : updated)
@@ -61,10 +91,26 @@ export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChan
           ) : error ? (
             <p className="text-center text-red-500 py-12 text-sm">{error}</p>
           ) : campaign ? (
-            <RequestBriefBody campaign={campaign} filterTaskId={filterTaskId} />
+            <RequestBriefBody
+              campaign={campaign}
+              filterTaskId={filterTaskId}
+              canRequestRework={canRequestRework}
+              onRequestRework={(t) => { setReworkTask(t); setReworkMsg('') }}
+            />
           ) : null}
         </div>
       </aside>
+
+      {reworkTask && (
+        <RequestorReworkModal
+          task={reworkTask}
+          message={reworkMsg}
+          onMessageChange={setReworkMsg}
+          onConfirm={handleRequestorRework}
+          onClose={() => { setReworkTask(null); setReworkMsg('') }}
+          submitting={submittingRw}
+        />
+      )}
     </div>
   )
 }
@@ -159,7 +205,7 @@ function DrawerHeader({ campaign, onClose, canEditPriority, onPriorityChanged, o
   )
 }
 
-function RequestBriefBody({ campaign: c, filterTaskId }) {
+function RequestBriefBody({ campaign: c, filterTaskId, canRequestRework = false, onRequestRework }) {
   // When opened from a worker's task card, only show their specific task.
   const visibleTasks = filterTaskId
     ? (c.workTasks || []).filter(t => String(t.taskId) === String(filterTaskId))
@@ -216,6 +262,30 @@ function RequestBriefBody({ campaign: c, filterTaskId }) {
         <Detail label="Vendor Type"     value={fmtMultiValue(c.vendorType)} span={2} />
       </Section>
 
+      {/* Campaign Files */}
+      {c.fileUrls?.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 px-4 py-2.5 flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-slate-800">Campaign Files</h4>
+            <span className="text-xs text-slate-500">{c.fileUrls.length}</span>
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {c.fileUrls.map((url, i) => {
+              const fileName = url.split('/').pop() || `File ${i + 1}`
+              return (
+                <li key={i} className="flex items-center gap-3 px-4 py-2.5">
+                  <Icon name="fileText" className="h-4 w-4 text-brand-500 shrink-0" />
+                  <a href={url} target="_blank" rel="noopener noreferrer"
+                    className="text-sm text-brand-600 hover:underline truncate flex-1">
+                    {fileName}
+                  </a>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
       {/* Deliverables */}
       {c.deliverables?.length > 0 && (
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -269,17 +339,25 @@ function RequestBriefBody({ campaign: c, filterTaskId }) {
                       </span>
                     )}
                   </div>
-                  {parseAssetUrls(t.assetUrl).length > 0 && (
-                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                      {parseAssetUrls(t.assetUrl).map((url, i, arr) => (
-                        <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                          className="text-brand-600 hover:underline text-xs flex items-center gap-1">
-                          <Icon name="fileText" className="h-3 w-3" />
-                          {arr.length > 1 ? `File ${i + 1}` : 'Submitted file'}
-                        </a>
-                      ))}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {parseAssetUrls(t.assetUrl).map((url, i, arr) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                        className="text-brand-600 hover:underline text-xs flex items-center gap-1">
+                        <Icon name="fileText" className="h-3 w-3" />
+                        {arr.length > 1 ? `File ${i + 1}` : 'Submitted file'}
+                      </a>
+                    ))}
+                    {t.status === 'COMPLETED' && canRequestRework && (
+                      <button
+                        onClick={() => onRequestRework?.(t)}
+                        className="inline-flex items-center gap-1 rounded-md border border-rose-200
+                                   bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700
+                                   hover:bg-rose-100 transition">
+                        <Icon name="refresh" className="h-3 w-3" />
+                        Request Rework
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="text-xs text-slate-500">
                   {t.assigneeName ? `Assigned to ${t.assigneeName}` : 'Unassigned'}
@@ -328,9 +406,6 @@ function Detail({ label, value, span = 1 }) {
 
 function StatusBadge({ status }) {
   const STYLES = {
-    PENDING_DEPT_APPROVAL:      'bg-yellow-50 text-yellow-700 ring-yellow-200',
-    PENDING_MARKETING_APPROVAL: 'bg-orange-50 text-orange-700 ring-orange-200',
-    PENDING_INTERVENTION:       'bg-amber-50 text-amber-700 ring-amber-200',
     IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
     QC_REVIEW:                  'bg-purple-50 text-purple-700 ring-purple-200',
     COMPLETED:                  'bg-green-50 text-green-700 ring-green-200',
@@ -338,9 +413,6 @@ function StatusBadge({ status }) {
     CANCELLED:                  'bg-slate-100 text-slate-500 ring-slate-200',
   }
   const LABELS = {
-    PENDING_DEPT_APPROVAL:      'Pending Dept Approval',
-    PENDING_MARKETING_APPROVAL: 'Pending Marketing Approval',
-    PENDING_INTERVENTION:       'Pending Intervention',
     IN_PROGRESS:                'In Progress',
     QC_REVIEW:                  'QC Review',
     COMPLETED:                  'Completed',
@@ -523,4 +595,68 @@ function fmtTargetLocation(raw) {
     if (Array.isArray(parsed)) return parsed.join(', ')
   } catch { /* fall through — raw was not JSON */ }
   return raw
+}
+
+// ─── Requestor Rework Modal ───────────────────────────────────────────────────
+
+function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClose, submitting }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl flex flex-col">
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Request Rework</h3>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Tell the team what needs to be changed for task{' '}
+              <span className="font-medium text-slate-700">#{task.taskId}</span>.
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="rounded-full p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+            <Icon name="x" className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mx-5 mt-4 rounded-lg border border-rose-200 bg-rose-50/50 px-4 py-3">
+          <p className="text-xs font-semibold text-slate-600 mb-0.5">
+            {task.granularTaskName || 'Task'}
+          </p>
+          <p className="text-xs text-slate-500">
+            Task #{task.taskId} · Currently{' '}
+            <span className="font-medium text-green-700">Delivered</span>
+          </p>
+        </div>
+        <div className="px-5 py-4">
+          <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+            Rework Message <span className="text-rose-500">*</span>
+          </label>
+          <textarea
+            value={message}
+            onChange={e => onMessageChange(e.target.value)}
+            rows={4}
+            placeholder="Describe what needs to be changed or improved…"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800
+                       placeholder:text-slate-400 focus:border-rose-400 focus:outline-none
+                       focus:ring-1 focus:ring-rose-300 resize-none"
+          />
+          <p className="mt-1 text-xs text-slate-400">This message will be visible to the marketing team.</p>
+        </div>
+        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-100">
+          <button onClick={onClose} disabled={submitting}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600
+                       hover:bg-slate-50 transition disabled:opacity-60">
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={submitting || !message?.trim()}
+            className="flex items-center gap-2 rounded-lg bg-rose-600 px-5 py-2 text-sm font-semibold
+                       text-white hover:bg-rose-700 disabled:opacity-50 transition shadow-sm">
+            {submitting ? (
+              <><span className="animate-spin h-4 w-4 rounded-full border-2 border-white border-t-transparent" /> Sending…</>
+            ) : (
+              <><Icon name="refresh" className="h-4 w-4" /> Send for Rework</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }

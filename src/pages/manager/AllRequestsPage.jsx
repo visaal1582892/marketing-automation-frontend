@@ -175,11 +175,18 @@ function EditCampaignModal({ campaignId, task, onClose, onSaved }) {
 }
 
 // ─── Unhold modal — choose auto-route OR manual assign ────────────────────────
+// For TASK-OTHER tasks, auto-route is not shown — manual assignment only.
 
-function UnholdModal({ task: t, mode, onSelectAuto, onSelectManual,
+function UnholdModal({ task: t, isOther, mode, onSelectAuto, onSelectManual,
                        eligibleUsers, loadingUsers, selectedUserId, onSelectUser,
                        onConfirm, onClose, acting }) {
   const canConfirm = mode === 'auto' || (mode === 'manual' && selectedUserId)
+  const [userSearch, setUserSearch] = useState('')
+  const filteredUsers = eligibleUsers.filter(u =>
+    !userSearch.trim() ||
+    u.fullName?.toLowerCase().includes(userSearch.toLowerCase()) ||
+    u.roleName?.toLowerCase().includes(userSearch.toLowerCase())
+  )
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
@@ -190,7 +197,7 @@ function UnholdModal({ task: t, mode, onSelectAuto, onSelectManual,
           <div>
             <p className="text-xs text-slate-400 font-mono">#{t.taskId}</p>
             <h3 className="text-sm font-semibold text-slate-900">
-              Unhold: {t.granularTaskName || t.taskTypeName || 'Task'}
+              Assign: {t.granularTaskName || t.taskTypeName || 'Task'}
             </h3>
           </div>
           <button onClick={onClose}
@@ -199,57 +206,83 @@ function UnholdModal({ task: t, mode, onSelectAuto, onSelectManual,
           </button>
         </div>
 
-        {/* Step 1 — choose mode */}
-        <div className="px-5 py-4 space-y-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            How would you like to resume this task?
-          </p>
+        {/* Mode selection — hidden for TASK-OTHER (manual only) */}
+        {!isOther && (
+          <div className="px-5 py-4 space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              How would you like to resume this task?
+            </p>
 
-          <button onClick={onSelectAuto}
-            className={`w-full flex items-start gap-3 rounded-xl border p-4 text-left transition
-              ${mode === 'auto'
-                ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-300'
-                : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
-            <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full
-              ${mode === 'auto' ? 'bg-blue-100' : 'bg-slate-100'}`}>
-              <Icon name="refresh" className={`h-4 w-4 ${mode === 'auto' ? 'text-blue-600' : 'text-slate-500'}`} />
-            </span>
-            <div>
-              <p className={`text-sm font-semibold ${mode === 'auto' ? 'text-blue-800' : 'text-slate-800'}`}>
-                Auto Route
-              </p>
-              <p className="text-xs text-slate-500 mt-0.5">
-                System picks the least-loaded eligible team member automatically.
-              </p>
-            </div>
-          </button>
+            <button onClick={onSelectAuto}
+              className={`w-full flex items-start gap-3 rounded-xl border p-4 text-left transition
+                ${mode === 'auto'
+                  ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-300'
+                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
+              <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full
+                ${mode === 'auto' ? 'bg-blue-100' : 'bg-slate-100'}`}>
+                <Icon name="refresh" className={`h-4 w-4 ${mode === 'auto' ? 'text-blue-600' : 'text-slate-500'}`} />
+              </span>
+              <div>
+                <p className={`text-sm font-semibold ${mode === 'auto' ? 'text-blue-800' : 'text-slate-800'}`}>
+                  Auto Route
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  System picks the least-loaded eligible team member automatically.
+                </p>
+              </div>
+            </button>
 
-          <button onClick={onSelectManual}
-            className={`w-full flex items-start gap-3 rounded-xl border p-4 text-left transition
-              ${mode === 'manual'
-                ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-300'
-                : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
-            <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full
-              ${mode === 'manual' ? 'bg-emerald-100' : 'bg-slate-100'}`}>
-              <Icon name="users" className={`h-4 w-4 ${mode === 'manual' ? 'text-emerald-600' : 'text-slate-500'}`} />
-            </span>
-            <div>
-              <p className={`text-sm font-semibold ${mode === 'manual' ? 'text-emerald-800' : 'text-slate-800'}`}>
-                Assign Manually
-              </p>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Pick a specific team member from the eligible list.
-              </p>
+            <button onClick={onSelectManual}
+              className={`w-full flex items-start gap-3 rounded-xl border p-4 text-left transition
+                ${mode === 'manual'
+                  ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-300'
+                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
+              <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full
+                ${mode === 'manual' ? 'bg-emerald-100' : 'bg-slate-100'}`}>
+                <Icon name="users" className={`h-4 w-4 ${mode === 'manual' ? 'text-emerald-600' : 'text-slate-500'}`} />
+              </span>
+              <div>
+                <p className={`text-sm font-semibold ${mode === 'manual' ? 'text-emerald-800' : 'text-slate-800'}`}>
+                  Assign Manually
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Pick a specific team member from the eligible list.
+                </p>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* TASK-OTHER: always manual — show a note */}
+        {isOther && (
+          <div className="px-5 pt-4 pb-2">
+            <div className="flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2.5 text-xs text-violet-800">
+              <Icon name="edit" className="h-4 w-4 shrink-0 mt-0.5 text-violet-600" />
+              <span>
+                This is a custom <span className="font-semibold">"Other"</span> task — please select a team member to assign it to.
+              </span>
             </div>
-          </button>
-        </div>
+          </div>
+        )}
 
         {/* Step 2 — user list (manual only) */}
         {mode === 'manual' && (
-          <div className="px-5 pb-4 pt-2 space-y-2 max-h-52 overflow-y-auto border-t border-slate-100">
+          <div className="px-5 pb-4 pt-2 space-y-2 border-t border-slate-100">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-2">
               Select a team member
             </p>
+            {!loadingUsers && eligibleUsers.length > 0 && (
+              <input
+                type="text"
+                placeholder="Search by name or role…"
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm
+                           placeholder-slate-400 focus:outline-none focus:ring-2
+                           focus:ring-brand-200 focus:border-brand-400"
+              />
+            )}
+            <div className="max-h-48 overflow-y-auto space-y-1.5">
             {loadingUsers ? (
               <div className="flex items-center justify-center gap-2 py-6 text-slate-400">
                 <Icon name="refresh" className="h-4 w-4 animate-spin" />
@@ -257,7 +290,9 @@ function UnholdModal({ task: t, mode, onSelectAuto, onSelectManual,
               </div>
             ) : eligibleUsers.length === 0 ? (
               <p className="py-6 text-center text-sm text-slate-500">No eligible users found.</p>
-            ) : eligibleUsers.map(u => (
+            ) : filteredUsers.length === 0 ? (
+              <p className="py-4 text-center text-sm text-slate-500">No users match your search.</p>
+            ) : filteredUsers.map(u => (
               <label key={u.userId}
                 className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition
                   ${selectedUserId === u.userId
@@ -274,6 +309,7 @@ function UnholdModal({ task: t, mode, onSelectAuto, onSelectManual,
                 </span>
               </label>
             ))}
+            </div>
           </div>
         )}
 
@@ -422,9 +458,20 @@ export default function AllRequestsPage() {
   // ── Unhold — open modal ───────────────────────────────────────────────────────
   const openUnholdModal = (task) => {
     setUnholdTarget(task)
-    setUnholdMode(null)
     setSelectedUserId(null)
     setEligibleUsers([])
+
+    if (task.granularTaskId === 'TASK-OTHER') {
+      // TASK-OTHER always goes manual — pre-select mode and load eligible users
+      setUnholdMode('manual')
+      setLoadingUsers(true)
+      managerApi.eligibleUsersForTask(task.taskId)
+        .then(res => setEligibleUsers(res.data || []))
+        .catch(() => toast.error('Failed to load eligible users.'))
+        .finally(() => setLoadingUsers(false))
+    } else {
+      setUnholdMode(null)
+    }
   }
 
   const closeUnholdModal = () => {
@@ -432,6 +479,7 @@ export default function AllRequestsPage() {
     setUnholdMode(null)
     setSelectedUserId(null)
     setEligibleUsers([])
+    setLoadingUsers(false)
   }
 
   const selectManual = async () => {
@@ -605,6 +653,7 @@ export default function AllRequestsPage() {
       {unholdTarget && (
         <UnholdModal
           task={unholdTarget}
+          isOther={unholdTarget.granularTaskId === 'TASK-OTHER'}
           mode={unholdMode}
           onSelectAuto={() => setUnholdMode('auto')}
           onSelectManual={selectManual}

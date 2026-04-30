@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const TOKEN_KEY = 'ma_token'
 const USER_KEY  = 'ma_user'
-const DEFAULT_BACKEND_URL = 'https://parking-polio-robbing.ngrok-free.dev'
+const DEFAULT_BACKEND_URL = 'http://localhost:9090'
 
 const configuredBaseUrl = (import.meta.env.VITE_API_BASE_URL || DEFAULT_BACKEND_URL).trim()
 const normalisedBaseUrl = configuredBaseUrl.replace(/\/+$/, '')

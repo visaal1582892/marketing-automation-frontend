@@ -5,6 +5,7 @@ import { useToast } from '../../components/Toast'
 import campaignsApi from '../../api/campaigns'
 import { masterApi, granularTasksApi } from '../../api/masterData'
 import { enumsApi } from '../../api/enums'
+import api from '../../api/client'
 import Icon from '../../components/Icon'
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
@@ -549,6 +550,107 @@ function DeliverableCard({
   )
 }
 
+// ─── Campaign Files upload section ───────────────────────────────────────────
+
+function CampaignFilesSection({ files, onFilesChange, uploading, setUploading }) {
+  const fileInputRef = useRef(null)
+
+  const handleFileSelect = async (e) => {
+    const selected = Array.from(e.target.files)
+    if (!selected.length) return
+    e.target.value = ''
+
+    // Add placeholder entries
+    const placeholders = selected.map(f => ({ name: f.name, url: null, uploading: true, error: null }))
+    onFilesChange(prev => [...prev, ...placeholders])
+    setUploading(true)
+
+    try {
+      const formData = new FormData()
+      selected.forEach(f => formData.append('files', f))
+      const res = await api.post('/upload/asset', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      const urls = res.data?.urls || []
+      onFilesChange(prev => {
+        const next = [...prev]
+        // Replace placeholder entries for the files we just uploaded
+        let urlIdx = 0
+        for (let i = 0; i < next.length; i++) {
+          if (next[i].uploading && next[i].error === null) {
+            next[i] = { ...next[i], url: urls[urlIdx++] || null, uploading: false }
+            if (urlIdx >= urls.length) break
+          }
+        }
+        return next
+      })
+    } catch {
+      onFilesChange(prev => prev.map(f =>
+        f.uploading ? { ...f, uploading: false, error: 'Upload failed' } : f
+      ))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const removeFile = (idx) => {
+    onFilesChange(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition"
+        >
+          <Icon name="upload" className="h-3.5 w-3.5" />
+          {uploading ? 'Uploading…' : 'Upload Files'}
+        </button>
+        <span className="text-xs text-slate-400">Multiple files allowed (images, PDFs, docs…)</span>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+      </div>
+      {files.length > 0 && (
+        <ul className="space-y-1.5">
+          {files.map((f, idx) => (
+            <li key={idx} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs">
+              {f.uploading ? (
+                <svg className="h-3.5 w-3.5 animate-spin text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+              ) : f.error ? (
+                <Icon name="alertCircle" className="h-3.5 w-3.5 text-red-400 shrink-0" />
+              ) : (
+                <Icon name="fileText" className="h-3.5 w-3.5 text-brand-500 shrink-0" />
+              )}
+              <span className={`flex-1 truncate ${f.error ? 'text-red-500' : 'text-slate-700'}`}>
+                {f.error ? `${f.name} — ${f.error}` : f.name}
+              </span>
+              {f.url && (
+                <a href={f.url} target="_blank" rel="noopener noreferrer"
+                  className="text-brand-600 hover:underline text-xs shrink-0">View</a>
+              )}
+              <button type="button" onClick={() => removeFile(idx)}
+                className="text-slate-400 hover:text-red-500 transition shrink-0">
+                <Icon name="x" className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 // ─── Location multi-select (OpenStreetMap Nominatim — free, no key needed) ────
 
 function useNominatim() {
@@ -768,23 +870,29 @@ export default function CampaignFormPage() {
   // Selected locations array
   const [targetLocations, setTargetLocations] = useState([])
 
+  // Campaign-level supporting files
+  const [campaignFiles,     setCampaignFiles]     = useState([]) // [{ name, url, uploading, error }]
+  const [uploadingFiles,    setUploadingFiles]     = useState(false)
+
   // Validation errors
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    masterApi.list('departments').then((d) => setDepts(d.map(normaliseById))).catch(() => {})
+    // All master-data selects now use item.id as the submitted value (not the display name).
+    const nb  = (setter) => (d) => setter([...d.map(normaliseById), OTHER_OPTION])
+    const nbM = (setter) => (d) => setter([...d.map(normaliseById), OTHER_OPTION]) // multi-select same
 
-    const nb = (setter) => (d) => setter([...d.map(normaliseByName), OTHER_OPTION])
+    masterApi.list('departments').then((d) => setDepts(d.map(normaliseById))).catch(() => {})
     masterApi.list('requirement-types').then(nb(setReqTypes)).catch(() => {})
-    masterApi.list('audiences').then((d) => setAudiences([...d.map(normaliseByName), OTHER_OPTION])).catch(() => {})
+    masterApi.list('audiences').then(nbM(setAudiences)).catch(() => {})
     masterApi.list('business-objectives').then(nb(setBusinessObjectives)).catch(() => {})
-    masterApi.list('languages').then((d) => setLanguages([...d.map(normaliseByName), OTHER_OPTION])).catch(() => {})
-    masterApi.list('tones').then((d) => setTones([...d.map(normaliseByName), OTHER_OPTION])).catch(() => {})
+    masterApi.list('languages').then(nbM(setLanguages)).catch(() => {})
+    masterApi.list('tones').then(nbM(setTones)).catch(() => {})
     masterApi.list('offer-types').then(nb(setOfferTypes)).catch(() => {})
     masterApi.list('supporting-proofs').then(nb(setSupportingProofs)).catch(() => {})
     masterApi.list('budget-tiers').then(nb(setBudgetTierOpts)).catch(() => {})
-    masterApi.list('vendor-types').then((d) => setVendorTypes([...d.map(normaliseByName), OTHER_OPTION])).catch(() => {})
+    masterApi.list('vendor-types').then(nbM(setVendorTypes)).catch(() => {})
     masterApi.list('kpi-types').then(nb(setKpiTypeOpts)).catch(() => {})
     masterApi.list('expected-outputs').then(nb(setExpectedOutputOpts)).catch(() => {})
 
@@ -1006,23 +1114,23 @@ export default function CampaignFormPage() {
     setSubmitting(true)
     console.log('[Form] Sending payload to backend...')
     try {
-      // Resolve "Other" free-text values for single-select fields
+      // Single-select: send the ID if a known option, or the free-text if "Other"
       const resolve = (val, other) => val === 'Other' ? (other?.trim() || null) : (val || null)
-      // Resolve "Other" for multi-select: replace 'Other' sentinel with the custom text
-      const resolveMulti = (arr, other) => {
+      // Multi-select: send JSON array of IDs; free-text for "Other" appended as plain string
+      const resolveMultiArr = (arr, other) => {
         const result = arr.filter((v) => v !== 'Other')
         if (arr.includes('Other') && other?.trim()) result.push(other.trim())
-        return result.join(',') || null
+        return result.length > 0 ? result : null
       }
 
       const payload = {
         departmentId:      form.departmentId || null,
         businessObjective: resolve(form.businessObjective, form.businessObjectiveOther),
         requirementTypeId: resolve(form.requirementTypeId, form.requirementTypeOther),
-        // multi-select fields stored as comma-separated display names
-        audienceTypeId:    resolveMulti(form.audienceTypeIds, form.audienceTypeOther),
-        language:          resolveMulti(form.languages,       form.languageOther),
-        tone:              resolveMulti(form.tones,           form.toneOther),
+        // multi-select fields — sent as JSON arrays to the backend List<String> fields
+        audienceTypeId:    resolveMultiArr(form.audienceTypeIds, form.audienceTypeOther),
+        language:          resolveMultiArr(form.languages,       form.languageOther),
+        tone:              resolveMultiArr(form.tones,           form.toneOther),
         hasOffer:          form.hasOffer,
         offerTypeId:       form.hasOffer === 'YES' ? resolve(form.offerTypeId, form.offerTypeOther) : null,
         keyMessage:        form.hasOffer === 'YES' ? form.keyMessage || null : null,
@@ -1030,10 +1138,12 @@ export default function CampaignFormPage() {
         priority:          form.priority || null,
         budgetTier:        resolve(form.budgetTier, form.budgetTierOther),
         vendorRequired:    form.vendorRequired,
-        vendorType:        form.vendorRequired === 'YES' ? resolveMulti(form.vendorTypeIds, form.vendorTypeOther) : null,
+        vendorType:        form.vendorRequired === 'YES'
+          ? resolveMultiArr(form.vendorTypeIds, form.vendorTypeOther) : null,
         kpiType:           resolve(form.kpiType, form.kpiTypeOther),
         expectedOutput:    resolve(form.expectedOutput, form.expectedOutputOther),
         targetLocation:    JSON.stringify(targetLocations),
+        fileUrls:          campaignFiles.filter(f => f.url).map(f => f.url),
         taskSpecs:  Object.values(deliverables).map((d) => {
           const qn = d.questionnaire || {}
           const questionnaireAnswers = Object.entries(qn)
@@ -1293,7 +1403,7 @@ export default function CampaignFormPage() {
 
         {/* ── Card 4: Timelines · Budget · KPIs ── */}
         <Card>
-          <SectionLabel number="5" title="Timelines & Priority" />
+          <SectionLabel number="5" title="Timelines & Priority" />  {/* intentionally 5 not 4 since files is new 7 */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <FormGroup label="Priority" required error={errors.priority}>
               <div data-has-error={!!errors.priority || undefined}>
@@ -1362,6 +1472,21 @@ export default function CampaignFormPage() {
           </div>
         </Card>
 
+        {/* ── Card 5: Supporting Files ── */}
+        <Card>
+          <SectionLabel number="7" title="Related / Supporting Files" />
+          <p className="text-xs text-slate-500 mb-3">
+            Upload any reference files for this campaign (briefs, brand guides, images, etc.).
+            These files will be visible in all task briefs for this campaign.
+          </p>
+          <CampaignFilesSection
+            files={campaignFiles}
+            onFilesChange={setCampaignFiles}
+            uploading={uploadingFiles}
+            setUploading={setUploadingFiles}
+          />
+        </Card>
+
         {/* Validation error summary — shown after a failed submit attempt */}
         {Object.keys(errors).length > 0 && (
           <div id="form-error-summary" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-3">
@@ -1420,17 +1545,9 @@ export default function CampaignFormPage() {
   )
 }
 
-/** Departments still use the DB id as the submitted value. */
+/** All dropdowns (including departments and master-data selects) use the DB id as the submitted value. */
 function normaliseById(item) {
   return { value: item.id, label: item.name }
-}
-
-/**
- * All form-field dropdowns now store the display name directly.
- * The backend no longer uses FK IDs for these fields.
- */
-function normaliseByName(item) {
-  return { value: item.name, label: item.name }
 }
 
 /** Sentinel option appended to every list that supports free-text "Other". */

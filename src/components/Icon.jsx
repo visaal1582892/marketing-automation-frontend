@@ -260,6 +260,34 @@ const PATHS = {
       <rect x="17" y="3" width="4" height="18" />
     </>
   ),
+  checkSquare: (
+    <>
+      <polyline points="9 11 12 14 22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </>
+  ),
+  paperclip: (
+    <path d="M21.4 11.6l-9.2 9.2a5.5 5.5 0 0 1-7.8-7.8l9.8-9.8a3.5 3.5 0 0 1 5 5L9.4 17.8a1.5 1.5 0 0 1-2.2-2.2l8.6-8.6" />
+  ),
+  undo: (
+    <>
+      <path d="M9 14L4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+    </>
+  ),
+  checkCircle: (
+    <>
+      <path d="M22 11.1V12a10 10 0 1 1-5.9-9.1" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </>
+  ),
 }
 
 export default function Icon({ name, className = 'h-5 w-5', strokeWidth = 1.7 }) {
