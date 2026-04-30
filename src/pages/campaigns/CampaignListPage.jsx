@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { useToast } from '../../components/Toast'
 import campaignsApi from '../../api/campaigns'
 import { masterApi, granularTasksApi } from '../../api/masterData'
+import tasksApi from '../../api/tasks'
 import api from '../../api/client'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
@@ -379,6 +380,21 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   const [taskQuestions,     setTaskQuestions]      = useState({})
   const [loadingQs,         setLoadingQs]          = useState({})
 
+  // Existing task question editing
+  const [expandedTask,       setExpandedTask]       = useState(null)  // granularTaskId
+  const [existingTaskQs,     setExistingTaskQs]     = useState({})    // granularTaskId → DynamicQuestion[]
+  const [existingTaskAns,    setExistingTaskAns]    = useState({})    // workTaskId → { questionId: value }
+  const [loadingExistQs,     setLoadingExistQs]     = useState({})    // granularTaskId → bool
+
+  // Build granularTaskId → workTask lookup once
+  const workTaskByGranularId = useMemo(() => {
+    const map = {}
+    for (const wt of (campaign.workTasks || [])) {
+      if (wt.granularTaskId && !map[wt.granularTaskId]) map[wt.granularTaskId] = wt
+    }
+    return map
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Files – existing (with optional remove) + new uploads
   const [existingFiles, setExistingFiles] = useState(
     () => (campaign.fileUrls || []).map(url => ({ url, name: url.split('/').pop() || url, removed: false }))
@@ -530,6 +546,44 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
     return { ...prev, [name]: arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val] }
   })
 
+  // Existing task question helpers
+  const toggleExistingTask = async (granularTaskId) => {
+    if (expandedTask === granularTaskId) { setExpandedTask(null); return }
+    setExpandedTask(granularTaskId)
+
+    // Load questions if not already cached
+    if (!existingTaskQs[granularTaskId]) {
+      setLoadingExistQs(prev => ({ ...prev, [granularTaskId]: true }))
+      try {
+        const qs = await granularTasksApi.getQuestions(granularTaskId)
+        setExistingTaskQs(prev => ({ ...prev, [granularTaskId]: qs || [] }))
+
+        // Pre-fill existing answers if we have the work task ID
+        const wt = workTaskByGranularId[granularTaskId]
+        if (wt?.taskId && qs?.length > 0 && !existingTaskAns[wt.taskId]) {
+          try {
+            const rawAnswers = await tasksApi.getAnswers(wt.taskId)
+            const answerMap = {}
+            for (const a of (rawAnswers?.data || [])) {
+              answerMap[a.questionId] = a.answerValue ?? a.answer ?? ''
+            }
+            setExistingTaskAns(prev => ({ ...prev, [wt.taskId]: answerMap }))
+          } catch { /* answers optional — start blank */ }
+        }
+      } catch {
+        setExistingTaskQs(prev => ({ ...prev, [granularTaskId]: [] }))
+      } finally {
+        setLoadingExistQs(prev => ({ ...prev, [granularTaskId]: false }))
+      }
+    }
+  }
+
+  const updateExistingTaskAnswer = (workTaskId, questionId, value) =>
+    setExistingTaskAns(prev => ({
+      ...prev,
+      [workTaskId]: { ...(prev[workTaskId] || {}), [questionId]: value },
+    }))
+
   // Task helpers
   const toggleNewTask = (taskId) => {
     setNewTaskSelections(prev => {
@@ -643,6 +697,18 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
         removedFileUrls:   existingFiles.filter(f => f.removed).map(f => f.url),
       }
       await campaignsApi.requestorEdit(campaign.campaignId, payload)
+
+      // Persist any edited questionnaire answers for existing tasks
+      const answerSaves = Object.entries(existingTaskAns).map(async ([workTaskId, ansMap]) => {
+        const answers = Object.entries(ansMap)
+          .filter(([, v]) => v != null && String(v).trim() !== '')
+          .map(([questionId, answerValue]) => ({ questionId, answerValue }))
+        if (answers.length > 0) {
+          await tasksApi.submitAnswers(workTaskId, answers)
+        }
+      })
+      await Promise.all(answerSaves)
+
       showToast('Campaign updated successfully!', 'success')
       onSuccess()
     } catch (err) {
@@ -908,24 +974,30 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
 
               {/* 5 – Tasks */}
               <SectionCard id="tasks" title="Tasks" icon="checkSquare" accent="sky">
-                {/* Existing tasks — with optional delete for un-started tasks */}
+                {/* Existing tasks — expandable to view/edit task questions */}
                 {localDeliverables.length > 0 && (
                   <div>
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                       Existing Tasks
-                      <span className="ml-1 normal-case font-normal text-slate-400">(only un-started tasks can be deleted)</span>
+                      <span className="ml-1 normal-case font-normal text-slate-400">· click a task to edit its answers · only un-started tasks can be deleted</span>
                     </p>
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       {localDeliverables.map(d => {
-                        const deletable  = canDeleteTask(d)
-                        const isDeleting = deletingTaskSpecId === d.specId
+                        const deletable      = canDeleteTask(d)
+                        const isDeleting     = deletingTaskSpecId === d.specId
                         const confirmingThis = confirmDeleteTask?.specId === d.specId
-                        const taskName   = d.granularTaskName || d.granularTaskId
-                        const statusLabel = d.workTaskStatus ? d.workTaskStatus.replace('_', ' ') : 'PENDING'
+                        const taskName       = d.granularTaskName || d.granularTaskId
+                        const statusLabel    = d.workTaskStatus ? d.workTaskStatus.replace('_', ' ') : 'PENDING'
+                        const isExpanded     = expandedTask === d.granularTaskId
+                        const wt             = workTaskByGranularId[d.granularTaskId]
+                        const qs             = existingTaskQs[d.granularTaskId] || []
+                        const ans            = wt ? (existingTaskAns[wt.taskId] || {}) : {}
+                        const loadingQ       = loadingExistQs[d.granularTaskId]
+
                         const statusColors = {
-                          ASSIGNED: 'text-blue-600 bg-blue-50',
-                          HELD:     'text-amber-600 bg-amber-50',
-                          ACCEPTED: 'text-indigo-600 bg-indigo-50',
+                          ASSIGNED:    'text-blue-600 bg-blue-50',
+                          HELD:        'text-amber-600 bg-amber-50',
+                          ACCEPTED:    'text-indigo-600 bg-indigo-50',
                           IN_PROGRESS: 'text-emerald-600 bg-emerald-50',
                           QC_REVIEW:   'text-purple-600 bg-purple-50',
                           REWORK:      'text-orange-600 bg-orange-50',
@@ -933,41 +1005,91 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                           CANCELLED:   'text-slate-500 bg-slate-100',
                         }
                         const statusCls = statusColors[d.workTaskStatus] || 'text-slate-500 bg-slate-100'
+
                         return (
                           <div key={d.specId || d.granularTaskId}
-                            className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition
-                              ${confirmingThis ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-white'}`}>
-                            <Icon name="check" className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span className="flex-1 text-sm text-slate-700 font-medium">{taskName}</span>
-                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${statusCls}`}>
-                              {statusLabel}
-                            </span>
-                            {confirmingThis ? (
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-xs text-red-600 font-medium">Delete this task?</span>
-                                <button type="button" disabled={isDeleting}
-                                  onClick={() => handleDeleteTask(d.specId, taskName)}
-                                  className="flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition">
-                                  {isDeleting
-                                    ? <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
-                                    : <Icon name="trash" className="h-3 w-3" />}
-                                  Yes, delete
-                                </button>
-                                <button type="button" onClick={() => setConfirmDeleteTask(null)}
-                                  className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 transition">
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
+                            className={`rounded-xl border-2 transition ${
+                              isExpanded     ? 'border-sky-300 bg-sky-50/30'
+                              : confirmingThis ? 'border-red-300 bg-red-50'
+                              : 'border-slate-200 bg-white hover:border-sky-200'
+                            }`}>
+                            {/* Task header row */}
+                            <div className="flex items-center gap-2 px-3 py-2">
+                              {/* Expand/collapse toggle */}
                               <button type="button"
-                                disabled={!deletable}
-                                onClick={() => deletable && setConfirmDeleteTask({ specId: d.specId, name: taskName })}
-                                title={deletable ? 'Delete this task' : `Cannot delete — task is ${statusLabel}`}
-                                className={`shrink-0 rounded-full p-1.5 transition ${deletable
-                                  ? 'text-slate-400 hover:text-red-500 hover:bg-red-50'
-                                  : 'text-slate-200 cursor-not-allowed'}`}>
-                                <Icon name="trash" className="h-3.5 w-3.5" />
+                                onClick={() => !confirmingThis && toggleExistingTask(d.granularTaskId)}
+                                className="flex items-center gap-2 flex-1 text-left min-w-0"
+                                title="Click to view / edit task-specific questions">
+                                <Icon
+                                  name="chevron"
+                                  className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
+                                />
+                                <span className="text-sm text-slate-700 font-medium truncate">{taskName}</span>
                               </button>
+
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0 ${statusCls}`}>
+                                {statusLabel}
+                              </span>
+
+                              {confirmingThis ? (
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="text-xs text-red-600 font-medium">Delete this task?</span>
+                                  <button type="button" disabled={isDeleting}
+                                    onClick={() => handleDeleteTask(d.specId, taskName)}
+                                    className="flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition">
+                                    {isDeleting
+                                      ? <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                                      : <Icon name="trash" className="h-3 w-3" />}
+                                    Yes, delete
+                                  </button>
+                                  <button type="button" onClick={() => setConfirmDeleteTask(null)}
+                                    className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 transition">
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <button type="button"
+                                  disabled={!deletable}
+                                  onClick={() => deletable && setConfirmDeleteTask({ specId: d.specId, name: taskName })}
+                                  title={deletable ? 'Delete this task' : `Cannot delete — task is ${statusLabel}`}
+                                  className={`shrink-0 rounded-full p-1.5 transition ${deletable
+                                    ? 'text-slate-400 hover:text-red-500 hover:bg-red-50'
+                                    : 'text-slate-200 cursor-not-allowed'}`}>
+                                  <Icon name="trash" className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Expandable questionnaire panel */}
+                            {isExpanded && (
+                              <div className="border-t border-sky-200 px-4 pb-4 pt-3 space-y-3 bg-sky-50/20">
+                                {loadingQ ? (
+                                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                                    <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                                    </svg>
+                                    Loading questions…
+                                  </div>
+                                ) : qs.length === 0 ? (
+                                  <p className="text-xs text-slate-400 italic">No task-specific questions for this task type.</p>
+                                ) : (
+                                  <>
+                                    <p className="text-xs text-sky-700 font-medium">
+                                      Task-specific answers
+                                      {wt ? '' : <span className="text-slate-400 font-normal"> (work task not yet assigned)</span>}
+                                    </p>
+                                    {qs.map(q => (
+                                      <TaskQuestion
+                                        key={q.questionId}
+                                        q={q}
+                                        answer={wt ? ans[q.questionId] : ''}
+                                        onChange={v => wt && updateExistingTaskAnswer(wt.taskId, q.questionId, v)}
+                                      />
+                                    ))}
+                                  </>
+                                )}
+                              </div>
                             )}
                           </div>
                         )
@@ -1210,7 +1332,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
 
 // ─── Requestor campaign-level view ───────────────────────────────────────────
 
-function RequestorCampaignView({ campaigns, loadingDetails, onRefresh }) {
+function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefresh }) {
   const [briefId,        setBriefId]        = useState(null)
   const [editCampaign,   setEditCampaign]   = useState(null) // campaign object for the edit modal
   const [fCampaign,  setFCampaign]  = useState('')
@@ -1307,20 +1429,27 @@ function RequestorCampaignView({ campaigns, loadingDetails, onRefresh }) {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((c) => {
-                  const taskCount  = (c.workTasks || []).length
-                  const doneCount  = (c.workTasks || []).filter(t => t.status === 'COMPLETED').length
-                  const canEdit    = !TERMINAL.includes(c.status)
-                  const fmtDate    = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
+                  const taskCount    = (c.workTasks || []).length
+                  const doneCount    = (c.workTasks || []).filter(t => t.status === 'COMPLETED').length
+                  const canEdit      = !TERMINAL.includes(c.status)
+                  const fmtDate      = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
+                  const commentTasks = (c.workTasks || []).filter(t => t.status === 'HELD' && t.workerComment)
+                  const hasComment   = commentTasks.length > 0
                   return (
-                    <tr key={c.campaignId} className="hover:bg-slate-50/70 transition">
+                    <tr key={c.campaignId}
+                      className={`transition ${hasComment
+                        ? 'row-comment-pulse'
+                        : 'hover:bg-slate-50/70'}`}>
                       <td className="px-3 py-3 font-mono text-slate-500">#{c.campaignId}</td>
                       <td className="px-3 py-3 font-medium text-slate-800">{c.requirementTypeName || '—'}</td>
                       <td className="px-3 py-3"><PriorityBadge priority={c.priority} /></td>
                       <td className="px-3 py-3"><CampaignStatusBadge status={c.status} /></td>
                       <td className="px-3 py-3 text-slate-600">
-                        {taskCount === 0
-                          ? <span className="italic text-slate-400">None yet</span>
-                          : <span>{doneCount}/{taskCount} done</span>}
+                        <div className="flex items-center gap-2">
+                          {taskCount === 0
+                            ? <span className="italic text-slate-400">None yet</span>
+                            : <span>{doneCount}/{taskCount} done</span>}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-slate-500">{fmtDate(c.createdAt)}</td>
                       <td className="px-3 py-3">
@@ -1330,8 +1459,11 @@ function RequestorCampaignView({ campaigns, loadingDetails, onRefresh }) {
                             <Icon name="eye" className="h-3.5 w-3.5" /> Brief
                           </button>
                           {canEdit && (
-                            <button onClick={() => setEditCampaign(c)}
-                              className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition">
+                            <button
+                              onClick={() => !refreshing && setEditCampaign(c)}
+                              disabled={refreshing}
+                              title={refreshing ? 'Refreshing data…' : 'Edit campaign'}
+                              className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
                               <Icon name="edit" className="h-3.5 w-3.5" /> Edit
                             </button>
                           )}
@@ -1475,16 +1607,18 @@ export default function CampaignListPage() {
       const list = res.data || []
       setCampaigns(list)
 
-      // For requestors: batch-fetch campaign details to get work tasks
+      // For requestors: batch-fetch campaign details to get work tasks.
+      // During a silent refresh, skip the loadingDetails spinner so the table
+      // doesn't flash away — the existing rows stay visible while data updates.
       if (isRequestor && list.length > 0) {
-        setLoadingDetails(true)
+        if (!silent) setLoadingDetails(true)
         try {
           const details = await Promise.all(
             list.map(c => campaignsApi.getById(c.campaignId).then(r => r.data).catch(() => c))
           )
           setCampaignDetails(details)
         } finally {
-          setLoadingDetails(false)
+          if (!silent) setLoadingDetails(false)
         }
       } else {
         setCampaignDetails(list)
@@ -1504,11 +1638,9 @@ export default function CampaignListPage() {
     }
   }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    const onFocus = () => load(true)
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [isRequestor]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Intentionally no window-focus auto-refresh here — it caused the entire
+  // campaign table to flash a loading spinner every time the user tabbed back.
+  // Users can use the manual "Refresh" button instead.
 
   return (
     <div className="space-y-5">
@@ -1568,6 +1700,7 @@ export default function CampaignListPage() {
         <RequestorCampaignView
           campaigns={campaignDetails}
           loadingDetails={loadingDetails}
+          refreshing={refreshing}
           onRefresh={() => load(true)}
         />
       ) : (

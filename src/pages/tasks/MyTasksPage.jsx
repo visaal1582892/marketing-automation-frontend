@@ -27,6 +27,11 @@ export default function MyTasksPage() {
   const [fileItems, setFileItems]   = useState([])
   const [savingId, setSavingId]     = useState(null)
 
+  // Comment & hold modal
+  const [commentTask,    setCommentTask]    = useState(null)
+  const [commentText,    setCommentText]    = useState('')
+  const [commentSaving,  setCommentSaving]  = useState(false)
+
   // Full-brief drawer (any task → click "View brief")
   const [briefCampaignId, setBriefCampaignId] = useState(null)
   const [briefTaskId,     setBriefTaskId]     = useState(null)
@@ -112,6 +117,7 @@ export default function MyTasksPage() {
       t.campaignStatus !== 'REJECTED' &&
       t.campaignStatus !== 'COMPLETED'
     )
+    if (filter === 'HELD')      return tasks.filter(t => t.status === 'HELD')
     if (filter === 'QC')        return tasks.filter(t => t.status === 'QC_REVIEW')
     if (filter === 'DONE')      return tasks.filter(t => t.status === 'COMPLETED')
     if (filter === 'CANCELLED') return tasks.filter(t =>
@@ -128,6 +134,7 @@ export default function MyTasksPage() {
       t.campaignStatus !== 'REJECTED' &&
       t.campaignStatus !== 'COMPLETED'
     ).length,
+    held: tasks.filter(t => t.status === 'HELD').length,
     qc:   tasks.filter(t => t.status === 'QC_REVIEW').length,
     done: tasks.filter(t => t.status === 'COMPLETED').length,
     cancelled: tasks.filter(t =>
@@ -287,6 +294,40 @@ export default function MyTasksPage() {
     uploadFileItem(item)
   }
 
+  const openCommentModal = (task) => {
+    setCommentTask(task)
+    setCommentText(task.workerComment || '')
+  }
+
+  const submitComment = async () => {
+    if (!commentTask || !commentText.trim()) return
+    setCommentSaving(true)
+    try {
+      await tasksApi.commentAndHold(commentTask.taskId, commentText.trim())
+      showToast('Task held. The requestor will be notified of your comment.', 'success')
+      setCommentTask(null)
+      setCommentText('')
+      refresh()
+    } catch (e) {
+      showToast(e?.response?.data?.message || 'Could not hold task', 'error')
+    } finally {
+      setCommentSaving(false)
+    }
+  }
+
+  const workerUnhold = async (task) => {
+    setSavingId(task.taskId)
+    try {
+      await tasksApi.workerUnhold(task.taskId)
+      showToast('Task resumed. Comment cleared.', 'success')
+      refresh()
+    } catch (e) {
+      showToast(e?.response?.data?.message || 'Could not resume task', 'error')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -298,6 +339,9 @@ export default function MyTasksPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <FilterPill label={`Open (${counts.open})`}            active={filter === 'OPEN'}      onClick={() => setFilter('OPEN')} />
+          {counts.held > 0 && (
+            <FilterPill label={`On Hold (${counts.held})`} active={filter === 'HELD'} onClick={() => setFilter('HELD')} highlight />
+          )}
           <FilterPill label={`In QC (${counts.qc})`}             active={filter === 'QC'}        onClick={() => setFilter('QC')} />
           <FilterPill label={`Done (${counts.done})`}            active={filter === 'DONE'}      onClick={() => setFilter('DONE')} />
           {counts.cancelled > 0 && (
@@ -328,6 +372,8 @@ export default function MyTasksPage() {
               onAccept={() => accept(t)}
               onSubmit={() => openSubmit(t)}
               onView={() => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}
+              onComment={() => openCommentModal(t)}
+              onWorkerUnhold={() => workerUnhold(t)}
             />
           ))}
         </div>
@@ -350,6 +396,17 @@ export default function MyTasksPage() {
           onConfirm={submitForQc}
           onViewBrief={() => { setBriefCampaignId(submitting.campaignId); setBriefTaskId(submitting.taskId) }}
           saving={savingId === submitting.taskId}
+        />
+      )}
+
+      {commentTask && (
+        <CommentModal
+          task={commentTask}
+          comment={commentText}
+          onCommentChange={setCommentText}
+          onConfirm={submitComment}
+          onClose={() => { setCommentTask(null); setCommentText('') }}
+          saving={commentSaving}
         />
       )}
 
@@ -381,10 +438,13 @@ export default function MyTasksPage() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView }) {
+function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold }) {
   const elapsed      = formatElapsed(task, now)
   const isAssigned   = (task.status === 'ASSIGNED' || task.status === 'REWORK') && !closed
   const isInProgress = task.status === 'IN_PROGRESS' && !closed
+  const isHeld       = task.status === 'HELD'
+  // Only worker-held tasks (those with a workerComment) can be self-unholded.
+  const isSelfHeld   = isHeld && !!task.workerComment
   // Queue rule: only the top-of-queue task can be started, and only when no
   // other task is in flight. Everything else in ASSIGNED/REWORK gets locked.
   const canStart     = isAssigned && isNextUp && !hasInFlight
@@ -421,6 +481,12 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
               >
                 <Icon name="refresh" className="h-3 w-3" />
                 {task.reworkCount}× rework
+              </span>
+            )}
+            {isHeld && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                <Icon name="pause" className="h-3 w-3" />
+                {isSelfHeld ? 'On Hold — your comment' : 'On Hold'}
               </span>
             )}
             {campaignDead && task.status !== 'COMPLETED' && (
@@ -483,6 +549,26 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
               Submit for QC
             </button>
           )}
+          {(isAssigned || isInProgress) && !isCancelled && (
+            <button
+              onClick={onComment}
+              className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition"
+              title="Add a comment and pause this task"
+            >
+              <Icon name="messageSquare" className="h-3.5 w-3.5" />
+              Add Comment
+            </button>
+          )}
+          {isSelfHeld && (
+            <button
+              onClick={onWorkerUnhold}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 transition disabled:opacity-60"
+            >
+              <Icon name="play" className="h-3.5 w-3.5" />
+              {busy ? 'Resuming…' : 'Resume Task'}
+            </button>
+          )}
           <button
             onClick={onView}
             className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1"
@@ -495,6 +581,16 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
       </div>
 
       <TaskTimeline task={task} />
+
+      {isSelfHeld && task.workerComment && (
+        <div className="border-t border-amber-100 bg-amber-50/60 px-4 py-2.5 flex items-start gap-2">
+          <Icon name="messageSquare" className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <span className="text-xs font-semibold text-amber-700">Your comment to requestor:</span>
+            <p className="mt-0.5 text-xs text-amber-800 whitespace-pre-wrap">{task.workerComment}</p>
+          </div>
+        </div>
+      )}
 
       {(task.totalTimeLoggedMinutes || task.assetUrl) && (
         <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5 flex flex-wrap items-center gap-4 text-xs text-slate-600">
@@ -873,14 +969,81 @@ function parseAssetUrls(assetUrl) {
   return [assetUrl]
 }
 
-function FilterPill({ label, active, onClick }) {
+// ─── Comment & Hold modal ─────────────────────────────────────────────────────
+function CommentModal({ task, comment, onCommentChange, onConfirm, onClose, saving }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl flex flex-col">
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Add Comment &amp; Hold Task</h3>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Task <span className="font-medium text-slate-700">#{task.taskId}</span> —{' '}
+              {task.granularTaskName || task.requirementTypeName || 'Task'}
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="rounded-full p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+            <Icon name="x" className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-3">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
+            <div className="font-semibold mb-0.5">This will pause your task</div>
+            <div>The task will go <span className="font-medium">On Hold</span> and the requestor will see your comment. You can resume it once they respond.</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+              Your comment / question <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              rows={4}
+              value={comment}
+              onChange={e => onCommentChange(e.target.value)}
+              placeholder="Describe what you need from the requestor to proceed…"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800
+                         placeholder:text-slate-400 focus:border-amber-400 focus:outline-none
+                         focus:ring-1 focus:ring-amber-300 resize-none"
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-100">
+          <button onClick={onClose} disabled={saving}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition disabled:opacity-60">
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={saving || !comment?.trim()}
+            className="flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50 transition"
+          >
+            {saving ? (
+              <><span className="animate-spin h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent" /> Holding…</>
+            ) : (
+              <><Icon name="messageSquare" className="h-3.5 w-3.5" /> Comment &amp; Hold</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FilterPill({ label, active, onClick, highlight }) {
   return (
     <button
       onClick={onClick}
       className={`rounded-full px-3 py-1 text-xs font-medium transition ring-1 ${
         active
-          ? 'bg-brand-50 text-brand-700 ring-brand-200'
-          : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
+          ? highlight
+            ? 'bg-amber-100 text-amber-800 ring-amber-300'
+            : 'bg-brand-50 text-brand-700 ring-brand-200'
+          : highlight
+            ? 'bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100'
+            : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
       }`}
     >
       {label}
@@ -895,10 +1058,12 @@ const STATUS_STYLES = {
   QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
   COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
   CANCELLED:   'bg-rose-50 text-rose-700 ring-rose-200',
+  HELD:        'bg-amber-50 text-amber-700 ring-amber-200',
 }
 const STATUS_LABELS = {
   ASSIGNED: 'New', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
   QC_REVIEW: 'In QC', COMPLETED: 'Completed', CANCELLED: 'Cancelled',
+  HELD: 'On Hold',
 }
 function StatusBadge({ status }) {
   const cls = STATUS_STYLES[status] || 'bg-slate-100 text-slate-600'

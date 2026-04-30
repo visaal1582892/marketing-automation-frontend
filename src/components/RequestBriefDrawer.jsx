@@ -338,6 +338,13 @@ function RequestBriefBody({ campaign: c, filterTaskId, canRequestRework = false,
                         {t.reworkCount}× rework
                       </span>
                     )}
+                    {t.workerComment && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200"
+                        title="Worker has left a comment — see below">
+                        <Icon name="messageSquare" className="h-2.5 w-2.5" />
+                        Worker comment
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
                     {parseAssetUrls(t.assetUrl).map((url, i, arr) => (
@@ -367,6 +374,15 @@ function RequestBriefBody({ campaign: c, filterTaskId, canRequestRework = false,
                 {t.submissionNotes && (
                   <div className="rounded-md bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
                     <span className="text-slate-400 font-medium">Submission notes:</span> {t.submissionNotes}
+                  </div>
+                )}
+                {t.workerComment && (
+                  <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Icon name="messageSquare" className="h-3 w-3 text-amber-600 shrink-0" />
+                      <span className="font-semibold text-amber-800">Worker comment (task on hold)</span>
+                    </div>
+                    <p className="text-amber-900 whitespace-pre-wrap">{t.workerComment}</p>
                   </div>
                 )}
                 <TaskQuestionnaireBrief items={t.questionnaire} />

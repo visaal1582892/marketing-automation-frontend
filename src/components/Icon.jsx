@@ -196,6 +196,11 @@ const PATHS = {
       <path d="M22 2l-7 20-4-9-9-4 20-7z" />
     </>
   ),
+  messageSquare: (
+    <>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </>
+  ),
   refresh: (
     <>
       <path d="M4 4v5h5" />

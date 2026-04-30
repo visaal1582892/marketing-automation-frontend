@@ -268,7 +268,7 @@ export default function QuestionMasterPage() {
                         <span className="text-slate-400 text-xs">—</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
-                          {q.mappedTasks.map((t) => (
+                          {q.mappedTasks.slice(0, 3).map((t) => (
                             <span
                               key={t.granularTaskId}
                               className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5
@@ -277,6 +277,15 @@ export default function QuestionMasterPage() {
                               {t.granularTaskName}
                             </span>
                           ))}
+                          {q.mappedTasks.length > 3 && (
+                            <span
+                              title={q.mappedTasks.slice(3).map(t => t.granularTaskName).join(', ')}
+                              className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5
+                                text-xs font-medium text-slate-600 ring-1 ring-slate-200 cursor-default"
+                            >
+                              +{q.mappedTasks.length - 3}
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
@@ -405,10 +414,29 @@ export default function QuestionMasterPage() {
             </div>
           )}
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">
-              Map to granular tasks
-              <span className="ml-1.5 font-normal text-slate-400">({form.granularTaskIds.length} selected)</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium text-slate-700">
+                Map to granular tasks
+                <span className="ml-1.5 font-normal text-slate-400">({form.granularTaskIds.length} of {granularTasks.length} selected)</span>
+              </label>
+              {granularTasks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm(f => ({
+                      ...f,
+                      granularTaskIds:
+                        f.granularTaskIds.length === granularTasks.length
+                          ? []
+                          : granularTasks.map(t => t.taskId),
+                    }))
+                  }
+                  className="text-xs font-medium text-brand-600 hover:text-brand-800 transition"
+                >
+                  {form.granularTaskIds.length === granularTasks.length ? 'Clear all' : 'Select all'}
+                </button>
+              )}
+            </div>
             <div className="max-h-52 overflow-y-auto rounded-md border border-slate-200 divide-y divide-slate-100">
               {granularTasks.length === 0 ? (
                 <p className="px-4 py-3 text-xs text-slate-400">No granular tasks found.</p>

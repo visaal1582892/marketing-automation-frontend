@@ -42,6 +42,18 @@ const tasksApi = {
 
   /** Retrieve previously saved answers for a task (for pre-filling the form). */
   getAnswers: (taskId) => api.get(`${BASE}/${taskId}/answers`),
+
+  /**
+   * Worker adds a comment on their task and self-holds it (status → HELD).
+   * payload: { comment: string }
+   */
+  commentAndHold: (taskId, comment) =>
+    api.post(`${BASE}/${taskId}/comment`, { comment }),
+
+  /**
+   * Worker clears their comment and resumes the task (status → ASSIGNED).
+   */
+  workerUnhold: (taskId) => api.patch(`${BASE}/${taskId}/worker-unhold`),
 }
 
 export default tasksApi

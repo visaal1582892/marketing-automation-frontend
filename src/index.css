@@ -78,3 +78,15 @@ input, select, textarea, button { font-size: inherit; }
   background-color: #fde3e3;
   color: #71161a;
 }
+
+/* ------------------------------------------------------------------ */
+/* Row comment-pulse: animates only background-color so text stays    */
+/* fully opaque (unlike Tailwind's animate-pulse which fades opacity) */
+/* ------------------------------------------------------------------ */
+@keyframes row-comment-pulse {
+  0%, 100% { background-color: #fef9c3; } /* amber-100  */
+  50%       { background-color: #fde68a; } /* amber-200  */
+}
+.row-comment-pulse {
+  animation: row-comment-pulse 2s ease-in-out infinite;
+}
