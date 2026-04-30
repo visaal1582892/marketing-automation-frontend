@@ -397,7 +397,7 @@ export default function AppLayout() {
                   {user?.fullName || user?.email}
                 </div>
                 <div className="text-xs leading-tight text-slate-500">
-                  {user?.role || 'User'}{user?.department ? ` • ${user.department}` : ''}
+                  {user?.designation || 'User'}{user?.department ? ` • ${user.department}` : ''}
                 </div>
               </div>
             </button>
@@ -420,12 +420,11 @@ export default function AppLayout() {
                       <div className="truncate text-xs text-slate-500">{user?.email}</div>
                     </div>
                   </div>
-                  {user?.role && (
+                  {user?.designation && (
                     <div className="border-b border-slate-100 px-3 py-2 text-xs text-slate-500">
-                      Signed in as{' '}
                       <span className="inline-flex items-center rounded-full bg-brand-50 px-1.5 py-0.5
                                        text-xs font-medium text-brand-700 ring-1 ring-brand-100">
-                        {user.role}
+                        {user.designation}
                       </span>
                     </div>
                   )}
