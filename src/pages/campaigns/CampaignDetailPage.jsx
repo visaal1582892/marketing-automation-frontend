@@ -1,9 +1,10 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import campaignsApi from '../../api/campaigns'
 import { useAuth } from '../../auth/AuthContext'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
+import { generateBriefPdf } from '../../utils/generateBriefPdf'
 
 const STATUS_STYLES = {
   IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
@@ -40,6 +41,19 @@ export default function CampaignDetailPage() {
 
   const [c, setC] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownloadPdf = useCallback(async () => {
+    if (!c) return
+    setDownloading(true)
+    try {
+      await generateBriefPdf(c)
+    } catch (e) {
+      console.error('PDF generation failed:', e)
+    } finally {
+      setDownloading(false)
+    }
+  }, [c])
 
   // Requestor rework modal state
   const [reworkTask,    setReworkTask]    = useState(null)   // task object to rework
@@ -88,12 +102,31 @@ export default function CampaignDetailPage() {
         >
           <Icon name="chevron" className="h-3.5 w-3.5 rotate-180" /> Back
         </button>
-        <button
-          onClick={load}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition"
-        >
-          <Icon name="refresh" className="h-3.5 w-3.5" /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownloadPdf}
+            disabled={downloading}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition"
+          >
+            {downloading ? (
+              <>
+                <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+                Generating…
+              </>
+            ) : (
+              <><Icon name="download" className="h-3.5 w-3.5" /> Download PDF</>
+            )}
+          </button>
+          <button
+            onClick={load}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition"
+          >
+            <Icon name="refresh" className="h-3.5 w-3.5" /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Header */}

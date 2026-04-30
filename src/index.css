@@ -90,3 +90,4 @@ input, select, textarea, button { font-size: inherit; }
 .row-comment-pulse {
   animation: row-comment-pulse 2s ease-in-out infinite;
 }
+

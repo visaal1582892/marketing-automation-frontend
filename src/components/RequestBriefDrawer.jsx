@@ -1,9 +1,10 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import campaignsApi from '../api/campaigns'
 import Icon from './Icon'
 import PriorityEditor from './PriorityEditor'
 import { useAuth } from '../auth/AuthContext'
 import { useToast } from './Toast'
+import { generateBriefPdf } from '../utils/generateBriefPdf'
 
 /**
  * Slide-in drawer that shows the *complete* request brief for a campaign.
@@ -21,6 +22,20 @@ export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChan
   const { isMarketingManager, isAdmin, isRequestor, user } = useAuth()
   const toast = useToast()
   const canEditPriority = isMarketingManager || isAdmin
+
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownloadPdf = useCallback(async () => {
+    if (!campaign) return
+    setDownloading(true)
+    try {
+      await generateBriefPdf(campaign)
+    } catch (e) {
+      console.error('PDF generation failed:', e)
+    } finally {
+      setDownloading(false)
+    }
+  }, [campaign])
 
   // Requestor rework state
   const [reworkTask,    setReworkTask]    = useState(null)
@@ -84,8 +99,11 @@ export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChan
           canEditPriority={canEditPriority}
           onPriorityChanged={handlePriorityChange}
           onPriorityError={(msg) => toast.error?.(msg)}
+          onDownloadPdf={handleDownloadPdf}
+          downloading={downloading}
+          canDownload={!!campaign && !loading}
         />
-        <div className="flex-1 px-5 py-4 space-y-4">
+        <div className="flex-1 px-5 py-4 space-y-4 bg-white">
           {loading ? (
             <p className="text-center text-slate-400 py-12 text-sm">Loading full brief…</p>
           ) : error ? (
@@ -152,9 +170,7 @@ export function RequestSummaryCard({ campaign }) {
 
 // ─── Internals ───────────────────────────────────────────────────────────────
 
-function DrawerHeader({ campaign, onClose, canEditPriority, onPriorityChanged, onPriorityError }) {
-  // Hide the editor UI on terminal states — the server would reject the edit
-  // anyway, so don't tease the user with a control that won't work.
+function DrawerHeader({ campaign, onClose, canEditPriority, onPriorityChanged, onPriorityError, onDownloadPdf, downloading, canDownload }) {
   const editablePriority = canEditPriority
     && campaign
     && !['COMPLETED', 'REJECTED'].includes(campaign.status)
@@ -194,13 +210,40 @@ function DrawerHeader({ campaign, onClose, canEditPriority, onPriorityChanged, o
           {campaign?.createdAt && ` • ${fmtDateTime(campaign.createdAt)}`}
         </p>
       </div>
-      <button
-        onClick={onClose}
-        className="rounded p-1.5 text-slate-400 hover:bg-slate-100 transition shrink-0"
-        aria-label="Close brief"
-      >
-        <Icon name="x" className="h-4 w-4" />
-      </button>
+      <div className="flex items-center gap-1.5 shrink-0">
+        {canDownload && (
+          <button
+            onClick={onDownloadPdf}
+            disabled={downloading}
+            title="Download brief as PDF"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50
+                       px-2.5 py-1.5 text-xs font-medium text-slate-600
+                       hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50 transition"
+          >
+            {downloading ? (
+              <>
+                <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+                Generating…
+              </>
+            ) : (
+              <>
+                <Icon name="download" className="h-3.5 w-3.5" />
+                Download PDF
+              </>
+            )}
+          </button>
+        )}
+        <button
+          onClick={onClose}
+          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 transition"
+          aria-label="Close brief"
+        >
+          <Icon name="x" className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   )
 }
