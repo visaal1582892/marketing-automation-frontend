@@ -103,7 +103,7 @@ export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChan
           downloading={downloading}
           canDownload={!!campaign && !loading}
         />
-        <div className="flex-1 px-5 py-4 space-y-4 bg-white">
+        <div className="flex-1 px-5 py-5 space-y-4 bg-slate-50/50">
           {loading ? (
             <p className="text-center text-slate-400 py-12 text-sm">Loading full brief…</p>
           ) : error ? (
@@ -146,7 +146,7 @@ export function RequestSummaryCard({ campaign }) {
   return (
     <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700 space-y-1.5 ring-1 ring-slate-200">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-mono text-slate-400">#{campaign.campaignId}</span>
+        <IdChip value={campaign.campaignId} />
         <span className="font-semibold text-slate-800">{campaign.requirementTypeName || '—'}</span>
         <PriorityBadge v={campaign.priority} />
         {campaign.flaggedInconsistency && (
@@ -179,9 +179,7 @@ function DrawerHeader({ campaign, onClose, canEditPriority, onPriorityChanged, o
     <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-5 py-4 flex items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-mono text-slate-400">
-            Request #{campaign?.campaignId ?? '—'}
-          </span>
+          <IdChip label="REQ" value={campaign?.campaignId ?? '—'} />
           {campaign && <StatusBadge status={campaign.status} />}
           {campaign && (
             editablePriority ? (
@@ -314,13 +312,13 @@ function RequestBriefBody({ campaign: c, filterTaskId, canRequestRework = false,
           </div>
           <ul className="divide-y divide-slate-100">
             {c.fileUrls.map((url, i) => {
-              const fileName = url.split('/').pop() || `File ${i + 1}`
+              const { label, icon } = fileDisplayInfo(url, i)
               return (
                 <li key={i} className="flex items-center gap-3 px-4 py-2.5">
-                  <Icon name="fileText" className="h-4 w-4 text-brand-500 shrink-0" />
+                  <span className={`text-xs font-bold shrink-0 rounded px-1.5 py-0.5 ${icon.cls}`}>{icon.tag}</span>
                   <a href={url} target="_blank" rel="noopener noreferrer"
                     className="text-sm text-brand-600 hover:underline truncate flex-1">
-                    {fileName}
+                    {label}
                   </a>
                 </li>
               )
@@ -368,66 +366,68 @@ function RequestBriefBody({ campaign: c, filterTaskId, canRequestRework = false,
           </div>
           <div className="divide-y divide-slate-100">
             {visibleTasks.map(t => (
-              <div key={t.taskId} className="px-4 py-2.5 space-y-1.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-mono text-slate-400">#{t.taskId}</span>
-                    <span className="text-xs font-semibold text-slate-800">{t.granularTaskName || 'Task'}</span>
-                    <TaskBadge status={t.status} />
-                    {t.reworkCount > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 ring-1 ring-orange-200"
-                        title={`Reworked ${t.reworkCount} time${t.reworkCount === 1 ? '' : 's'}`}>
-                        <Icon name="refresh" className="h-2.5 w-2.5" />
-                        {t.reworkCount}× rework
-                      </span>
-                    )}
-                    {t.workerComment && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200"
-                        title="Worker has left a comment — see below">
-                        <Icon name="messageSquare" className="h-2.5 w-2.5" />
-                        Worker comment
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                    {parseAssetUrls(t.assetUrl).map((url, i, arr) => (
-                      <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                        className="text-brand-600 hover:underline text-xs flex items-center gap-1">
-                        <Icon name="fileText" className="h-3 w-3" />
-                        {arr.length > 1 ? `File ${i + 1}` : 'Submitted file'}
-                      </a>
-                    ))}
-                    {t.status === 'COMPLETED' && canRequestRework && (
-                      <button
-                        onClick={() => onRequestRework?.(t)}
-                        className="inline-flex items-center gap-1 rounded-md border border-rose-200
-                                   bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700
-                                   hover:bg-rose-100 transition">
-                        <Icon name="refresh" className="h-3 w-3" />
-                        Request Rework
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="text-xs text-slate-500">
-                  {t.assigneeName ? `Assigned to ${t.assigneeName}` : 'Unassigned'}
-                  {t.totalTimeLoggedMinutes != null && ` • ${t.totalTimeLoggedMinutes} min logged`}
-                </div>
-                <TaskTimestamps task={t} />
-                {t.submissionNotes && (
-                  <div className="rounded-md bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
-                    <span className="text-slate-400 font-medium">Submission notes:</span> {t.submissionNotes}
-                  </div>
-                )}
-                {t.workerComment && (
-                  <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <Icon name="messageSquare" className="h-3 w-3 text-amber-600 shrink-0" />
-                      <span className="font-semibold text-amber-800">Worker comment (task on hold)</span>
+              <div key={t.taskId} className="px-4 py-4 space-y-3">
+                {/* Task header */}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <IdChip label="TASK" value={t.taskId} />
+                      <span className="text-sm font-bold text-slate-900">{t.granularTaskName || 'Task'}</span>
+                      <TaskBadge status={t.status} />
+                      {t.reworkCount > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 ring-1 ring-orange-200"
+                          title={`Reworked ${t.reworkCount} time${t.reworkCount === 1 ? '' : 's'}`}>
+                          <Icon name="refresh" className="h-2.5 w-2.5" />
+                          {t.reworkCount}× rework
+                        </span>
+                      )}
+                      {t.workerComment && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                          <Icon name="messageSquare" className="h-2.5 w-2.5" />
+                          On Hold
+                        </span>
+                      )}
                     </div>
-                    <p className="text-amber-900 whitespace-pre-wrap">{t.workerComment}</p>
+                    <div className="text-xs text-slate-500">
+                      {t.assigneeName ? `Assigned to ${t.assigneeName}` : 'Unassigned'}
+                      {t.totalTimeLoggedMinutes != null && ` · ${t.totalTimeLoggedMinutes} min logged`}
+                    </div>
+                  </div>
+                  {t.status === 'COMPLETED' && canRequestRework && (
+                    <button
+                      onClick={() => onRequestRework?.(t)}
+                      className="flex items-center gap-1.5 rounded-md border border-amber-200
+                                 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700
+                                 hover:bg-amber-100 transition shrink-0">
+                      <Icon name="refresh" className="h-3 w-3" />
+                      Request Rework
+                    </button>
+                  )}
+                </div>
+
+                {/* Timeline */}
+                <TaskTimestamps task={t} />
+
+                {/* Submission notes */}
+                {t.submissionNotes && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Submission notes</p>
+                    <p>{t.submissionNotes}</p>
                   </div>
                 )}
+
+                {/* Worker comment / on-hold alert */}
+                {t.workerComment && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-xs">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Icon name="messageSquare" className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                      <span className="font-bold text-amber-800 text-xs">Worker comment — task is on hold</span>
+                    </div>
+                    <p className="text-amber-900 whitespace-pre-wrap leading-relaxed">{t.workerComment}</p>
+                  </div>
+                )}
+
+                {/* Task-specific Q&A */}
                 <TaskQuestionnaireBrief items={t.questionnaire} />
               </div>
             ))}
@@ -443,10 +443,10 @@ function RequestBriefBody({ campaign: c, filterTaskId, canRequestRework = false,
 function Section({ title, children }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</span>
+      <div className="border-b border-slate-100 px-4 py-2.5 flex items-center gap-2">
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-600">{title}</span>
       </div>
-      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-3">{children}</div>
+      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">{children}</div>
     </div>
   )
 }
@@ -457,8 +457,8 @@ function Detail({ label, value, span = 1 }) {
             : ''
   return (
     <div className={cls}>
-      <div className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">{label}</div>
-      <div className="text-xs text-slate-800 font-medium break-words">{value || '—'}</div>
+      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">{label}</div>
+      <div className="text-sm text-slate-800 font-medium break-words">{value || <span className="text-slate-400 font-normal">—</span>}</div>
     </div>
   )
 }
@@ -498,6 +498,16 @@ function TaskBadge({ status }) {
   }
   const cls = TASK_STYLES[status] || 'bg-slate-100 text-slate-600'
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{TASK_LABELS[status] || status}</span>
+}
+
+/** Compact ID chip — replaces bare "#N" displays with a legible badge. */
+function IdChip({ label, value }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-500 shrink-0">
+      {label && <span className="font-normal text-slate-400">{label}</span>}
+      {value}
+    </span>
+  )
 }
 
 function PriorityBadge({ v }) {
@@ -580,17 +590,17 @@ function ApprovalTrail({ c }) {
 function TaskQuestionnaireBrief({ items }) {
   if (!items?.length) return null
   return (
-    <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-2.5 space-y-2">
-      <div className="text-xs font-semibold uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
-        <Icon name="clipboard" className="h-3 w-3 shrink-0" />
-        Task-specific Q&amp;A
+    <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 overflow-hidden">
+      <div className="px-3 py-2 border-b border-indigo-100 flex items-center gap-1.5">
+        <Icon name="clipboard" className="h-3 w-3 text-indigo-500 shrink-0" />
+        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Task Q&amp;A</span>
       </div>
-      <ul className="space-y-2.5">
+      <ul className="divide-y divide-indigo-100/70">
         {items.map((row) => (
-          <li key={row.questionId} className="text-xs">
-            <div className="text-slate-600 font-medium leading-snug">{row.questionText}</div>
-            <div className="text-slate-900 mt-0.5 whitespace-pre-wrap break-words">
-              {row.answerDisplay ?? '—'}
+          <li key={row.questionId} className="px-3 py-2.5">
+            <div className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider mb-0.5">{row.questionText}</div>
+            <div className="text-sm text-slate-800 font-medium whitespace-pre-wrap break-words">
+              {row.answerDisplay ?? <span className="text-slate-400 font-normal italic">—</span>}
             </div>
           </li>
         ))}
@@ -601,38 +611,134 @@ function TaskQuestionnaireBrief({ items }) {
 
 function TaskTimestamps({ task }) {
   const steps = [
-    { key: 'assigned',  icon: 'inbox', label: 'Assigned',  ts: task.assignedAt || task.createdAt },
-    { key: 'accepted',  icon: 'play',  label: 'Accepted',  ts: task.acceptedAt },
-    { key: 'submitted', icon: 'send',  label: 'Submitted', ts: task.submittedAt },
-    { key: 'approved',  icon: 'check', label: 'Approved',  ts: task.completedAt },
+    {
+      key: 'assigned',
+      label: 'Assigned',
+      ts: task.assignedAt || task.createdAt,
+      icon: (
+        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+          <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm4 1.5a4.5 4.5 0 0 1 1 2.833V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-.667A4.5 4.5 0 0 1 4 9.5h8Z"/>
+        </svg>
+      ),
+      done: { dot: 'bg-slate-500', line: 'bg-slate-300', text: 'text-slate-600', card: 'bg-slate-50 border-slate-200' },
+    },
+    {
+      key: 'accepted',
+      label: 'Accepted',
+      ts: task.acceptedAt,
+      icon: (
+        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+          <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.78-1.72a.75.75 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25Z"/>
+        </svg>
+      ),
+      done: { dot: 'bg-blue-500', line: 'bg-blue-200', text: 'text-blue-700', card: 'bg-blue-50 border-blue-200' },
+    },
+    {
+      key: 'submitted',
+      label: 'Submitted',
+      ts: task.submittedAt,
+      icon: (
+        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+          <path d="M.5 9.9a.5.5 0 0 1 .5.5V13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.6a.5.5 0 0 1 1 0V13a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.6a.5.5 0 0 1 .5-.5Z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3Z"/>
+        </svg>
+      ),
+      done: { dot: 'bg-violet-500', line: 'bg-violet-200', text: 'text-violet-700', card: 'bg-violet-50 border-violet-200' },
+    },
+    {
+      key: 'approved',
+      label: 'Approved',
+      ts: task.completedAt,
+      icon: (
+        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+          <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0Z"/>
+        </svg>
+      ),
+      done: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' },
+    },
   ]
+
+  const fmt = (ts) => new Date(ts).toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  })
+
   return (
-    <div className="rounded-md bg-slate-50 px-2.5 py-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
-      {steps.map(s => (
-        <div key={s.key} className="flex items-center gap-1">
-          <Icon name={s.icon} className={`h-3 w-3 ${s.ts ? 'text-emerald-600' : 'text-slate-300'}`} />
-          <span className={`font-medium ${s.ts ? 'text-slate-700' : 'text-slate-400'}`}>{s.label}:</span>
-          <span className={s.ts ? 'text-slate-600' : 'text-slate-400'}>
-            {s.ts
-              ? new Date(s.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-              : '—'}
-          </span>
-        </div>
-      ))}
+    <div className="overflow-x-auto pb-0.5">
+      <div className="flex items-stretch min-w-max gap-0">
+        {steps.map((step, i) => {
+          const active = !!step.ts
+          const isLast = i === steps.length - 1
+          const s = step.done
+          return (
+            <div key={step.key} className="flex items-center">
+              {/* Step card */}
+              <div className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 transition ${
+                active ? s.card : 'bg-slate-50 border-slate-100'
+              }`}>
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full shrink-0 ${
+                  active ? `${s.dot} text-white` : 'bg-slate-200 text-slate-400'
+                }`}>
+                  <span className="scale-75">{step.icon}</span>
+                </span>
+                <div className="leading-tight">
+                  <div className={`text-[9px] font-bold uppercase tracking-wider ${active ? s.text : 'text-slate-400'}`}>
+                    {step.label}
+                  </div>
+                  <div className={`text-[10px] font-semibold whitespace-nowrap ${active ? 'text-slate-700' : 'text-slate-400'}`}>
+                    {active ? fmt(step.ts) : '—'}
+                  </div>
+                </div>
+              </div>
+              {/* Connector */}
+              {!isLast && (
+                <div className={`h-px w-3 shrink-0 ${active ? s.line : 'bg-slate-200'}`} />
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Parses task.assetUrl which may be a JSON array or a plain URL string. */
-function parseAssetUrls(assetUrl) {
-  if (!assetUrl) return []
-  try {
-    const parsed = JSON.parse(assetUrl)
-    if (Array.isArray(parsed)) return parsed
-  } catch { /* not JSON — plain URL */ }
-  return [assetUrl]
+/**
+ * Returns a human-readable label and a type tag/colour for a file URL.
+ * Avoids showing raw server-generated hash filenames to users.
+ */
+function fileDisplayInfo(url, index) {
+  const clean = (url || '').split('?')[0].toLowerCase()
+  const ext   = clean.split('.').pop()
+
+  const MAP = {
+    jpg: { name: 'Image',        cls: 'bg-blue-50 text-blue-600'   },
+    jpeg:{ name: 'Image',        cls: 'bg-blue-50 text-blue-600'   },
+    png: { name: 'Image',        cls: 'bg-blue-50 text-blue-600'   },
+    gif: { name: 'Image',        cls: 'bg-blue-50 text-blue-600'   },
+    webp:{ name: 'Image',        cls: 'bg-blue-50 text-blue-600'   },
+    svg: { name: 'Graphic',      cls: 'bg-cyan-50 text-cyan-600'   },
+    mp4: { name: 'Video',        cls: 'bg-violet-50 text-violet-600'},
+    mov: { name: 'Video',        cls: 'bg-violet-50 text-violet-600'},
+    avi: { name: 'Video',        cls: 'bg-violet-50 text-violet-600'},
+    webm:{ name: 'Video',        cls: 'bg-violet-50 text-violet-600'},
+    wmv: { name: 'Video',        cls: 'bg-violet-50 text-violet-600'},
+    pdf: { name: 'PDF',          cls: 'bg-red-50 text-red-600'     },
+    doc: { name: 'Document',     cls: 'bg-indigo-50 text-indigo-600'},
+    docx:{ name: 'Document',     cls: 'bg-indigo-50 text-indigo-600'},
+    xls: { name: 'Spreadsheet',  cls: 'bg-green-50 text-green-600' },
+    xlsx:{ name: 'Spreadsheet',  cls: 'bg-green-50 text-green-600' },
+    ppt: { name: 'Presentation', cls: 'bg-orange-50 text-orange-600'},
+    pptx:{ name: 'Presentation', cls: 'bg-orange-50 text-orange-600'},
+  }
+
+  const entry = MAP[ext]
+  const num   = index + 1
+  const label = entry ? `${entry.name} ${num}` : `Attachment ${num}`
+  const icon  = entry
+    ? { tag: entry.name.slice(0, 3).toUpperCase(), cls: entry.cls }
+    : { tag: 'FILE', cls: 'bg-slate-100 text-slate-500' }
+
+  return { label, icon }
 }
 
 /**
@@ -680,7 +786,7 @@ function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClo
             {task.granularTaskName || 'Task'}
           </p>
           <p className="text-xs text-slate-500">
-            Task #{task.taskId} · Currently{' '}
+            Task {task.taskId} · Currently{' '}
             <span className="font-medium text-green-700">Delivered</span>
           </p>
         </div>

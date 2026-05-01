@@ -177,6 +177,7 @@ export default function AppLayout() {
     if (location.pathname.startsWith('/admin/questions'))           return 'Question Library'
     if (location.pathname.startsWith('/admin/users'))              return 'User Management'
     if (location.pathname.startsWith('/campaigns/new'))            return 'New Marketing Request'
+    if (location.pathname.startsWith('/campaigns/completed'))      return 'Completed Tasks'
     if (location.pathname.match(/^\/campaigns\/\d+/))              return 'Campaign Detail'
     if (location.pathname.startsWith('/campaigns'))                return 'Marketing Requests'
     if (location.pathname.startsWith('/my-tasks'))                 return 'My Tasks'
@@ -229,6 +230,17 @@ export default function AppLayout() {
               onNavigate={() => setMobileOpen(false)}
             />
           ))}
+
+          {/* Requestor-only: Completed Tasks */}
+          {showRequests && (
+            <SidebarLink
+              to="/campaigns/completed"
+              label="Completed Tasks"
+              icon="check"
+              collapsed={collapsed}
+              onNavigate={() => setMobileOpen(false)}
+            />
+          )}
 
           {/* Marketing-Manager tools */}
           {showManagerTools && (

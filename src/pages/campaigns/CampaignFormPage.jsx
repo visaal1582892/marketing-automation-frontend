@@ -192,8 +192,9 @@ function GenericMultiSelect({ name, values, onChange, options, placeholder = 'Se
         ) : selected.length === 1 ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-medium text-brand-700 max-w-[80%] truncate">
             <span className="truncate">{selected[0].label}</span>
-            <button type="button" onClick={(e) => { e.stopPropagation(); toggle(selected[0].value) }}
-              className="shrink-0 hover:text-red-600 transition leading-none">×</button>
+            <span role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); toggle(selected[0].value) }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); toggle(selected[0].value) } }}
+              className="shrink-0 cursor-pointer hover:text-red-600 transition leading-none">×</span>
           </span>
         ) : (
           <span className="flex items-center gap-1.5">
@@ -304,10 +305,12 @@ function TaskMultiSelect({ tasks, selectedIds, onToggle, loading, hasError }) {
                 <span key={id}
                   className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700">
                   {t.taskName}
-                  <button type="button" onClick={(e) => { e.stopPropagation(); onToggle(t) }}
-                    className="ml-0.5 hover:text-red-600 transition">
+                  <span role="button" tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); onToggle(t) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onToggle(t) } }}
+                    className="ml-0.5 cursor-pointer hover:text-red-600 transition">
                     <Icon name="x" className="h-3 w-3" />
-                  </button>
+                  </span>
                 </span>
               ) : null
             })}

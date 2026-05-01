@@ -134,7 +134,9 @@ export default function CampaignDetailPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono text-slate-400">Campaign #{c.campaignId}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-500">
+                <span className="font-normal text-slate-400">CMP</span>{c.campaignId}
+              </span>
               <StatusBadge status={c.status} />
               <PriorityBadge v={c.priority} />
               {c.flaggedInconsistency && (
@@ -229,7 +231,9 @@ export default function CampaignDetailPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex-1 min-w-[200px]">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono text-slate-400">#{t.taskId}</span>
+                      <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-500">
+                        <span className="font-normal text-slate-400">TASK</span>{t.taskId}
+                      </span>
                       <span className="text-sm font-semibold text-slate-800">
                         {t.granularTaskName || 'Task'}
                       </span>
@@ -467,7 +471,7 @@ function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClo
             {task.granularTaskName || 'Task'}
           </p>
           <p className="text-xs text-slate-500">
-            Task #{task.taskId} · Currently{' '}
+            Task {task.taskId} · Currently{' '}
             <span className="font-medium text-green-700">Delivered</span>
           </p>
         </div>

@@ -5,6 +5,7 @@ import Icon from '../../components/Icon'
 import { useToast } from '../../components/Toast'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
 import campaignsApi from '../../api/campaigns'
+import AssetPreviewModal, { parseAssetUrls } from '../../components/AssetPreviewModal'
 
 /**
  * Module 3 — Employee Dashboard.
@@ -31,6 +32,9 @@ export default function MyTasksPage() {
   const [commentTask,    setCommentTask]    = useState(null)
   const [commentText,    setCommentText]    = useState('')
   const [commentSaving,  setCommentSaving]  = useState(false)
+
+  // Asset preview modal
+  const [assetPreviewTask, setAssetPreviewTask] = useState(null)
 
   // Full-brief drawer (any task → click "View brief")
   const [briefCampaignId, setBriefCampaignId] = useState(null)
@@ -374,6 +378,7 @@ export default function MyTasksPage() {
               onView={() => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}
               onComment={() => openCommentModal(t)}
               onWorkerUnhold={() => workerUnhold(t)}
+              onViewAssets={() => setAssetPreviewTask(t)}
             />
           ))}
         </div>
@@ -410,6 +415,14 @@ export default function MyTasksPage() {
         />
       )}
 
+      {assetPreviewTask && (
+        <AssetPreviewModal
+          urls={parseAssetUrls(assetPreviewTask.assetUrl)}
+          taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
+          onClose={() => setAssetPreviewTask(null)}
+        />
+      )}
+
       {briefCampaignId && (
         <RequestBriefDrawer
           campaignId={briefCampaignId}
@@ -438,7 +451,7 @@ export default function MyTasksPage() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold }) {
+function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onViewAssets }) {
   const elapsed      = formatElapsed(task, now)
   const isAssigned   = (task.status === 'ASSIGNED' || task.status === 'REWORK') && !closed
   const isInProgress = task.status === 'IN_PROGRESS' && !closed
@@ -462,7 +475,9 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
       <div className="flex flex-wrap items-start justify-between gap-3 p-4">
         <div className="flex-1 min-w-[240px]">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-mono text-slate-400">#{task.taskId}</span>
+            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-500">
+              <span className="font-normal text-slate-400">TASK</span>{task.taskId}
+            </span>
             <span className="text-sm font-semibold text-slate-800">
               {task.granularTaskName || task.requirementTypeName || 'Task'}
             </span>
@@ -497,7 +512,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
             )}
           </div>
           <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
-            <span>Campaign #{task.campaignId} • {task.requirementTypeName || '—'}</span>
+            <span>Campaign {task.campaignId} · {task.requirementTypeName || '—'}</span>
             {task.platformName && <span>• {task.platformName}</span>}
             {task.formatName   && <span>• {task.formatName}</span>}
             {task.quantity     && <span>• {task.quantity}</span>}
@@ -597,13 +612,18 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
           {task.totalTimeLoggedMinutes != null && (
             <span><span className="text-slate-400">Time logged:</span> {task.totalTimeLoggedMinutes} min</span>
           )}
-          {parseAssetUrls(task.assetUrl).map((url, i) => (
-            <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-               className="text-brand-600 hover:underline flex items-center gap-1">
+          {task.assetUrl && parseAssetUrls(task.assetUrl).length > 0 && (
+            <button
+              onClick={onViewAssets}
+              className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-200 transition"
+            >
               <Icon name="fileText" className="h-3.5 w-3.5" />
-              {parseAssetUrls(task.assetUrl).length > 1 ? `Asset ${i + 1}` : 'View submitted asset'}
-            </a>
-          ))}
+              Assets
+              <span className="ml-0.5 rounded-full bg-brand-50 px-1.5 py-px text-[10px] font-semibold text-brand-700 ring-1 ring-brand-200">
+                {parseAssetUrls(task.assetUrl).length}
+              </span>
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -753,7 +773,7 @@ function SubmitModal({
             <h3 className="text-base font-semibold text-slate-900">Submit for QC review</h3>
             <p className="mt-0.5 text-xs text-slate-500">
               {task.granularTaskName || task.requirementTypeName || 'Task'}
-              {campaign && <span className="text-slate-400"> · {campaign.requirementTypeName || `Campaign #${task.campaignId}`}</span>}
+              {campaign && <span className="text-slate-400"> · {campaign.requirementTypeName || `Campaign ${task.campaignId}`}</span>}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -954,19 +974,6 @@ function parseTs(v) {
   }
   const t = new Date(v).getTime()
   return Number.isNaN(t) ? null : t
-}
-
-/**
- * Parses the stored asset URL string into an array of URLs.
- * The value may be a JSON array (multiple uploads) or a plain URL (legacy single upload).
- */
-function parseAssetUrls(assetUrl) {
-  if (!assetUrl) return []
-  try {
-    const parsed = JSON.parse(assetUrl)
-    if (Array.isArray(parsed)) return parsed
-  } catch { /* not JSON — treat as plain URL */ }
-  return [assetUrl]
 }
 
 // ─── Comment & Hold modal ─────────────────────────────────────────────────────

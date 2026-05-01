@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import Logo from '../components/Logo'
@@ -15,7 +15,10 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]       = useState('')
 
-  if (isAuthenticated) navigate(from, { replace: true })
+  // Redirect after render — never call navigate() during the render phase.
+  useEffect(() => {
+    if (isAuthenticated) navigate(from, { replace: true })
+  }, [isAuthenticated, navigate, from])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

@@ -5,6 +5,7 @@ import campaignsApi from '../../api/campaigns'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
+import AssetPreviewModal, { parseAssetUrls } from '../../components/AssetPreviewModal'
 
 /**
  * Module 4 — QC Review queue.
@@ -34,6 +35,7 @@ export default function QcReviewPage() {
   const [saving, setSaving] = useState(false)
 
   const [briefCampaignId, setBriefCampaignId] = useState(null)
+  const [assetPreviewTask, setAssetPreviewTask] = useState(null)
 
   const load = () => {
     setLoading(true)
@@ -150,6 +152,7 @@ export default function QcReviewPage() {
               onRework={(t)  => open(t, 'NEEDS_REWORK')}
               onReject={(t)  => open(t, 'REJECTED')}
               onView={()     => setBriefCampaignId(g.campaignId)}
+              onViewAssets={(t) => setAssetPreviewTask(t)}
             />
           ))}
         </div>
@@ -167,6 +170,14 @@ export default function QcReviewPage() {
           onCancel={close}
           onConfirm={submitReview}
           onViewBrief={() => setBriefCampaignId(reviewing.campaignId)}
+        />
+      )}
+
+      {assetPreviewTask && (
+        <AssetPreviewModal
+          urls={parseAssetUrls(assetPreviewTask.assetUrl)}
+          taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
+          onClose={() => setAssetPreviewTask(null)}
         />
       )}
 
@@ -194,136 +205,144 @@ export default function QcReviewPage() {
  * QC. The header surfaces campaign-level metadata (id, priority, deadline,
  * requestor); rows below each carry their own individual action buttons.
  */
-function CampaignGroup({ group, onApprove, onRework, onReject, onView }) {
+function CampaignGroup({ group, onApprove, onRework, onReject, onView, onViewAssets }) {
   const { campaignId, items } = group
-  const sample   = items[0] || {}
+  const sample    = items[0] || {}
   const requestor = sample.requestorName
   const priority  = sample.campaignPriority
   const deadline  = sample.campaignDeadline
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
-        <div className="flex-1 min-w-[240px]">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-mono text-slate-400">CMP</span>
-            <span className="text-sm font-semibold text-slate-800">Campaign #{campaignId}</span>
-            <PriorityBadge v={priority} />
-            <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-purple-200">
-              {items.length} deliverable{items.length === 1 ? '' : 's'} pending QC
-            </span>
-          </div>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-            {requestor && <span>Requested by {requestor}</span>}
-            {deadline && <span>• Deadline: {fmtDate(deadline)}</span>}
-          </div>
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      {/* Campaign header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 border-b border-slate-200 px-5 py-3.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Campaign</span>
+          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">
+            <span className="font-normal text-slate-400">CMP</span>{campaignId}
+          </span>
+          <PriorityBadge v={priority} />
+          <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-semibold text-purple-700 ring-1 ring-purple-200">
+            {items.length} pending QC
+          </span>
+          {requestor && (
+            <span className="text-xs text-slate-500">· {requestor}</span>
+          )}
+          {deadline && (
+            <span className="text-xs text-slate-400">· Due {fmtDate(deadline)}</span>
+          )}
         </div>
         <button
           onClick={onView}
-          className="rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1 self-center"
+          className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition shadow-sm"
         >
           <Icon name="eye" className="h-3.5 w-3.5" /> View Brief
         </button>
       </div>
 
-      <ul className="divide-y divide-slate-100">
+      {/* Task rows */}
+      <div className="divide-y divide-slate-100">
         {items.map((t, idx) => (
-          <li key={t.taskId} className="px-4 py-3">
-            <TaskRow
-              task={t}
-              index={idx + 1}
-              onApprove={() => onApprove(t)}
-              onRework={()  => onRework(t)}
-              onReject={()  => onReject(t)}
-            />
-          </li>
+          <TaskRow
+            key={t.taskId}
+            task={t}
+            index={idx + 1}
+            onApprove={() => onApprove(t)}
+            onRework={()  => onRework(t)}
+            onReject={()  => onReject(t)}
+            onViewAssets={() => onViewAssets(t)}
+          />
         ))}
-      </ul>
+      </div>
     </div>
   )
 }
 
-function TaskRow({ task, index, onApprove, onRework, onReject }) {
+function TaskRow({ task, index, onApprove, onRework, onReject, onViewAssets }) {
+  const assetCount = parseAssetUrls(task.assetUrl).length
+
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="flex-1 min-w-[260px]">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-mono text-slate-400">#{task.taskId}</span>
-          <span className="text-xs uppercase tracking-wide text-slate-400">Deliverable {index}</span>
-          <span className="text-sm font-semibold text-slate-800">
-            {task.granularTaskName || task.requirementTypeName || 'Task'}
-          </span>
-          {task.platformName && (
-            <span className="text-xs text-slate-500">• {task.platformName}</span>
-          )}
-          {task.formatName && (
-            <span className="text-xs text-slate-500">• {task.formatName}</span>
-          )}
-          {task.quantity && (
-            <span className="text-xs text-slate-500">• {task.quantity}</span>
-          )}
-        </div>
-        <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
-          <span>Submitted by {task.assigneeName || `User ${task.assignedTo}`}</span>
-          {task.totalTimeLoggedMinutes != null && (
-            <span>• {task.totalTimeLoggedMinutes} min logged</span>
-          )}
-          {task.reworkCount > 0 && (
-            <span
-              className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 ring-1 ring-orange-200"
-              title={`Sent back for rework ${task.reworkCount} time${task.reworkCount === 1 ? '' : 's'} previously`}
-            >
-              <Icon name="refresh" className="h-3 w-3" />
-              {task.reworkCount}× rework
+    <div className="px-5 py-4 space-y-3">
+      {/* ── Row 1: task identity ── */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        {/* Left: name + meta tags */}
+        <div className="space-y-1 flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Deliverable {index}
             </span>
-          )}
-        </div>
-        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-          <TimePill icon="inbox" label="Assigned"  ts={task.assignedAt || task.createdAt} />
-          <TimePill icon="play"  label="Accepted"  ts={task.acceptedAt} />
-          <TimePill icon="send"  label="Submitted" ts={task.submittedAt} />
-        </div>
-
-        {task.submissionNotes && (
-          <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700">
-            <span className="text-slate-400 text-xs uppercase tracking-wide">Notes:</span>{' '}
-            {task.submissionNotes}
+            <span className="text-sm font-bold text-slate-900 truncate">
+              {task.granularTaskName || task.requirementTypeName || 'Task'}
+            </span>
+            {task.reworkCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700 ring-1 ring-orange-200">
+                <Icon name="refresh" className="h-3 w-3" />
+                {task.reworkCount}× rework
+              </span>
+            )}
           </div>
-        )}
-      </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            {task.platformName && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{task.platformName}</span>
+            )}
+            {task.formatName && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{task.formatName}</span>
+            )}
+            {task.quantity && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">Qty: {task.quantity}</span>
+            )}
+            <span className="text-slate-400">
+              by <span className="font-medium text-slate-600">{task.assigneeName || `User ${task.assignedTo}`}</span>
+              {task.totalTimeLoggedMinutes != null && ` · ${task.totalTimeLoggedMinutes} min`}
+            </span>
+          </div>
+        </div>
 
-      <div className="flex flex-col items-end gap-2">
-        {parseAssetUrls(task.assetUrl).map((url, i, arr) => (
-          <a
-            key={i}
-            href={url} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1 text-xs text-brand-600 hover:bg-brand-50 transition"
-          >
-            <Icon name="fileText" className="h-3.5 w-3.5" />
-            {arr.length > 1 ? `Asset ${i + 1}` : 'Open asset'}
-          </a>
-        ))}
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        {/* Right: action buttons */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          {assetCount > 0 && (
+            <button
+              onClick={onViewAssets}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition"
+            >
+              <Icon name="fileText" className="h-3.5 w-3.5" />
+              Assets
+              <span className="rounded-full bg-brand-600 text-white px-1.5 py-px text-[10px] font-bold">
+                {assetCount}
+              </span>
+            </button>
+          )}
           <button
             onClick={onRework}
-            className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 transition flex items-center gap-1"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition"
           >
             <Icon name="refresh" className="h-3.5 w-3.5" /> Rework
           </button>
           <button
             onClick={onReject}
-            className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 transition flex items-center gap-1"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition"
           >
             <Icon name="x" className="h-3.5 w-3.5" /> Reject
           </button>
           <button
             onClick={onApprove}
-            className="rounded-md border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100 transition flex items-center gap-1"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
           >
             <Icon name="check" className="h-3.5 w-3.5" /> Approve
           </button>
         </div>
       </div>
+
+      {/* ── Row 2: lifecycle stepper ── */}
+      <TaskTimeline task={task} />
+
+      {/* ── Row 3: submission notes (only when present) ── */}
+      {task.submissionNotes && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1.5">Notes</span>
+          {task.submissionNotes}
+        </div>
+      )}
     </div>
   )
 }
@@ -365,7 +384,7 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 space-y-0.5">
               <div>
                 <span className="font-medium">Reviewing deliverable:</span>{' '}
-                #{task.taskId} — {task.granularTaskName || task.requirementTypeName}
+                Task {task.taskId} — {task.granularTaskName || task.requirementTypeName}
               </div>
               <div>
                 <span className="font-medium">Creator:</span>{' '}
@@ -377,7 +396,7 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
         ) : (
           <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
             <div><span className="font-medium">Task:</span> {task.granularTaskName || task.requirementTypeName}</div>
-            <div><span className="font-medium">Campaign:</span> #{task.campaignId}</div>
+            <div><span className="font-medium">Campaign:</span> {task.campaignId}</div>
             <div><span className="font-medium">Creator:</span> {task.assigneeName || `User ${task.assignedTo}`}</div>
           </div>
         )}
@@ -461,16 +480,80 @@ function PriorityBadge({ v }) {
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || '—'}</span>
 }
 
-function TimePill({ icon, label, ts }) {
-  if (!ts) return null
+function TaskTimeline({ task }) {
+  const steps = [
+    {
+      label: 'Assigned',
+      ts: task.assignedAt || task.createdAt,
+      icon: (
+        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+          <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm4 1.5a4.5 4.5 0 0 1 1 2.833V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-.667A4.5 4.5 0 0 1 4 9.5h8Z"/>
+        </svg>
+      ),
+      done: { dot: 'bg-slate-500', line: 'bg-slate-300', text: 'text-slate-600', card: 'bg-slate-50 border-slate-200' },
+    },
+    {
+      label: 'Accepted',
+      ts: task.acceptedAt,
+      icon: (
+        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+          <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.78-1.72a.75.75 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25Z"/>
+        </svg>
+      ),
+      done: { dot: 'bg-blue-500', line: 'bg-blue-200', text: 'text-blue-700', card: 'bg-blue-50 border-blue-200' },
+    },
+    {
+      label: 'Submitted',
+      ts: task.submittedAt,
+      icon: (
+        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+          <path d="M.5 9.9a.5.5 0 0 1 .5.5V13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.6a.5.5 0 0 1 1 0V13a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.6a.5.5 0 0 1 .5-.5Z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3Z"/>
+        </svg>
+      ),
+      done: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' },
+    },
+  ]
+
+  const fmt = (ts) => new Date(ts).toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  })
+
   return (
-    <span className="inline-flex items-center gap-1">
-      <Icon name={icon} className="h-3 w-3 text-emerald-600" />
-      <span className="text-slate-400">{label}:</span>
-      <span className="text-slate-700 font-medium">
-        {new Date(ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-      </span>
-    </span>
+    <div className="overflow-x-auto pb-0.5">
+      <div className="flex items-stretch min-w-max gap-0">
+        {steps.map((step, i) => {
+          const active = !!step.ts
+          const isLast = i === steps.length - 1
+          const s = step.done
+          return (
+            <div key={step.label} className="flex items-center">
+              {/* Step card */}
+              <div className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 transition ${
+                active ? s.card : 'bg-slate-50 border-slate-100'
+              }`}>
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full shrink-0 ${
+                  active ? `${s.dot} text-white` : 'bg-slate-200 text-slate-400'
+                }`}>
+                  <span className="scale-75">{step.icon}</span>
+                </span>
+                <div className="leading-tight">
+                  <div className={`text-[9px] font-bold uppercase tracking-wider ${active ? s.text : 'text-slate-400'}`}>
+                    {step.label}
+                  </div>
+                  <div className={`text-[10px] font-semibold whitespace-nowrap ${active ? 'text-slate-700' : 'text-slate-400'}`}>
+                    {active ? fmt(step.ts) : '—'}
+                  </div>
+                </div>
+              </div>
+              {/* Connector */}
+              {!isLast && (
+                <div className={`h-px w-3 shrink-0 ${active ? s.line : 'bg-slate-200'}`} />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -479,15 +562,3 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 
-/**
- * Parses task.assetUrl which may be a JSON array (multiple uploads)
- * or a plain URL string (legacy single-upload).
- */
-function parseAssetUrls(assetUrl) {
-  if (!assetUrl) return []
-  try {
-    const parsed = JSON.parse(assetUrl)
-    if (Array.isArray(parsed)) return parsed
-  } catch { /* not JSON — treat as plain URL */ }
-  return [assetUrl]
-}

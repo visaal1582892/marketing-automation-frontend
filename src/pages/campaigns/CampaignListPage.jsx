@@ -77,6 +77,22 @@ function PriorityBadge({ priority }) {
   )
 }
 
+// ─── File display helpers ─────────────────────────────────────────────────────
+
+const FILE_TYPE_MAP = {
+  jpg: 'Image', jpeg: 'Image', png: 'Image', gif: 'Image', webp: 'Image', svg: 'Graphic',
+  mp4: 'Video', mov: 'Video', avi: 'Video', webm: 'Video', wmv: 'Video',
+  pdf: 'PDF Document', doc: 'Document', docx: 'Document',
+  xls: 'Spreadsheet', xlsx: 'Spreadsheet',
+  ppt: 'Presentation', pptx: 'Presentation',
+}
+
+function friendlyFileName(url, index) {
+  const ext  = (url || '').split('?')[0].toLowerCase().split('.').pop()
+  const type = FILE_TYPE_MAP[ext]
+  return type ? `${type} ${index + 1}` : `Attachment ${index + 1}`
+}
+
 // ─── Shared helpers for Edit Campaign modal ───────────────────────────────────
 
 function parseOpts(raw) {
@@ -397,7 +413,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
 
   // Files – existing (with optional remove) + new uploads
   const [existingFiles, setExistingFiles] = useState(
-    () => (campaign.fileUrls || []).map(url => ({ url, name: url.split('/').pop() || url, removed: false }))
+    () => (campaign.fileUrls || []).map((url, i) => ({ url, name: friendlyFileName(url, i), removed: false }))
   )
   const [newFiles,       setNewFiles]       = useState([])
   const [uploadingFiles, setUploadingFiles] = useState(false)
@@ -1339,20 +1355,37 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
   const [fReqType,   setFReqType]   = useState('')
   const [fPriority,  setFPriority]  = useState('')
   const [fStatus,    setFStatus]    = useState('')
+  const [activeTab,  setActiveTab]  = useState('open')  // 'open' | 'rework' | 'all' | 'closed'
 
-  const reqTypeOptions = useMemo(() => [...new Set(campaigns.map(c => c.requirementTypeName).filter(Boolean))].sort(), [campaigns])
+  const reqTypeOptions  = useMemo(() => [...new Set(campaigns.map(c => c.requirementTypeName).filter(Boolean))].sort(), [campaigns])
   const priorityOptions = useMemo(() => [...new Set(campaigns.map(c => c.priority).filter(Boolean))].sort(), [campaigns])
   const statusOptions   = useMemo(() => [...new Set(campaigns.map(c => c.status).filter(Boolean))].sort(), [campaigns])
 
   const TERMINAL = ['COMPLETED', 'REJECTED', 'CANCELLED']
 
-  const filtered = useMemo(() => campaigns.filter(c => {
+  // Tab counts
+  const tabCounts = useMemo(() => ({
+    open:   campaigns.filter(c => !TERMINAL.includes(c.status) &&
+              !(c.workTasks || []).some(t => t.status === 'REWORK')).length,
+    rework: campaigns.filter(c => (c.workTasks || []).some(t => t.status === 'REWORK')).length,
+    closed: campaigns.filter(c => TERMINAL.includes(c.status)).length,
+    all:    campaigns.length,
+  }), [campaigns]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const tabFiltered = useMemo(() => campaigns.filter(c => {
+    if (activeTab === 'open')   return !TERMINAL.includes(c.status) && !(c.workTasks || []).some(t => t.status === 'REWORK')
+    if (activeTab === 'rework') return (c.workTasks || []).some(t => t.status === 'REWORK')
+    if (activeTab === 'closed') return TERMINAL.includes(c.status)
+    return true
+  }), [campaigns, activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filtered = useMemo(() => tabFiltered.filter(c => {
     if (fCampaign && !String(c.campaignId).includes(fCampaign.trim())) return false
     if (fReqType  && c.requirementTypeName !== fReqType)                return false
     if (fPriority && c.priority !== fPriority)                          return false
     if (fStatus   && c.status   !== fStatus)                            return false
     return true
-  }), [campaigns, fCampaign, fReqType, fPriority, fStatus])
+  }), [tabFiltered, fCampaign, fReqType, fPriority, fStatus])
 
   const hasFilters = fCampaign || fReqType || fPriority || fStatus
   const clearAll   = () => { setFCampaign(''); setFReqType(''); setFPriority(''); setFStatus('') }
@@ -1360,8 +1393,44 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
   const colFilterCls = `w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-600
     placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-300 focus:border-brand-400`
 
+  const tabs = [
+    { id: 'open',   label: 'Open',   count: tabCounts.open },
+    { id: 'rework', label: 'Rework', count: tabCounts.rework, highlight: true },
+    { id: 'closed', label: 'Closed', count: tabCounts.closed },
+    { id: 'all',    label: 'All',    count: tabCounts.all },
+  ]
+
   return (
     <div className="space-y-3">
+      {/* Tabs */}
+      <div className="flex items-center gap-1.5 flex-wrap border-b border-slate-200 pb-3">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ring-1 ${
+              activeTab === tab.id
+                ? tab.highlight
+                  ? 'bg-amber-500 text-white ring-amber-500 shadow-sm'
+                  : 'bg-brand-600 text-white ring-brand-600 shadow-sm'
+                : tab.highlight
+                  ? tabCounts.rework > 0
+                    ? 'bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100'
+                    : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50'
+                  : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {tab.highlight && tab.count > 0 && <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />}
+            {tab.label}
+            <span className={`rounded-full px-1.5 py-px text-[10px] font-bold ${
+              activeTab === tab.id ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-500'
+            }`}>
+              {tab.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* Row count + clear */}
       <div className="flex items-center justify-between">
         <span className="text-xs text-slate-400">{filtered.length} campaign{filtered.length !== 1 ? 's' : ''}</span>
@@ -1392,7 +1461,7 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
             <table className="w-full min-w-[640px] text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign #</th>
+                  <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign</th>
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Requirement Type</th>
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Priority</th>
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Status</th>
@@ -1440,15 +1509,22 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                       className={`transition ${hasComment
                         ? 'row-comment-pulse'
                         : 'hover:bg-slate-50/70'}`}>
-                      <td className="px-3 py-3 font-mono text-slate-500">#{c.campaignId}</td>
+                      <td className="px-3 py-3">
+                        <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{c.campaignId}</span>
+                      </td>
                       <td className="px-3 py-3 font-medium text-slate-800">{c.requirementTypeName || '—'}</td>
                       <td className="px-3 py-3"><PriorityBadge priority={c.priority} /></td>
                       <td className="px-3 py-3"><CampaignStatusBadge status={c.status} /></td>
                       <td className="px-3 py-3 text-slate-600">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {taskCount === 0
                             ? <span className="italic text-slate-400">None yet</span>
                             : <span>{doneCount}/{taskCount} done</span>}
+                          {(c.workTasks || []).some(t => t.status === 'REWORK') && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 ring-1 ring-orange-200">
+                              ↩ Rework
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-3 text-slate-500">{fmtDate(c.createdAt)}</td>
@@ -1551,7 +1627,9 @@ function CampaignTableView({ campaigns, loading, onRefresh, refreshing }) {
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((c) => (
                   <tr key={c.campaignId} className="hover:bg-slate-50/60 transition">
-                    <td className="px-4 py-3 text-slate-500 font-mono text-xs">#{c.campaignId}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{c.campaignId}</span>
+                    </td>
                     <td className="px-4 py-3 font-medium text-slate-800">{c.requirementTypeName || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{c.requestorName || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{c.departmentName || '—'}</td>

@@ -121,7 +121,7 @@ function EditCampaignModal({ campaignId, task, onClose, onSaved }) {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div>
             <h3 className="text-base font-semibold text-slate-800">Edit Campaign</h3>
-            <p className="mt-0.5 text-xs text-slate-400">Campaign #{campaignId} · Task #{task.taskId}</p>
+            <p className="mt-0.5 text-xs text-slate-400">Campaign {campaignId} · Task {task.taskId}</p>
           </div>
           <button onClick={onClose} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 transition">
             <Icon name="x" className="h-4 w-4" />
@@ -195,7 +195,9 @@ function UnholdModal({ task: t, isOther, mode, onSelectAuto, onSelectManual,
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
-            <p className="text-xs text-slate-400 font-mono">#{t.taskId}</p>
+            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-500">
+              <span className="font-normal text-slate-400">TASK</span>{t.taskId}
+            </span>
             <h3 className="text-sm font-semibold text-slate-900">
               Assign: {t.granularTaskName || t.taskTypeName || 'Task'}
             </h3>
@@ -446,7 +448,7 @@ export default function AllRequestsPage() {
     setHoldingId(task.taskId)
     try {
       await managerApi.holdTask(task.taskId)
-      toast.success(`Task #${task.taskId} is now on hold.`)
+      toast.success(`Task ${task.taskId} is now on hold.`)
       load(true)
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Hold failed.')
@@ -502,10 +504,10 @@ export default function AllRequestsPage() {
     try {
       if (unholdMode === 'auto') {
         await managerApi.unholdTask(unholdTarget.taskId)
-        toast.success(`Task #${unholdTarget.taskId} auto-routed successfully.`)
+        toast.success(`Task ${unholdTarget.taskId} auto-routed successfully.`)
       } else {
         await managerApi.assignHeldTask(unholdTarget.taskId, selectedUserId)
-        toast.success(`Task #${unholdTarget.taskId} assigned successfully.`)
+        toast.success(`Task ${unholdTarget.taskId} assigned successfully.`)
       }
       closeUnholdModal()
       load(true)
@@ -522,7 +524,7 @@ export default function AllRequestsPage() {
     setActingCancel(true)
     try {
       await managerApi.cancelTask(cancelTarget.taskId)
-      toast.success(`Task #${cancelTarget.taskId} cancelled.`)
+      toast.success(`Task ${cancelTarget.taskId} cancelled.`)
       setCancelTarget(null)
       load(true)
     } catch (e) {
@@ -578,7 +580,7 @@ export default function AllRequestsPage() {
             <table className="w-full min-w-[1160px] text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  <Th width="w-16">Task #</Th>
+                  <Th width="w-16">Task</Th>
                   <Th width="w-28">Campaign</Th>
                   <Th>Requestor</Th>
                   <Th>Assignee</Th>
@@ -706,7 +708,9 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
                     ${alt ? 'bg-slate-50/40' : 'bg-white'}`}>
 
       <td className="px-3 py-2.5">
-        <span className="font-mono text-xs text-slate-400">#{t.taskId}</span>
+        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-500">
+          <span className="font-normal text-slate-400">TASK</span>{t.taskId}
+        </span>
       </td>
 
       <td className="px-3 py-2.5">

@@ -99,7 +99,7 @@ export default function DashboardPage() {
               <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1
                               text-xs font-medium uppercase tracking-wider text-white/90 ring-1 ring-white/20">
                 <span className="h-1.5 w-1.5 rounded-full bg-accent-400" />
-                {user?.role || 'User'}
+                {user?.designation || user?.fullName?.split(' ')[0] || 'Team'}
               </div>
               <h1 className="text-2xl font-semibold sm:text-3xl">
                 Welcome back, {user?.fullName?.split(' ')[0] || 'there'}.

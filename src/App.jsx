@@ -13,6 +13,7 @@ import QuestionMasterPage from './pages/admin/QuestionMasterPage'
 import CampaignFormPage from './pages/campaigns/CampaignFormPage'
 import CampaignListPage from './pages/campaigns/CampaignListPage'
 import CampaignDetailPage from './pages/campaigns/CampaignDetailPage'
+import CompletedTasksPage from './pages/campaigns/CompletedTasksPage'
 import MyTasksPage from './pages/tasks/MyTasksPage'
 import QcReviewPage from './pages/manager/QcReviewPage'
 import TimeReportPage from './pages/manager/TimeReportPage'
@@ -55,6 +56,14 @@ export default function App() {
                 element={
                   <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager', 'Admin']}>
                     <CampaignFormPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/campaigns/completed"
+                element={
+                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager', 'Admin']}>
+                    <CompletedTasksPage />
                   </ProtectedRoute>
                 }
               />

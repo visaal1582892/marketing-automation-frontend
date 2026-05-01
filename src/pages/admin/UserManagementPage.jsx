@@ -30,6 +30,41 @@ function StatusBadge({ status }) {
   )
 }
 
+// ─── Role multi-select chip picker ───────────────────────────────────────────
+function RoleChipPicker({ roles, selectedIds, onChange }) {
+  const toggle = (id) => {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter(r => r !== id))
+    } else {
+      onChange([...selectedIds, id])
+    }
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2 min-h-[40px]">
+      {roles.length === 0 && (
+        <span className="text-xs text-slate-400 self-center">No roles configured</span>
+      )}
+      {roles.map(r => {
+        const active = selectedIds.includes(r.id)
+        return (
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => toggle(r.id)}
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition border
+              ${active
+                ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
+                : 'bg-white text-slate-600 border-slate-300 hover:border-brand-400 hover:text-brand-700'
+              }`}
+          >
+            {r.name}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Form modal ───────────────────────────────────────────────────────────────
 function UserFormModal({ open, onClose, initial, roles, departments, designations, onSaved }) {
   const toast  = useToast()
@@ -37,7 +72,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
 
   const blank = {
     fullName: '', email: '',
-    departmentId: '', designationId: '', roleId: '',
+    departmentId: '', designationId: '', roleIds: [],
     skillLevel: 'JUNIOR', status: 'ACTIVE',
   }
   const [form, setForm] = useState(blank)
@@ -50,7 +85,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
         email:         initial.email         || '',
         departmentId:  initial.departmentId  || '',
         designationId: initial.designationId || '',
-        roleId:        initial.roleId        || '',
+        roleIds:       initial.roleIds       || [],
         skillLevel:    initial.skillLevel    || 'JUNIOR',
         status:        initial.status        || 'ACTIVE',
       } : blank)
@@ -125,17 +160,6 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
             </select>
           </div>
 
-          {/* Role (internal — used for task routing only) */}
-          <div>
-            <label className={labelCls}>
-              Role <span className="text-slate-400 font-normal">(task routing)</span>
-            </label>
-            <select className={inputCls} value={form.roleId} onChange={e => set('roleId', e.target.value)}>
-              <option value="">— Select role —</option>
-              {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          </div>
-
           {/* Skill Level */}
           <div>
             <label className={labelCls}>Skill Level</label>
@@ -155,6 +179,21 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
                 <option value="INACTIVE">Inactive</option>
               </select>
             </div>
+          )}
+        </div>
+
+        {/* Roles — multi-select chips (spans full width) */}
+        <div>
+          <label className={labelCls}>
+            Roles <span className="text-slate-400 font-normal">(select one or more)</span>
+          </label>
+          <RoleChipPicker
+            roles={roles}
+            selectedIds={form.roleIds}
+            onChange={ids => set('roleIds', ids)}
+          />
+          {form.roleIds.length === 0 && (
+            <p className="mt-1 text-xs text-amber-600">At least one role is recommended for proper access.</p>
           )}
         </div>
 
@@ -343,6 +382,7 @@ export default function UserManagementPage() {
                   <th className="px-3 pt-3 pb-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 w-8">#</th>
                   <th className={th}>Name</th>
                   <th className={th}>Email</th>
+                  <th className={th}>Roles</th>
                   <th className={th}>Designation</th>
                   <th className={th}>Department</th>
                   <th className={th}>Skill</th>
@@ -354,6 +394,7 @@ export default function UserManagementPage() {
                   <td className="px-3 pb-2" />
                   <td className="px-3 pb-2"><ColInput value={fName}  onChange={setFName}  placeholder="Filter name…" /></td>
                   <td className="px-3 pb-2"><ColInput value={fEmail} onChange={setFEmail} placeholder="Filter email…" /></td>
+                  <td className="px-3 pb-2" />
                   <td className="px-3 pb-2"><ColSelect value={fDesignation} onChange={setFDesignation} options={designationOptions} placeholder="All designations" /></td>
                   <td className="px-3 pb-2"><ColSelect value={fDept}        onChange={setFDept}        options={deptOptions}        placeholder="All depts" /></td>
                   <td className="px-3 pb-2"><ColSelect value={fSkill}       onChange={setFSkill}       options={skillOptions}       placeholder="All skills" /></td>
@@ -365,13 +406,25 @@ export default function UserManagementPage() {
               <tbody className="divide-y divide-slate-100">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-400">No users match the current filters.</td>
+                    <td colSpan={10} className="py-12 text-center text-slate-400">No users match the current filters.</td>
                   </tr>
                 ) : filtered.map((u, idx) => (
                   <tr key={u.userId} className="hover:bg-slate-50/60 transition">
                     <td className="px-3 py-2.5 text-slate-400 font-mono text-xs">{idx + 1}</td>
                     <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{u.fullName}</td>
                     <td className="px-3 py-2.5 text-slate-500 text-xs">{u.email}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-wrap gap-1">
+                        {(u.roleNames ?? []).length > 0
+                          ? (u.roleNames).map(r => (
+                              <span key={r} className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-brand-100">
+                                {r}
+                              </span>
+                            ))
+                          : <span className="text-slate-400 text-xs">—</span>
+                        }
+                      </div>
+                    </td>
                     <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{u.designationName || '—'}</td>
                     <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{u.departmentName || '—'}</td>
                     <td className="px-3 py-2.5 text-slate-500 capitalize">

@@ -38,30 +38,41 @@ export function AuthProvider({ children }) {
     setUser(null)
   }, [])
 
-  const hasRole = useCallback((roleName) =>
-    Boolean(user && user.role && user.role.toLowerCase() === roleName.toLowerCase()),
-  [user])
+  /**
+   * Returns true if the current user holds the given role name (case-insensitive).
+   * Checks user.roles array (multi-role aware).
+   */
+  const hasRole = useCallback((roleName) => {
+    const roles = user?.roles
+    if (!roles || !roleName) return false
+    return roles.some(r => r.toLowerCase() === roleName.toLowerCase())
+  }, [user])
 
-  const value = useMemo(
-    () => ({
+  const value = useMemo(() => {
+    const roles = user?.roles ?? []
+
+    const hasAnyRole = (...roleNames) =>
+      roles.some(r => roleNames.some(n => n.toLowerCase() === r.toLowerCase()))
+
+    return {
       user,
       token,
       loading,
       isAuthenticated: Boolean(token && user),
-      isAdmin:            Boolean(user?.role?.toLowerCase() === 'admin'),
-      isRequestor:        Boolean(user?.role?.toLowerCase() === 'requestor'),
-      isMarketingManager: Boolean(user?.role?.toLowerCase() === 'marketing manager'),
-      isMarketingCreator: Boolean(user?.role?.toLowerCase() === 'marketing creator'),
-      isHead:             Boolean(user?.role?.toLowerCase() === 'head'),
-      isRegionalManager:  Boolean(user?.role?.toLowerCase() === 'regional manager'),
-      /** Returns true if current user has ANY of the given role names (case-insensitive). */
-      hasAnyRole: (...roles) => Boolean(user?.role && roles.some(r => r.toLowerCase() === user.role.toLowerCase())),
+      // Boolean flags — true when user holds that role (or any of the combined roles)
+      isAdmin:            hasAnyRole('admin'),
+      isRequestor:        hasAnyRole('requestor'),
+      isMarketingManager: hasAnyRole('marketing manager'),
+      isMarketingCreator: hasAnyRole('marketing creator'),
+      isHead:             hasAnyRole('head'),
+      isRegionalManager:  hasAnyRole('regional manager'),
+      /** Returns true if the current user holds ANY of the provided role names (case-insensitive). */
+      hasAnyRole,
       hasRole,
       login,
       logout,
-    }),
-    [user, token, loading, hasRole, login, logout],
-  )
+    }
+  }, [user, token, loading, hasRole, login, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
