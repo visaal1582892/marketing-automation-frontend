@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import campaignsApi from '../../api/campaigns'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
-import AssetPreviewModal, { parseAssetUrls } from '../../components/AssetPreviewModal'
+import AssetPreviewModal from '../../components/AssetPreviewModal'
 
 /**
  * Requestor view — tasks that have been approved by the Marketing Head.
@@ -102,7 +102,7 @@ export default function CompletedTasksPage() {
       {/* Asset preview modal */}
       {assetTask && (
         <AssetPreviewModal
-          urls={parseAssetUrls(assetTask.assetUrl)}
+          taskId={assetTask.taskId}
           taskName={assetTask.granularTaskName || assetTask.requirementTypeName || `Task ${assetTask.taskId}`}
           onClose={() => setAssetTask(null)}
         />
@@ -126,9 +126,7 @@ export default function CompletedTasksPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CompletedTaskCard({ task, onRework, onViewAssets }) {
-  const assetUrls  = parseAssetUrls(task.assetUrl)
-  const assetCount = assetUrls.length
-  const hasAssets  = assetCount > 0
+  const hasAssets = true // loaded on demand in AssetPreviewModal
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -176,25 +174,11 @@ function CompletedTaskCard({ task, onRework, onViewAssets }) {
           <button
             onClick={hasAssets ? onViewAssets : undefined}
             disabled={!hasAssets}
-            className={[
-              'flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition',
-              hasAssets
-                ? 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 cursor-pointer'
-                : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed',
-            ].join(' ')}
-            title={hasAssets ? 'View submitted assets' : 'No assets uploaded for this task'}
+            className="flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer transition"
+            title="View submitted assets"
           >
             <Icon name="fileText" className="h-3.5 w-3.5" />
             Assets
-            {hasAssets ? (
-              <span className="rounded-full bg-brand-100 px-1.5 py-px text-[10px] font-bold text-brand-700 ring-1 ring-brand-200">
-                {assetCount}
-              </span>
-            ) : (
-              <span className="rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-bold text-slate-400">
-                0
-              </span>
-            )}
           </button>
           <button
             onClick={onRework}

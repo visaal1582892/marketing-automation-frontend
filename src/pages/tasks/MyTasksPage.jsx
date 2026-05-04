@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import tasksApi from '../../api/tasks'
+import collaborationApi from '../../api/collaboration'
 import Icon from '../../components/Icon'
 import { useToast } from '../../components/Toast'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
 import campaignsApi from '../../api/campaigns'
-import AssetPreviewModal, { parseAssetUrls } from '../../components/AssetPreviewModal'
+import AssetPreviewModal from '../../components/AssetPreviewModal'
 
 /**
  * Module 3 — Employee Dashboard.
@@ -35,6 +36,9 @@ export default function MyTasksPage() {
 
   // Asset preview modal
   const [assetPreviewTask, setAssetPreviewTask] = useState(null)
+
+  // Collaborate modal
+  const [collaborateTask,  setCollaborateTask]  = useState(null)
 
   // Full-brief drawer (any task → click "View brief")
   const [briefCampaignId, setBriefCampaignId] = useState(null)
@@ -181,16 +185,20 @@ export default function MyTasksPage() {
     setSubmitForm({ submissionNotes: task.submissionNotes || '' })
 
     // Pre-populate previously uploaded files as already-done items.
-    // The worker can remove any of them or just add new ones on top.
-    const prevUrls = parseAssetUrls(task.assetUrl)
-    setFileItems(prevUrls.map((url, i) => ({
-      id:           `prev-${i}-${Date.now()}`,
-      file:         null,        // no File object — already on server
-      status:       'done',
-      url,
-      fromPrevious: true,
-      errorMsg:     null,
-    })))
+    // Assets live in asset_info now — load them from the collaboration endpoint.
+    collaborationApi.getAssets(task.taskId)
+      .then(res => {
+        const prevUrls = (res.data || []).map(a => a.url)
+        setFileItems(prevUrls.map((url, i) => ({
+          id:           `prev-${i}-${Date.now()}`,
+          file:         null,
+          status:       'done',
+          url,
+          fromPrevious: true,
+          errorMsg:     null,
+        })))
+      })
+      .catch(() => {})
 
     campaignsApi.getById(task.campaignId)
       .then(res => setSubmittingCampaign(res.data))
@@ -379,6 +387,7 @@ export default function MyTasksPage() {
               onComment={() => openCommentModal(t)}
               onWorkerUnhold={() => workerUnhold(t)}
               onViewAssets={() => setAssetPreviewTask(t)}
+              onCollaborate={() => setCollaborateTask(t)}
             />
           ))}
         </div>
@@ -417,9 +426,16 @@ export default function MyTasksPage() {
 
       {assetPreviewTask && (
         <AssetPreviewModal
-          urls={parseAssetUrls(assetPreviewTask.assetUrl)}
+          taskId={assetPreviewTask.taskId}
           taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
           onClose={() => setAssetPreviewTask(null)}
+        />
+      )}
+
+      {collaborateTask && (
+        <CollaborateModal
+          task={collaborateTask}
+          onClose={() => setCollaborateTask(null)}
         />
       )}
 
@@ -451,7 +467,7 @@ export default function MyTasksPage() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onViewAssets }) {
+function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onViewAssets, onCollaborate }) {
   const elapsed      = formatElapsed(task, now)
   const isAssigned   = (task.status === 'ASSIGNED' || task.status === 'REWORK') && !closed
   const isInProgress = task.status === 'IN_PROGRESS' && !closed
@@ -601,6 +617,16 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
             <Icon name="eye" className="h-3.5 w-3.5" />
             View Brief
           </button>
+          {!isCancelled && (
+            <button
+              onClick={onCollaborate}
+              className="flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition"
+              title="Invite collaborators to this task"
+            >
+              <Icon name="users" className="h-3.5 w-3.5" />
+              Collaborate
+            </button>
+          )}
         </div>
       </div>
 
@@ -635,21 +661,17 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
         </div>
       )}
 
-      {(task.totalTimeLoggedMinutes || task.assetUrl) && (
+      {task.totalTimeLoggedMinutes != null && (
         <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5 flex flex-wrap items-center gap-4 text-xs text-slate-600">
-          {task.totalTimeLoggedMinutes != null && (
-            <span><span className="text-slate-400">Time logged:</span> {task.totalTimeLoggedMinutes} min</span>
-          )}
-          {task.assetUrl && parseAssetUrls(task.assetUrl).length > 0 && (
+          <span><span className="text-slate-400">Time logged:</span> {task.totalTimeLoggedMinutes} min</span>
+          {(task.status === 'QC_REVIEW' || task.status === 'COMPLETED') && (
             <button
               onClick={onViewAssets}
               className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-200 transition"
+              title="View submitted assets"
             >
               <Icon name="fileText" className="h-3.5 w-3.5" />
-              Assets
-              <span className="ml-0.5 rounded-full bg-brand-50 px-1.5 py-px text-[10px] font-semibold text-brand-700 ring-1 ring-brand-200">
-                {parseAssetUrls(task.assetUrl).length}
-              </span>
+              View Assets
             </button>
           )}
         </div>
@@ -1111,4 +1133,126 @@ function StatusBadge({ status }) {
 function PriorityBadge({ v }) {
   const m = { HIGH: 'bg-red-50 text-red-700 ring-red-200', MEDIUM: 'bg-yellow-50 text-yellow-700 ring-yellow-200', LOW: 'bg-green-50 text-green-700 ring-green-200' }
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || '—'}</span>
+}
+
+// ─── Collaborate Modal ────────────────────────────────────────────────────────
+
+function CollaborateModal({ task, onClose }) {
+  const toast = useToast()
+  const [allUsers,  setAllUsers]  = useState([])
+  const [selected,  setSelected]  = useState([])
+  const [search,    setSearch]    = useState('')
+  const [loading,   setLoading]   = useState(true)
+  const [saving,    setSaving]    = useState(false)
+  const [existing,  setExisting]  = useState([])
+
+  useEffect(() => {
+    Promise.all([
+      collaborationApi.getAllUsers(),
+      collaborationApi.getMembers(task.taskId).catch(() => ({ data: [] })),
+    ]).then(([usersRes, membersRes]) => {
+      setAllUsers(usersRes.data || [])
+      setExisting((membersRes.data || []).map(m => m.userId))
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [task.taskId])
+
+  const filtered = allUsers.filter(u =>
+    u.userId !== task.assignedTo &&
+    (u.fullName || '').toLowerCase().includes(search.toLowerCase())
+  )
+
+  const toggle = (uid) =>
+    setSelected(prev => prev.includes(uid) ? prev.filter(x => x !== uid) : [...prev, uid])
+
+  const handleSubmit = async () => {
+    if (!selected.length) return
+    setSaving(true)
+    try {
+      await collaborationApi.invite(task.taskId, selected)
+      toast.success?.(`${selected.length} collaborator${selected.length > 1 ? 's' : ''} invited.`)
+      onClose()
+    } catch (e) {
+      toast.error?.(e?.response?.data?.message || 'Failed to invite collaborators.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Invite Collaborators</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{task.granularTaskName || task.taskId}</p>
+          </div>
+          <button onClick={onClose} className="rounded-full p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
+            <Icon name="x" className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-5 pt-4 pb-2">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search users…"
+            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400"
+          />
+        </div>
+
+        <div className="overflow-y-auto max-h-64 px-5 py-2 space-y-1">
+          {loading ? (
+            <p className="text-center text-slate-400 text-sm py-6">Loading…</p>
+          ) : filtered.length === 0 ? (
+            <p className="text-center text-slate-400 text-sm py-4">No users found.</p>
+          ) : filtered.map(u => {
+            const isAlready = existing.includes(u.userId)
+            const isSel     = selected.includes(u.userId)
+            return (
+              <button
+                key={u.userId}
+                disabled={isAlready}
+                onClick={() => !isAlready && toggle(u.userId)}
+                className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left transition
+                  ${isAlready
+                    ? 'opacity-50 cursor-not-allowed bg-slate-50'
+                    : isSel
+                      ? 'bg-indigo-50 ring-1 ring-indigo-200'
+                      : 'hover:bg-slate-50'}`}
+              >
+                <div className="h-7 w-7 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700 shrink-0">
+                  {(u.fullName || '?')[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-slate-800 truncate">{u.fullName}</p>
+                  <p className="text-[10px] text-slate-400 truncate">{u.designationName || u.email}</p>
+                </div>
+                {isAlready && <span className="text-[10px] text-slate-400 shrink-0">Already added</span>}
+                {!isAlready && isSel && <Icon name="check" className="h-3.5 w-3.5 text-indigo-600 shrink-0" />}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="border-t border-slate-100 px-5 py-4 flex items-center justify-between gap-3">
+          <span className="text-xs text-slate-500">
+            {selected.length > 0 ? `${selected.length} selected` : 'Select collaborators above'}
+          </span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition">
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={!selected.length || saving}
+              className="rounded-lg bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Inviting…' : 'Start Collaboration'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }

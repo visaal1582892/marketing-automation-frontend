@@ -128,9 +128,10 @@ function ChangePasswordModal({ open, onClose }) {
 }
 
 const TOP_NAV = [
-  { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { to: '/campaigns', label: 'Requests',  icon: 'fileText'  },
-  { to: '/my-tasks',  label: 'My Tasks',  icon: 'clipboard' },
+  { to: '/dashboard',    label: 'Dashboard',      icon: 'dashboard'  },
+  { to: '/campaigns',    label: 'Requests',        icon: 'fileText'   },
+  { to: '/my-tasks',     label: 'My Tasks',        icon: 'clipboard'  },
+  { to: '/collaborations', label: 'Collaborations', icon: 'users'     },
 ]
 
 export default function AppLayout() {
@@ -180,6 +181,7 @@ export default function AppLayout() {
     if (location.pathname.match(/^\/campaigns\/\d+/))              return 'Campaign Detail'
     if (location.pathname.startsWith('/campaigns'))                return 'Marketing Requests'
     if (location.pathname.startsWith('/my-tasks'))                 return 'My Tasks'
+    if (location.pathname.startsWith('/collaborations'))           return 'Collaborations'
     if (location.pathname.startsWith('/manager/all-requests'))     return 'All Requests'
     if (location.pathname.startsWith('/manager/qc-review'))        return 'QC Review Queue'
     if (location.pathname.startsWith('/manager/reports'))          return 'Time & Efficiency Reports'
@@ -217,8 +219,9 @@ export default function AppLayout() {
         {/* Nav */}
         <nav className={`flex-1 overflow-y-auto py-3 ${collapsed ? 'px-1.5 space-y-0.5' : 'px-2 space-y-0.5'}`}>
           {TOP_NAV.filter(item => {
-            if (item.to === '/my-tasks')  return showMyTasks
-            if (item.to === '/campaigns') return showRequests
+            if (item.to === '/my-tasks')        return showMyTasks
+            if (item.to === '/collaborations')  return showMyTasks
+            if (item.to === '/campaigns')       return showRequests
             return true
           }).map((item) => (
             <SidebarLink

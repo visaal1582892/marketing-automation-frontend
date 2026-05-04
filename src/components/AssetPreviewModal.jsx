@@ -1,13 +1,33 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Icon from './Icon'
+import collaborationApi from '../api/collaboration'
 
 /**
  * Modal that shows all submitted assets for a work task.
+ * Loads assets from the asset_info table via the collaboration API.
  * Handles images (compact thumbnail + expand), videos (inline player),
  * and any other file type (icon + open/download links).
+ *
+ * Props:
+ *   taskId   — work task ID (loads assets from API)
+ *   urls     — legacy: pass a plain array of URLs to skip the API call
+ *   taskName — display label
+ *   onClose  — close handler
  */
-export default function AssetPreviewModal({ urls = [], taskName, onClose }) {
-  if (!urls.length) return null
+export default function AssetPreviewModal({ taskId, urls: urlsProp, taskName, onClose }) {
+  const [urls,    setUrls]    = useState(urlsProp || [])
+  const [loading, setLoading] = useState(!!taskId && !urlsProp?.length)
+
+  useEffect(() => {
+    if (!taskId) return
+    setLoading(true)
+    collaborationApi.getAssets(taskId)
+      .then(res => setUrls((res.data || []).map(a => a.url)))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [taskId])
+
+  if (!loading && !urls.length) return null
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -19,9 +39,11 @@ export default function AssetPreviewModal({ urls = [], taskName, onClose }) {
             {taskName && <p className="text-xs text-slate-500 mt-0.5">{taskName}</p>}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">
-              {urls.length} file{urls.length !== 1 ? 's' : ''}
-            </span>
+            {!loading && (
+              <span className="text-xs text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">
+                {urls.length} file{urls.length !== 1 ? 's' : ''}
+              </span>
+            )}
             <button
               onClick={onClose}
               className="rounded-full p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
@@ -33,9 +55,15 @@ export default function AssetPreviewModal({ urls = [], taskName, onClose }) {
 
         {/* Scrollable list */}
         <div className="overflow-y-auto p-4 space-y-3">
-          {urls.map((url, i) => (
-            <AssetCard key={i} url={url} index={i} total={urls.length} />
-          ))}
+          {loading ? (
+            <p className="text-center text-slate-400 text-sm py-8">Loading assets…</p>
+          ) : urls.length === 0 ? (
+            <p className="text-center text-slate-400 text-sm py-8">No assets uploaded yet.</p>
+          ) : (
+            urls.map((url, i) => (
+              <AssetCard key={i} url={url} index={i} total={urls.length} />
+            ))
+          )}
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
 import { printBrief } from '../../utils/printBrief'
+import AssetPreviewModal from '../../components/AssetPreviewModal'
 
 const STATUS_STYLES = {
   IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
@@ -50,6 +51,8 @@ export default function CampaignDetailPage() {
     catch (e) { console.error('Print failed:', e) }
     finally   { setPrinting(false) }
   }, [c])
+
+  const [assetPreviewTask, setAssetPreviewTask] = useState(null)
 
   // Requestor rework modal state
   const [reworkTask,    setReworkTask]    = useState(null)   // task object to rework
@@ -374,15 +377,16 @@ export default function CampaignDetailPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap shrink-0">
-                    {parseAssetUrls(t.assetUrl).map((url, i, arr) => (
-                      <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                    {(t.status === 'QC_REVIEW' || t.status === 'COMPLETED') && (
+                      <button
+                        onClick={() => setAssetPreviewTask(t)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200
                                    bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700
                                    hover:bg-brand-100 transition">
                         <Icon name="fileText" className="h-3 w-3" />
-                        {arr.length > 1 ? `File ${i + 1}` : 'View file'}
-                      </a>
-                    ))}
+                        View Assets
+                      </button>
+                    )}
                     {t.status === 'COMPLETED' && canRequestRework && (
                       <button
                         onClick={() => { setReworkTask(t); setReworkMsg('') }}
@@ -423,6 +427,14 @@ export default function CampaignDetailPage() {
           onConfirm={handleRequestorRework}
           onClose={() => { setReworkTask(null); setReworkMsg('') }}
           submitting={submittingRw}
+        />
+      )}
+
+      {assetPreviewTask && (
+        <AssetPreviewModal
+          taskId={assetPreviewTask.taskId}
+          taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
+          onClose={() => setAssetPreviewTask(null)}
         />
       )}
     </div>
@@ -537,15 +549,6 @@ function fmtMultiValue(v) {
 }
 
 function fmtDate(d) { return d ? new Date(d).toLocaleString('en-IN') : '' }
-
-function parseAssetUrls(assetUrl) {
-  if (!assetUrl) return []
-  try {
-    const parsed = JSON.parse(assetUrl)
-    if (Array.isArray(parsed)) return parsed
-  } catch { /* plain URL */ }
-  return [assetUrl]
-}
 
 function TaskTimestamps({ task }) {
   const fmt = ts => new Date(ts).toLocaleString('en-IN', {

@@ -5,7 +5,7 @@ import campaignsApi from '../../api/campaigns'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
-import AssetPreviewModal, { parseAssetUrls } from '../../components/AssetPreviewModal'
+import AssetPreviewModal from '../../components/AssetPreviewModal'
 
 /**
  * Module 4 — QC Review queue.
@@ -175,7 +175,7 @@ export default function QcReviewPage() {
 
       {assetPreviewTask && (
         <AssetPreviewModal
-          urls={parseAssetUrls(assetPreviewTask.assetUrl)}
+          taskId={assetPreviewTask.taskId}
           taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
           onClose={() => setAssetPreviewTask(null)}
         />
@@ -259,9 +259,8 @@ function CampaignGroup({ group, onApprove, onRework, onReject, onView, onViewAss
 }
 
 function TaskRow({ task, index, onApprove, onRework, onReject, onViewAssets }) {
-  const assetUrls  = parseAssetUrls(task.assetUrl)
-  const assetCount = assetUrls.length
-  const hasAssets  = assetCount > 0
+  const assetCount = 0 // assets are loaded on demand in the modal / preview
+  const hasAssets  = true // always show the button — let the modal handle empty state
 
   return (
     <div className="px-5 py-4 space-y-3">
@@ -304,26 +303,12 @@ function TaskRow({ task, index, onApprove, onRework, onReject, onViewAssets }) {
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           {/* Assets — always shown; disabled when no files were submitted */}
           <button
-            onClick={hasAssets ? onViewAssets : undefined}
-            disabled={!hasAssets}
-            className={[
-              'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition',
-              hasAssets
-                ? 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 cursor-pointer'
-                : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed',
-            ].join(' ')}
-            title={hasAssets ? 'View submitted assets' : 'No assets submitted for this task'}
+            onClick={onViewAssets}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer transition"
+            title="View submitted assets"
           >
             <Icon name="fileText" className="h-3.5 w-3.5" />
             Assets
-            <span className={[
-              'rounded-full px-1.5 py-px text-[10px] font-bold',
-              hasAssets
-                ? 'bg-brand-600 text-white'
-                : 'bg-slate-200 text-slate-400',
-            ].join(' ')}>
-              {assetCount}
-            </span>
           </button>
           <button
             onClick={onRework}
@@ -377,8 +362,20 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
   ).length
   const wouldCloseSibs = isReject && openSiblings > 0
 
-  const assetUrls  = parseAssetUrls(task.assetUrl)
-  const hasAssets  = assetUrls.length > 0
+  const [taskAssets, setTaskAssets]   = useState([])
+  const [assetsLoaded, setAssetsLoaded] = useState(false)
+
+  useEffect(() => {
+    import('../../api/collaboration').then(m => {
+      m.default.getAssets(task.taskId)
+        .then(res => setTaskAssets(res.data || []))
+        .catch(() => {})
+        .finally(() => setAssetsLoaded(true))
+    })
+  }, [task.taskId])
+
+  const assetUrls = taskAssets.map(a => a.url)
+  const hasAssets = assetUrls.length > 0
   const [expandedAsset, setExpandedAsset] = useState(null)
 
   return (
@@ -433,7 +430,7 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
                 'rounded-full px-2 py-0.5 text-[10px] font-semibold',
                 hasAssets ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-400',
               ].join(' ')}>
-                {assetUrls.length} file{assetUrls.length !== 1 ? 's' : ''}
+                {!assetsLoaded ? '…' : `${assetUrls.length} file${assetUrls.length !== 1 ? 's' : ''}`}
               </span>
             </div>
             {hasAssets ? (
@@ -445,7 +442,7 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
                     <div key={i} className="rounded-lg border border-slate-200 overflow-hidden">
                       <div className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 border-b border-slate-100">
                         <span className="text-[11px] font-medium text-slate-600 truncate max-w-[160px]">
-                          {isImg ? 'Image' : 'File'} {assetUrls.length > 1 ? i + 1 : ''}
+                          {isImg ? 'Image' : 'File'} {assetUrls.length > 1 ? ` ${i + 1}` : ''}
                         </span>
                         <div className="flex items-center gap-1 shrink-0">
                           <a

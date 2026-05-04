@@ -15,6 +15,7 @@ import CampaignListPage from './pages/campaigns/CampaignListPage'
 import CampaignDetailPage from './pages/campaigns/CampaignDetailPage'
 import CompletedTasksPage from './pages/campaigns/CompletedTasksPage'
 import MyTasksPage from './pages/tasks/MyTasksPage'
+import CollaborationsPage from './pages/tasks/CollaborationsPage'
 import QcReviewPage from './pages/manager/QcReviewPage'
 import TimeReportPage from './pages/manager/TimeReportPage'
 import AllRequestsPage from './pages/manager/AllRequestsPage'
@@ -89,6 +90,16 @@ export default function App() {
                     excludeRole={['Requestor', 'Admin', 'Marketing Manager', 'Head', 'Regional Manager']}
                   >
                     <MyTasksPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/collaborations"
+                element={
+                  <ProtectedRoute
+                    excludeRole={['Requestor', 'Admin', 'Marketing Manager', 'Head', 'Regional Manager']}
+                  >
+                    <CollaborationsPage />
                   </ProtectedRoute>
                 }
               />
