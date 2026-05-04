@@ -1413,20 +1413,9 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
     }
   }
 
-  const [cloningId, setCloningId] = useState(null)
-  const handleClone = async (e, campaignId) => {
+  const handleClone = (e, campaignId) => {
     e.stopPropagation()
-    setCloningId(campaignId)
-    try {
-      const res = await campaignsApi.cloneCampaign(campaignId)
-      const newId = res.data?.campaignId
-      toast.success?.('Campaign cloned — loading form to review and submit.')
-      navigate(`/campaigns/${newId}/edit`)
-    } catch {
-      toast.error?.('Failed to clone campaign.')
-    } finally {
-      setCloningId(null)
-    }
+    navigate(`/campaigns/new?cloneFrom=${campaignId}`)
   }
 
   const reqTypeOptions  = useMemo(() => [...new Set(campaigns.map(c => c.requirementTypeName).filter(Boolean))].sort(), [campaigns])
@@ -1632,14 +1621,13 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                           {/* Clone */}
                           <button
                             onClick={(e) => handleClone(e, c.campaignId)}
-                            disabled={cloningId === c.campaignId}
                             title="Clone this request"
-                            className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                            className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition">
                             <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                               <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                             </svg>
-                            {cloningId === c.campaignId ? 'Cloning…' : 'Clone'}
+                            Clone
                           </button>
                           {canEdit && (
                             <button

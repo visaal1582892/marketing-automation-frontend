@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { useToast } from '../../components/Toast'
 import campaignsApi from '../../api/campaigns'
@@ -812,7 +812,8 @@ function LocationMultiSelect({ selected, onChange, hasError }) {
 // ─── Main form ────────────────────────────────────────────────────────────────
 
 export default function CampaignFormPage() {
-  const { id: cloneSourceId } = useParams() // present on /campaigns/:id/edit (clone)
+  const [searchParams] = useSearchParams()
+  const cloneSourceId = searchParams.get('cloneFrom') // present on /campaigns/new?cloneFrom=<id>
   const { user }   = useAuth()
   const toast      = useToast()
   const showToast  = (msg, type = 'info') => toast[type]?.(msg)
@@ -906,7 +907,7 @@ export default function CampaignFormPage() {
     enumsApi.getCampaignFormOptions().then((data) => setEnumOpts(data)).catch(() => {})
   }, [])
 
-  // Pre-populate form when editing a cloned campaign (route /campaigns/:id/edit)
+  // Pre-populate form when cloning a campaign (query param ?cloneFrom=<id>)
   const [cloneLoading, setCloneLoading] = useState(!!cloneSourceId)
   useEffect(() => {
     if (!cloneSourceId) return
@@ -942,6 +943,18 @@ export default function CampaignFormPage() {
           } catch {
             if (c.targetLocation) setTargetLocations([c.targetLocation])
           }
+        }
+        if (Array.isArray(c.deliverables) && c.deliverables.length > 0) {
+          const preDeliverables = {}
+          c.deliverables.forEach((d) => {
+            if (d.granularTaskId) {
+              preDeliverables[d.granularTaskId] = {
+                granularTaskId: d.granularTaskId,
+                questionnaire: {},
+              }
+            }
+          })
+          setDeliverables(preDeliverables)
         }
       })
       .catch(() => showToast('Failed to load source campaign for cloning.', 'error'))
