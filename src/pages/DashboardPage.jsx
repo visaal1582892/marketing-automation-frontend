@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import campaignsApi from '../api/campaigns'
@@ -18,18 +18,26 @@ import Icon from '../components/Icon'
  */
 export default function DashboardPage() {
   const {
-    user, isAdmin, isRequestor, isMarketingManager, isMarketingCreator,
+    user, isAdmin, isRequestor, isMarketingManager, isHead, isRegionalManager,
   } = useAuth()
 
-  // Operational pipeline view — Marketing Manager and Admin share this
-  const showOpsWidgets  = isMarketingManager || isAdmin
+  // Operational pipeline view — Marketing Manager only.
+  // Admin alone does NOT see this (consistent with sidebar isolation):
+  // they must also hold the Marketing Manager role.
+  const showOpsWidgets = isMarketingManager
+
   // Admin-only extras (quick-access links to admin pages)
   const showAdminExtras = isAdmin
-  // Worker widgets — marketing-team executors only
+
+  // Worker widgets: executors only — not brief-submitters, not ops, not admin
   const showWorkerWidgets =
-    !isRequestor && !isAdmin && !isMarketingManager
-  // Requestor widgets — brief authors only
-  const showRequestWidgets = isRequestor
+    !isRequestor && !isHead && !isRegionalManager && !isAdmin && !isMarketingManager
+
+  // Request widgets: anyone who submits briefs (mirrors sidebar showRequests)
+  const showRequestWidgets = isRequestor || isHead || isRegionalManager
+
+  // Whether to show the "New Request" CTA (same set of roles that can submit)
+  const canSubmitRequest = isRequestor || isHead || isRegionalManager
 
   const [campaigns,   setCampaigns]   = useState([])
   const [tasks,       setTasks]       = useState([])
@@ -66,17 +74,17 @@ export default function DashboardPage() {
   }), [tasks])
 
   const myRequestCounts = useMemo(() => {
-    const myId = user?.id ?? user?.userId
-    const my = isRequestor
-      ? campaigns
-      : campaigns.filter(c => myId != null && Number(c.requestorId) === Number(myId))
+    // campaignsApi.list() already returns only the caller's own campaigns
+    // (the isAdminOrManager bypass was removed from the backend), so we
+    // can always use the full list directly.
+    const my = campaigns
     return {
       total:      my.length,
       inProgress: my.filter(c => ['IN_PROGRESS','QC_REVIEW'].includes(c.status)).length,
       completed:  my.filter(c => c.status === 'COMPLETED').length,
       cancelled:  my.filter(c => c.status === 'CANCELLED' || c.status === 'REJECTED').length,
     }
-  }, [campaigns, isRequestor, user])
+  }, [campaigns])
 
   const opsCounts = useMemo(() => ({
     qcReview:   opsQcTasks.length,
@@ -87,57 +95,65 @@ export default function DashboardPage() {
   }), [opsQcTasks, opsAllTasks])
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      {/* Hero */}
-      <header className="overflow-hidden rounded-xl bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900
-                         p-6 text-white shadow-sm sm:p-7">
-        <div className="relative">
-          <div className="pointer-events-none absolute -top-10 right-0 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-14 -left-10 h-40 w-40 rounded-full bg-accent-500/30 blur-2xl" />
-          <div className="relative flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1
-                              text-xs font-medium uppercase tracking-wider text-white/90 ring-1 ring-white/20">
-                <span className="h-1.5 w-1.5 rounded-full bg-accent-400" />
-                {user?.designation || user?.fullName?.split(' ')[0] || 'Team'}
-              </div>
-              <h1 className="text-2xl font-semibold sm:text-3xl">
-                Welcome back, {user?.fullName?.split(' ')[0] || 'there'}.
-              </h1>
-              <p className="mt-1.5 max-w-xl text-sm text-white/80">
-                Here's what's on your plate today.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {isRequestor && (
-                <Link
-                  to="/campaigns/new"
-                  className="inline-flex items-center gap-1.5 rounded-md bg-white px-3.5 py-2
-                             text-sm font-semibold text-brand-700 shadow-sm hover:bg-brand-50 transition"
-                >
-                  <Icon name="plus" className="h-4 w-4" /> New Request
-                </Link>
-              )}
-              {showOpsWidgets && (
-                <Link
-                  to="/manager/qc-review"
-                  className="inline-flex items-center gap-1.5 rounded-md bg-white px-3.5 py-2
-                             text-sm font-semibold text-brand-700 shadow-sm hover:bg-brand-50 transition"
-                >
-                  <Icon name="send" className="h-4 w-4" /> QC Review Queue
-                </Link>
-              )}
-              {isAdmin && (
-                <Link
-                  to="/admin/master/departments"
-                  className="inline-flex items-center gap-1.5 rounded-md bg-white/20 px-3.5 py-2
-                             text-sm font-semibold text-white shadow-sm hover:bg-white/30 transition"
-                >
-                  <Icon name="cog" className="h-4 w-4" /> Master Data
-                </Link>
-              )}
-            </div>
+    <div className="mx-auto max-w-7xl space-y-5">
+      {/* Hero + CTA — single combined row */}
+      <header className="flex flex-wrap items-center justify-between gap-4
+                         rounded-2xl bg-white px-5 py-4
+                         shadow-sm ring-1 ring-slate-900/5">
+        {/* Left: greeting */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl
+                          bg-gradient-to-br from-brand-600 to-brand-800 text-xs font-bold text-white shadow-sm">
+            {(user?.fullName || 'U').charAt(0).toUpperCase()}
           </div>
+          <div>
+            <p className="text-sm font-bold text-slate-900">
+              Welcome back, {user?.fullName?.split(' ')[0] || 'there'}.
+            </p>
+            <p className="text-xs text-slate-400">
+              {user?.designation || 'User'}{user?.department ? ` · ${user.department}` : ''}
+            </p>
+          </div>
+        </div>
+
+        {/* Right: actions */}
+        <div className="flex items-center gap-3">
+          {/* QC queue shortcut — Marketing Manager only */}
+          {isMarketingManager && (
+            <Link
+              to="/manager/qc-review"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200
+                         px-3 py-1.5 text-xs font-semibold text-slate-600
+                         transition hover:bg-slate-50"
+            >
+              <Icon name="send" className="h-3 w-3" /> QC Review Queue
+            </Link>
+          )}
+          {/* Master Data shortcut — Admin only */}
+          {isAdmin && (
+            <Link
+              to="/admin/master/departments"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200
+                         px-3 py-1.5 text-xs font-semibold text-slate-600
+                         transition hover:bg-slate-50"
+            >
+              <Icon name="cog" className="h-3 w-3" /> Master Data
+            </Link>
+          )}
+          {/* New Request CTA — Requestor, Head, Regional Manager */}
+          {canSubmitRequest && (
+            <Link
+              to="/campaigns/new"
+              className="group relative inline-flex shrink-0 items-center gap-2 overflow-hidden
+                         rounded-xl attention-pulse
+                         bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500
+                         px-5 py-2.5 text-sm font-bold text-white"
+            >
+              <span className="pointer-events-none absolute inset-0 bg-white/0 transition-all duration-200 group-hover:bg-white/10" />
+              <Icon name="plus" className="relative h-4 w-4" strokeWidth={2.5} />
+              <span className="relative">New Request</span>
+            </Link>
+          )}
         </div>
       </header>
 
@@ -230,8 +246,7 @@ export default function DashboardPage() {
       {showAdminExtras && (
         <div>
           <div className="mb-3">
-            <h2 className="text-base font-semibold text-slate-900">Admin Quick Access</h2>
-            <p className="text-xs text-slate-500">Jump straight to any admin area.</p>
+            <h2 className="text-[13px] font-bold uppercase tracking-widest text-slate-400">Admin Quick Access</h2>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
@@ -243,18 +258,19 @@ export default function DashboardPage() {
               <Link
                 key={to}
                 to={to}
-                className="group flex flex-col gap-2 rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200/70
-                           transition hover:-translate-y-0.5 hover:shadow-md"
+                className="group flex flex-col gap-2 rounded-2xl bg-white p-5 shadow-sm
+                           ring-1 ring-slate-900/5
+                           transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
               >
-                <div className="inline-flex h-9 w-9 items-center justify-center rounded-md
+                <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl
                                 bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-sm">
-                  <Icon name={icon} className="h-[18px] w-[18px]" />
+                  <Icon name={icon} className="h-[17px] w-[17px]" strokeWidth={2} />
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-slate-800">{label}</div>
-                  <div className="text-xs text-slate-500">{desc}</div>
+                  <div className="text-xs text-slate-400">{desc}</div>
                 </div>
-                <div className="mt-auto text-xs font-medium text-brand-600 opacity-0 transition group-hover:opacity-100">
+                <div className="mt-auto text-xs font-semibold text-brand-600 opacity-0 transition group-hover:opacity-100">
                   Open →
                 </div>
               </Link>
@@ -293,7 +309,7 @@ export default function DashboardPage() {
         </Section>
       )}
 
-      {/* Requestor section — only Requestor accounts ever author briefs. */}
+      {/* Request submitters — Requestor, Head, Regional Manager */}
       {showRequestWidgets && (
         <Section title="My Requests" subtitle="The briefs you've submitted and where they stand.">
           <KpiCard
@@ -351,11 +367,11 @@ export default function DashboardPage() {
 function Section({ title, subtitle, children }) {
   return (
     <section className="space-y-3">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-        {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
+      <div className="flex items-baseline gap-2">
+        <h2 className="text-[13px] font-bold uppercase tracking-widest text-slate-400">{title}</h2>
+        {subtitle && <p className="hidden text-xs text-slate-400 sm:block">{subtitle}</p>}
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {children}
       </div>
     </section>
@@ -375,20 +391,20 @@ function KpiCard({ to, tone = 'brand', icon, label, value, cta }) {
   return (
     <Link
       to={to}
-      className="group overflow-hidden rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200/70
-                 transition hover:-translate-y-0.5 hover:shadow-md"
+      className="group flex flex-col overflow-hidden rounded-2xl bg-white p-5
+                 shadow-sm ring-1 ring-slate-900/5
+                 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-slate-900/8"
     >
-      <div className={`inline-flex h-9 w-9 items-center justify-center rounded-md
-                       bg-gradient-to-br ${TONES[tone]} text-white shadow-sm`}>
-        <Icon name={icon} className="h-[18px] w-[18px]" />
-      </div>
-      <div className="mt-3.5 text-2xl font-semibold text-slate-900">{value ?? 0}</div>
-      <div className="mt-0.5 text-xs text-slate-500">{label}</div>
-      {cta && (
-        <div className="mt-2 text-xs font-medium text-brand-600 opacity-0 transition group-hover:opacity-100">
-          {cta}
+      <div className="flex items-start justify-between">
+        <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl
+                         bg-gradient-to-br ${TONES[tone]} text-white shadow-sm`}>
+          <Icon name={icon} className="h-[17px] w-[17px]" strokeWidth={2} />
         </div>
-      )}
+        <Icon name="chevron"
+          className="h-4 w-4 text-slate-200 transition-all duration-200 group-hover:text-brand-400 group-hover:translate-x-0.5" />
+      </div>
+      <div className="mt-4 text-3xl font-bold tracking-tight text-slate-900">{value ?? 0}</div>
+      <div className="mt-0.5 text-xs font-medium text-slate-400">{label}</div>
     </Link>
   )
 }
@@ -396,23 +412,25 @@ function KpiCard({ to, tone = 'brand', icon, label, value, cta }) {
 function RecentTasksFeed({ tasks, title = 'Up Next', linkTo = '/my-tasks' }) {
   const recent = tasks.slice(0, 5)
   return (
-    <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-slate-200/70">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-slate-800">{title}</h2>
-        <Link to={linkTo} className="text-xs font-medium text-brand-600 hover:underline">View all →</Link>
+    <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-[13px] font-bold uppercase tracking-widest text-slate-400">{title}</h2>
+        <Link to={linkTo} className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition">
+          View all →
+        </Link>
       </div>
-      <ul className="mt-3 divide-y divide-slate-100">
+      <ul className="divide-y divide-slate-50">
         {recent.map(t => (
           <li key={t.taskId} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xs font-mono text-slate-400">#{t.taskId}</span>
-              <span className="font-medium text-slate-800 truncate">
+              <span className="text-[11px] font-mono text-slate-300">#{t.taskId}</span>
+              <span className="font-medium text-slate-700 truncate">
                 {t.granularTaskName || t.requirementTypeName || 'Task'}
               </span>
               <TaskBadge status={t.status} />
               <PriorityBadge v={t.campaignPriority} />
             </div>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-slate-400">
               {t.requestorName ? `by ${t.requestorName}` : ''}
             </span>
           </li>
@@ -442,15 +460,3 @@ function PriorityBadge({ v }) {
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || '—'}</span>
 }
 
-function fmtRelative(d) {
-  if (!d) return ''
-  const ms = Date.now() - new Date(d).getTime()
-  const min = Math.floor(ms / 60000)
-  if (min < 1)  return 'just now'
-  if (min < 60) return `${min}m ago`
-  const hr = Math.floor(min / 60)
-  if (hr < 24)  return `${hr}h ago`
-  const day = Math.floor(hr / 24)
-  if (day < 30) return `${day}d ago`
-  return new Date(d).toLocaleDateString('en-IN')
-}

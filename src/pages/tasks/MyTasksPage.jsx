@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import tasksApi from '../../api/tasks'
 import Icon from '../../components/Icon'
@@ -492,10 +492,19 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
             {task.reworkCount > 0 && (
               <span
                 className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 ring-1 ring-orange-200"
-                title={`This task has been sent back for rework ${task.reworkCount} time${task.reworkCount === 1 ? '' : 's'}`}
+                title={`QC Manager sent back ${task.reworkCount} time${task.reworkCount === 1 ? '' : 's'}`}
               >
                 <Icon name="refresh" className="h-3 w-3" />
-                {task.reworkCount}× rework
+                QC {task.reworkCount}×
+              </span>
+            )}
+            {task.requestorReworkCount > 0 && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-purple-200"
+                title={`Requestor sent back ${task.requestorReworkCount} time${task.requestorReworkCount === 1 ? '' : 's'}`}
+              >
+                <Icon name="refresh" className="h-3 w-3" />
+                Requestor {task.requestorReworkCount}×
               </span>
             )}
             {isHeld && (
@@ -603,6 +612,25 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
           <div>
             <span className="text-xs font-semibold text-amber-700">Your comment to requestor:</span>
             <p className="mt-0.5 text-xs text-amber-800 whitespace-pre-wrap">{task.workerComment}</p>
+          </div>
+        </div>
+      )}
+
+      {task.status === 'REWORK' && task.latestManagerReworkComment && (
+        <div className="border-t border-orange-100 bg-orange-50/60 px-4 py-2.5 flex items-start gap-2">
+          <Icon name="alertCircle" className="h-3.5 w-3.5 text-orange-500 shrink-0 mt-0.5" />
+          <div>
+            <span className="text-xs font-semibold text-orange-700">Manager rework note:</span>
+            <p className="mt-0.5 text-xs text-orange-800 whitespace-pre-wrap">{task.latestManagerReworkComment}</p>
+          </div>
+        </div>
+      )}
+      {task.status === 'REWORK' && task.latestRequestorReworkComment && (
+        <div className="border-t border-purple-100 bg-purple-50/60 px-4 py-2.5 flex items-start gap-2">
+          <Icon name="alertCircle" className="h-3.5 w-3.5 text-purple-500 shrink-0 mt-0.5" />
+          <div>
+            <span className="text-xs font-semibold text-purple-700">Requestor rework note:</span>
+            <p className="mt-0.5 text-xs text-purple-800 whitespace-pre-wrap">{task.latestRequestorReworkComment}</p>
           </div>
         </div>
       )}

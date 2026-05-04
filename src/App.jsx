@@ -18,6 +18,7 @@ import MyTasksPage from './pages/tasks/MyTasksPage'
 import QcReviewPage from './pages/manager/QcReviewPage'
 import TimeReportPage from './pages/manager/TimeReportPage'
 import AllRequestsPage from './pages/manager/AllRequestsPage'
+import AnalyticsPage from './pages/manager/AnalyticsPage'
 import { MASTER_RESOURCES } from './api/masterData'
 
 export default function App() {
@@ -46,7 +47,7 @@ export default function App() {
               <Route
                 path="/campaigns"
                 element={
-                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager', 'Admin']}>
+                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager']}>
                     <CampaignListPage />
                   </ProtectedRoute>
                 }
@@ -54,7 +55,7 @@ export default function App() {
               <Route
                 path="/campaigns/new"
                 element={
-                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager', 'Admin']}>
+                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager']}>
                     <CampaignFormPage />
                   </ProtectedRoute>
                 }
@@ -62,12 +63,20 @@ export default function App() {
               <Route
                 path="/campaigns/completed"
                 element={
-                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager', 'Admin']}>
+                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager']}>
                     <CompletedTasksPage />
                   </ProtectedRoute>
                 }
               />
               <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
+              <Route
+                path="/campaigns/:id/edit"
+                element={
+                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager']}>
+                    <CampaignFormPage />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* ── My Tasks (Module 3 — Employee Dashboard) ──
                    Only marketing-team workers (the people the routing engine
@@ -88,7 +97,7 @@ export default function App() {
               <Route
                 path="/manager/all-requests"
                 element={
-                  <ProtectedRoute requireRole={['Marketing Manager', 'Admin']}>
+                  <ProtectedRoute requireRole={['Marketing Manager']}>
                     <AllRequestsPage />
                   </ProtectedRoute>
                 }
@@ -96,7 +105,7 @@ export default function App() {
               <Route
                 path="/manager/qc-review"
                 element={
-                  <ProtectedRoute requireRole={['Marketing Manager', 'Admin']}>
+                  <ProtectedRoute requireRole={['Marketing Manager']}>
                     <QcReviewPage />
                   </ProtectedRoute>
                 }
@@ -104,8 +113,17 @@ export default function App() {
               <Route
                 path="/manager/reports"
                 element={
-                  <ProtectedRoute requireRole={['Marketing Manager', 'Admin']}>
+                  <ProtectedRoute requireRole={['Marketing Manager']}>
                     <TimeReportPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/manager/analytics"
+                element={
+                  <ProtectedRoute requireRole={['Marketing Manager']}>
+                    <AnalyticsPage />
                   </ProtectedRoute>
                 }
               />

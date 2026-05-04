@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { useToast } from '../../components/Toast'
 import campaignsApi from '../../api/campaigns'
@@ -812,6 +812,7 @@ function LocationMultiSelect({ selected, onChange, hasError }) {
 // ─── Main form ────────────────────────────────────────────────────────────────
 
 export default function CampaignFormPage() {
+  const { id: cloneSourceId } = useParams() // present on /campaigns/:id/edit (clone)
   const { user }   = useAuth()
   const toast      = useToast()
   const showToast  = (msg, type = 'info') => toast[type]?.(msg)
@@ -904,6 +905,48 @@ export default function CampaignFormPage() {
 
     enumsApi.getCampaignFormOptions().then((data) => setEnumOpts(data)).catch(() => {})
   }, [])
+
+  // Pre-populate form when editing a cloned campaign (route /campaigns/:id/edit)
+  const [cloneLoading, setCloneLoading] = useState(!!cloneSourceId)
+  useEffect(() => {
+    if (!cloneSourceId) return
+    setCloneLoading(true)
+    campaignsApi.getById(cloneSourceId)
+      .then(res => {
+        const c = res.data
+        if (!c) return
+        const parseArr = (v) => { try { const p = JSON.parse(v); if (Array.isArray(p)) return p } catch {} return [] }
+        setForm(prev => ({
+          ...prev,
+          departmentId:           c.departmentId           || prev.departmentId,
+          businessObjective:      c.businessObjectiveId    || c.businessObjective || '',
+          requirementTypeId:      c.requirementTypeId      || '',
+          audienceTypeIds:        parseArr(c.audienceTypeId),
+          languages:              parseArr(c.languageIds),
+          hasOffer:               c.hasOffer               || 'NO',
+          offerTypeId:            c.offerTypeId            || '',
+          keyMessage:             c.keyMessage             || '',
+          supportingProof:        c.supportingProofId      || c.supportingProof || '',
+          tones:                  parseArr(c.toneIds),
+          priority:               c.priority               || 'MEDIUM',
+          budgetTier:             c.budgetTierId           || c.budgetTier || '',
+          vendorRequired:         c.vendorRequired         || 'NO',
+          vendorTypeIds:          parseArr(c.vendorTypeIds),
+          kpiType:                c.kpiTypeId              || c.kpiType || '',
+          expectedOutput:         c.expectedOutputId       || c.expectedOutput || '',
+        }))
+        if (c.targetLocation) {
+          try {
+            const locs = JSON.parse(c.targetLocation)
+            if (Array.isArray(locs)) setTargetLocations(locs)
+          } catch {
+            if (c.targetLocation) setTargetLocations([c.targetLocation])
+          }
+        }
+      })
+      .catch(() => showToast('Failed to load source campaign for cloning.', 'error'))
+      .finally(() => setCloneLoading(false))
+  }, [cloneSourceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const deliverableTaskIdsKey = Object.keys(deliverables).sort().join('|')
 
@@ -1188,12 +1231,29 @@ export default function CampaignFormPage() {
 
   const selectedTaskIds = Object.keys(deliverables)
 
+  if (cloneLoading) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-3 text-slate-400">
+      <svg className="h-8 w-8 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+      </svg>
+      <span className="text-sm">Loading clone source…</span>
+    </div>
+  )
+
   return (
     <div className="mx-auto max-w-4xl space-y-3 pb-10">
       {/* Page header */}
       <div className="mb-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">New Marketing Request</h2>
+          <h2 className="text-lg font-bold text-slate-900">
+            {cloneSourceId ? 'Clone Request' : 'New Marketing Request'}
+          </h2>
+          {cloneSourceId && (
+            <p className="mt-0.5 text-xs text-amber-600 font-medium">
+              Cloned from campaign #{cloneSourceId} — review and edit before submitting.
+            </p>
+          )}
           <p className="text-xs text-slate-500">
             Fields marked <span className="text-red-500 font-medium">*</span> are required.
           </p>

@@ -58,6 +58,30 @@ const campaignsApi = {
   requestorRework: (campaignId, taskId, message) =>
     api.post(`${BASE}/${campaignId}/tasks/${taskId}/requestor-rework`, { message }),
 
+  /**
+   * Returns all COMPLETED work tasks for the caller's campaigns.
+   * Used by the Completed Tasks page — avoids loading every campaign detail
+   * just to find approved deliverables.
+   */
+  completedTasks: () => api.get(`${BASE}/completed-tasks`),
+
+  /**
+   * Toggles a bookmark for the caller on the given campaign.
+   * Returns { bookmarked: true|false }.
+   */
+  toggleBookmark: (id) => api.post(`${BASE}/${id}/bookmark`),
+
+  /**
+   * Returns the caller's bookmarked campaigns (summary list).
+   */
+  getBookmarked: () => api.get(`${BASE}/bookmarked`),
+
+  /**
+   * Clones a campaign — copies all brief fields into a new campaign owned by
+   * the caller. Returns { campaignId: newId }.
+   */
+  cloneCampaign: (id) => api.post(`${BASE}/${id}/clone`),
+
 }
 
 /** Returns granular tasks relevant to a requirement type (for form Section 5). */

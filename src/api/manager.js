@@ -29,6 +29,8 @@ const managerApi = {
   overrideIntervention: (id, payload)       => api.post(`${BASE}/intervention/${id}/override`, payload),
   rejectIntervention:   (id, reason)        => api.post(`${BASE}/intervention/${id}/reject`, { reason }),
 
+  analytics:   () => api.get(`${BASE}/reports/analytics`),
+
   // ── Time-tracking reports (Module 3) ───────────────────────────────────────
   timeReport: (from, to) => api.get(`${BASE}/reports/time`, { params: { from, to } }),
 }

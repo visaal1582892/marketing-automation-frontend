@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import managerApi from '../../api/manager'
 import campaignsApi from '../../api/campaigns'
@@ -259,7 +259,9 @@ function CampaignGroup({ group, onApprove, onRework, onReject, onView, onViewAss
 }
 
 function TaskRow({ task, index, onApprove, onRework, onReject, onViewAssets }) {
-  const assetCount = parseAssetUrls(task.assetUrl).length
+  const assetUrls  = parseAssetUrls(task.assetUrl)
+  const assetCount = assetUrls.length
+  const hasAssets  = assetCount > 0
 
   return (
     <div className="px-5 py-4 space-y-3">
@@ -300,18 +302,29 @@ function TaskRow({ task, index, onApprove, onRework, onReject, onViewAssets }) {
 
         {/* Right: action buttons */}
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-          {assetCount > 0 && (
-            <button
-              onClick={onViewAssets}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition"
-            >
-              <Icon name="fileText" className="h-3.5 w-3.5" />
-              Assets
-              <span className="rounded-full bg-brand-600 text-white px-1.5 py-px text-[10px] font-bold">
-                {assetCount}
-              </span>
-            </button>
-          )}
+          {/* Assets — always shown; disabled when no files were submitted */}
+          <button
+            onClick={hasAssets ? onViewAssets : undefined}
+            disabled={!hasAssets}
+            className={[
+              'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition',
+              hasAssets
+                ? 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 cursor-pointer'
+                : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed',
+            ].join(' ')}
+            title={hasAssets ? 'View submitted assets' : 'No assets submitted for this task'}
+          >
+            <Icon name="fileText" className="h-3.5 w-3.5" />
+            Assets
+            <span className={[
+              'rounded-full px-1.5 py-px text-[10px] font-bold',
+              hasAssets
+                ? 'bg-brand-600 text-white'
+                : 'bg-slate-200 text-slate-400',
+            ].join(' ')}>
+              {assetCount}
+            </span>
+          </button>
           <button
             onClick={onRework}
             className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition"
@@ -356,10 +369,6 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
     NEEDS_REWORK: 'bg-amber-600 hover:bg-amber-700',
     REJECTED:     'bg-red-600  hover:bg-red-700',
   }
-  // Reminder: rejecting one task closes the WHOLE campaign on the backend
-  // (cancels all sibling tasks), so we surface a clear warning when the
-  // reviewer is about to pick that path on a multi-deliverable brief that
-  // still has other open / approved tasks attached to it.
   const isReject = action === 'REJECTED'
   const openSiblings = (campaign?.workTasks || []).filter(w =>
     w.taskId !== task.taskId &&
@@ -368,91 +377,175 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
   ).length
   const wouldCloseSibs = isReject && openSiblings > 0
 
+  const assetUrls  = parseAssetUrls(task.assetUrl)
+  const hasAssets  = assetUrls.length > 0
+  const [expandedAsset, setExpandedAsset] = useState(null)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold text-slate-900">{labels[action]}</h3>
-          <button onClick={onCancel} className="rounded p-1 text-slate-400 hover:bg-slate-100 transition">
-            <Icon name="x" className="h-4 w-4" />
-          </button>
-        </div>
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl overflow-y-auto max-h-[92vh] flex flex-col">
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold text-slate-900">{labels[action]}</h3>
+            <button onClick={onCancel} className="rounded p-1 text-slate-400 hover:bg-slate-100 transition">
+              <Icon name="x" className="h-4 w-4" />
+            </button>
+          </div>
 
-        {campaign ? (
-          <>
-            <RequestSummaryCard campaign={campaign} />
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 space-y-0.5">
-              <div>
-                <span className="font-medium">Reviewing deliverable:</span>{' '}
-                Task {task.taskId} — {task.granularTaskName || task.requirementTypeName}
+          {campaign ? (
+            <>
+              <RequestSummaryCard campaign={campaign} />
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 space-y-0.5">
+                <div>
+                  <span className="font-medium">Reviewing deliverable:</span>{' '}
+                  Task {task.taskId} — {task.granularTaskName || task.requirementTypeName}
+                </div>
+                <div>
+                  <span className="font-medium">Creator:</span>{' '}
+                  {task.assigneeName || `User ${task.assignedTo}`}
+                  {task.totalTimeLoggedMinutes != null && ` • ${task.totalTimeLoggedMinutes} min logged`}
+                </div>
               </div>
-              <div>
-                <span className="font-medium">Creator:</span>{' '}
-                {task.assigneeName || `User ${task.assignedTo}`}
-                {task.totalTimeLoggedMinutes != null && ` • ${task.totalTimeLoggedMinutes} min logged`}
-              </div>
+            </>
+          ) : (
+            <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
+              <div><span className="font-medium">Task:</span> {task.granularTaskName || task.requirementTypeName}</div>
+              <div><span className="font-medium">Campaign:</span> {task.campaignId}</div>
+              <div><span className="font-medium">Creator:</span> {task.assigneeName || `User ${task.assignedTo}`}</div>
             </div>
-          </>
-        ) : (
-          <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
-            <div><span className="font-medium">Task:</span> {task.granularTaskName || task.requirementTypeName}</div>
-            <div><span className="font-medium">Campaign:</span> {task.campaignId}</div>
-            <div><span className="font-medium">Creator:</span> {task.assigneeName || `User ${task.assignedTo}`}</div>
-          </div>
-        )}
+          )}
 
-        <button
-          type="button"
-          onClick={onViewBrief}
-          className="text-xs text-brand-600 hover:underline flex items-center gap-1"
-        >
-          <Icon name="eye" className="h-3 w-3" /> View full request brief
-        </button>
-
-        <div className="grid grid-cols-3 gap-1">
-          <ActionRadio v="APPROVED"     active={action} setActive={setAction} label="Approve" />
-          <ActionRadio v="NEEDS_REWORK" active={action} setActive={setAction} label="Rework" />
-          <ActionRadio v="REJECTED"     active={action} setActive={setAction} label="Reject" />
-        </div>
-
-        {wouldCloseSibs && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700 flex items-start gap-2">
-            <Icon name="alertCircle" className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-            <span>
-              Heads up — rejecting this deliverable will <b>close the entire
-              campaign</b> and cancel {openSiblings} other open task{openSiblings === 1 ? '' : 's'}
-              {' '}on it. Use "Rework" if you only want this single deliverable redone.
-            </span>
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
-            Comments {action !== 'APPROVED' && <span className="text-red-500">*</span>}
-          </label>
-          <textarea
-            rows={3}
-            value={comments}
-            onChange={(e) => setComments(e.target.value)}
-            placeholder={action === 'APPROVED' ? 'Optional praise / sign-off…' : 'Be specific about what needs to change…'}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500 resize-none"
-          />
-        </div>
-
-        <div className="flex justify-end gap-3 pt-1">
           <button
-            onClick={onCancel}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+            type="button"
+            onClick={onViewBrief}
+            className="text-xs text-brand-600 hover:underline flex items-center gap-1"
           >
-            Cancel
+            <Icon name="eye" className="h-3 w-3" /> View full request brief
           </button>
-          <button
-            onClick={onConfirm}
-            disabled={saving}
-            className={`rounded-lg px-5 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${tones[action]}`}
-          >
-            {saving ? 'Saving…' : labels[action]}
-          </button>
+
+          {/* ── Submitted assets strip ── */}
+          <div className="rounded-lg border border-slate-200 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Submitted Assets
+              </span>
+              <span className={[
+                'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                hasAssets ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-400',
+              ].join(' ')}>
+                {assetUrls.length} file{assetUrls.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {hasAssets ? (
+              <div className="p-3 space-y-2">
+                {assetUrls.map((url, i) => {
+                  const isImg = /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(url)
+                  const isExpanded = expandedAsset === i
+                  return (
+                    <div key={i} className="rounded-lg border border-slate-200 overflow-hidden">
+                      <div className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 border-b border-slate-100">
+                        <span className="text-[11px] font-medium text-slate-600 truncate max-w-[160px]">
+                          {isImg ? 'Image' : 'File'} {assetUrls.length > 1 ? i + 1 : ''}
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-200 transition"
+                          >
+                            Open
+                          </a>
+                          <a
+                            href={url}
+                            download
+                            className="rounded px-1.5 py-0.5 text-[10px] font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 transition"
+                          >
+                            Download
+                          </a>
+                        </div>
+                      </div>
+                      {isImg && (
+                        <div className="bg-slate-100 text-center">
+                          <img
+                            src={url}
+                            alt={`Asset ${i + 1}`}
+                            loading="lazy"
+                            className={[
+                              'mx-auto block object-contain cursor-zoom-in transition-all duration-200',
+                              isExpanded ? 'max-h-64 w-full' : 'max-h-28 max-w-full',
+                            ].join(' ')}
+                            onClick={() => setExpandedAsset(isExpanded ? null : i)}
+                            title={isExpanded ? 'Click to shrink' : 'Click to expand'}
+                          />
+                          <p className="text-[9px] text-slate-400 py-0.5 select-none">
+                            {isExpanded ? 'Click to shrink' : 'Click to expand'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="px-3 py-4 text-center text-xs text-slate-400">
+                No assets were uploaded for this task.
+              </div>
+            )}
+          </div>
+
+          {task.submissionNotes && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1.5">Submission Notes</span>
+              {task.submissionNotes}
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-1">
+            <ActionRadio v="APPROVED"     active={action} setActive={setAction} label="Approve" />
+            <ActionRadio v="NEEDS_REWORK" active={action} setActive={setAction} label="Rework" />
+            <ActionRadio v="REJECTED"     active={action} setActive={setAction} label="Reject" />
+          </div>
+
+          {wouldCloseSibs && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700 flex items-start gap-2">
+              <Icon name="alertCircle" className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+              <span>
+                Heads up — rejecting this deliverable will <b>close the entire
+                campaign</b> and cancel {openSiblings} other open task{openSiblings === 1 ? '' : 's'}
+                {' '}on it. Use "Rework" if you only want this single deliverable redone.
+              </span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Comments {action !== 'APPROVED' && <span className="text-red-500">*</span>}
+            </label>
+            <textarea
+              rows={3}
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+              placeholder={action === 'APPROVED' ? 'Optional praise / sign-off…' : 'Be specific about what needs to change…'}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500 resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-1">
+            <button
+              onClick={onCancel}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={saving}
+              className={`rounded-lg px-5 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${tones[action]}`}
+            >
+              {saving ? 'Saving…' : labels[action]}
+            </button>
+          </div>
         </div>
       </div>
     </div>

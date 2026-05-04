@@ -1,10 +1,10 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import campaignsApi from '../../api/campaigns'
 import { useAuth } from '../../auth/AuthContext'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
-import { generateBriefPdf } from '../../utils/generateBriefPdf'
+import { printBrief } from '../../utils/printBrief'
 
 const STATUS_STYLES = {
   IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
@@ -41,18 +41,14 @@ export default function CampaignDetailPage() {
 
   const [c, setC] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [downloading, setDownloading] = useState(false)
+  const [printing, setPrinting] = useState(false)
 
-  const handleDownloadPdf = useCallback(async () => {
+  const handlePrint = useCallback(() => {
     if (!c) return
-    setDownloading(true)
-    try {
-      await generateBriefPdf(c)
-    } catch (e) {
-      console.error('PDF generation failed:', e)
-    } finally {
-      setDownloading(false)
-    }
+    setPrinting(true)
+    try   { printBrief(c) }
+    catch (e) { console.error('Print failed:', e) }
+    finally   { setPrinting(false) }
   }, [c])
 
   // Requestor rework modal state
@@ -90,214 +86,333 @@ export default function CampaignDetailPage() {
   const canRequestRework = isAdmin ||
     (user && c && myUserId != null && Number(c.requestorId) === Number(myUserId))
 
-  if (loading) return <p className="text-center text-slate-400 py-12 text-sm">Loading…</p>
-  if (!c)      return <p className="text-center text-slate-400 py-12 text-sm">Campaign not found.</p>
+  // Bookmark
+  const [bookmarked, setBookmarked]   = useState(false)
+  const [bookmarking, setBookmarking] = useState(false)
+  useEffect(() => { if (c) setBookmarked(c.bookmarked ?? false) }, [c])
+
+  const toggleBookmark = async () => {
+    setBookmarking(true)
+    try {
+      const res = await campaignsApi.toggleBookmark(c.campaignId)
+      setBookmarked(res.data?.bookmarked ?? false)
+    } catch {
+      showToast('Failed to update bookmark.', 'error')
+    } finally {
+      setBookmarking(false)
+    }
+  }
+
+  // Clone
+  const [cloning, setCloning] = useState(false)
+  const handleClone = async () => {
+    setCloning(true)
+    try {
+      const res = await campaignsApi.cloneCampaign(c.campaignId)
+      const newId = res.data?.campaignId
+      showToast('Campaign cloned — loading form to review and submit.', 'success')
+      navigate(`/campaigns/${newId}/edit`)
+    } catch {
+      showToast('Failed to clone campaign.', 'error')
+    } finally {
+      setCloning(false)
+    }
+  }
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-3 text-slate-400">
+      <svg className="h-8 w-8 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+      </svg>
+      <span className="text-sm">Loading…</span>
+    </div>
+  )
+  if (!c) return <p className="text-center text-slate-400 py-12 text-sm">Campaign not found.</p>
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
+      {/* ── Top action bar ── */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900"
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium
+                     text-slate-500 hover:text-slate-800 hover:bg-white transition"
         >
-          <Icon name="chevron" className="h-3.5 w-3.5 rotate-180" /> Back
+          <Icon name="chevron" className="h-4 w-4 rotate-180" /> Back
         </button>
         <div className="flex items-center gap-2">
+          {/* Bookmark */}
           <button
-            onClick={handleDownloadPdf}
-            disabled={downloading}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition"
+            onClick={toggleBookmark}
+            disabled={bookmarking}
+            title={bookmarked ? 'Remove bookmark' : 'Bookmark this request'}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold
+                        transition shadow-sm disabled:opacity-50
+                        ${bookmarked
+                          ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
           >
-            {downloading ? (
-              <>
-                <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                </svg>
-                Generating…
-              </>
-            ) : (
-              <><Icon name="download" className="h-3.5 w-3.5" /> Download PDF</>
-            )}
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24"
+              fill={bookmarked ? 'currentColor' : 'none'}
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+            </svg>
+            {bookmarked ? 'Bookmarked' : 'Bookmark'}
+          </button>
+          {/* Clone */}
+          {(isRequestor || isAdmin) && (
+            <button
+              onClick={handleClone}
+              disabled={cloning}
+              title="Clone this request into a new draft"
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white
+                         px-3 py-1.5 text-xs font-semibold text-slate-600
+                         hover:bg-slate-50 disabled:opacity-50 transition shadow-sm"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+              {cloning ? 'Cloning…' : 'Clone Request'}
+            </button>
+          )}
+          <button
+            onClick={handlePrint}
+            disabled={printing}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white
+                       px-3 py-1.5 text-xs font-semibold text-slate-600
+                       hover:bg-slate-50 disabled:opacity-50 transition shadow-sm"
+          >
+            <Icon name="printer" className="h-3.5 w-3.5" />
+            Print / PDF
           </button>
           <button
             onClick={load}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white
+                       px-3 py-1.5 text-xs font-semibold text-slate-600
+                       hover:bg-slate-50 transition shadow-sm"
           >
             <Icon name="refresh" className="h-3.5 w-3.5" /> Refresh
           </button>
         </div>
       </div>
 
-      {/* Header */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-500">
-                <span className="font-normal text-slate-400">CMP</span>{c.campaignId}
-              </span>
-              <StatusBadge status={c.status} />
-              <PriorityBadge v={c.priority} />
-              {c.flaggedInconsistency && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200" title={c.inconsistencyReason}>
-                  <Icon name="alertCircle" className="h-3 w-3" /> Inconsistency flagged
-                </span>
-              )}
+      {/* ── Hero banner ── */}
+      <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-slate-800 via-slate-800 to-slate-900 text-white shadow-md">
+        <div className="px-7 py-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">
+                Campaign Detail
+              </p>
+              <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">
+                {c.requirementTypeName || 'Marketing Request'}
+              </h1>
+              <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-white/55">
+                {c.requestorName && <span>{c.requestorName}</span>}
+                {c.departmentName && (
+                  <><span className="text-white/25">·</span><span>{c.departmentName}</span></>
+                )}
+                {c.createdAt && (
+                  <><span className="text-white/25">·</span><span>{fmtDate(c.createdAt)}</span></>
+                )}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <StatusBadge status={c.status} />
+                <PriorityBadge v={c.priority} />
+                {c.flaggedInconsistency && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-900/50 px-2 py-0.5
+                                   text-xs font-medium text-rose-200 ring-1 ring-rose-700">
+                    <Icon name="alertCircle" className="h-3 w-3" /> Inconsistency
+                  </span>
+                )}
+              </div>
             </div>
-            <h2 className="mt-2 text-xl font-bold text-slate-900">{c.requirementTypeName || 'Marketing Request'}</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Requested by {c.requestorName || '—'} • {c.departmentName || '—'} • {fmtDate(c.createdAt)}
-            </p>
-            {c.inconsistencyReason && (
-              <div className="mt-3 flex items-start gap-2 rounded-md bg-rose-50 p-2 text-xs text-rose-800 ring-1 ring-rose-200">
-                <Icon name="alertCircle" className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{c.inconsistencyReason}</span>
-              </div>
-            )}
-            {c.routingNotes && (
-              <div className="mt-3 flex items-start gap-2 rounded-md bg-amber-50 p-2 text-xs text-amber-800 ring-1 ring-amber-200">
-                <Icon name="alertCircle" className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{c.routingNotes}</span>
-              </div>
-            )}
+            <span className="text-4xl font-black text-white/10 tabular-nums select-none shrink-0">
+              #{c.campaignId}
+            </span>
           </div>
         </div>
+        {(c.businessObjective || fmtTargetLocation(c.targetLocation)) && (
+          <div className="border-t border-white/10 px-7 py-3 flex flex-wrap gap-x-8 gap-y-1.5">
+            {c.businessObjective && (
+              <span className="text-xs text-white/60">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
+                  Objective
+                </span>
+                {c.businessObjective}
+              </span>
+            )}
+            {fmtTargetLocation(c.targetLocation) && (
+              <span className="text-xs text-white/60">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
+                  Location
+                </span>
+                {fmtTargetLocation(c.targetLocation)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* ── Section 1: Campaign Overview ── */}
-      <BriefSection title="Campaign Overview">
-        {/* Row 1: type + objective fills row cleanly */}
-        <Detail label="Requirement Type"   value={c.requirementTypeName} />
-        <Detail label="Business Objective" value={c.businessObjective} span={2} />
-        {/* Row 2: location spans full width so multiple cities don't get clipped */}
-        <Detail label="Target Location"    value={fmtTargetLocation(c.targetLocation)} span={3} />
-        {/* Row 3: audience trio */}
-        <Detail label="Audience Type"      value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
-        <Detail label="Language"           value={fmtMultiValue(c.language)} />
-        <Detail label="Tone / Style"       value={fmtMultiValue(c.tone)} />
-      </BriefSection>
-
-      {/* ── Section 2: Message & Offer ── */}
-      <BriefSection title="Message & Offer">
-        <Detail label="Key Message"      value={c.keyMessage}                         span={3} />
-        <Detail label="Supporting Proof" value={c.supportingProof} />
-        <Detail label="Has Offer"        value={c.hasOffer} />
-        <Detail label="Offer Type"       value={c.offerTypeId || c.offerTypeName} />
-      </BriefSection>
-
-      {/* ── Section 3: Budget & Goals ── */}
-      <BriefSection title="Budget & Goals">
-        <Detail label="Budget Tier"     value={c.budgetTier} />
-        <Detail label="KPI Type"        value={c.kpiType} />
-        <Detail label="Expected Output" value={c.expectedOutput} />
-        <Detail label="Vendor Required" value={c.vendorRequired} />
-        <Detail label="Vendor Type"     value={fmtMultiValue(c.vendorType)} span={2} />
-      </BriefSection>
-
-      {/* Deliverables */}
-      {c.deliverables?.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-800">Deliverables</h3>
-            <span className="text-xs text-slate-500">{c.deliverables.length}</span>
+      {/* Alerts */}
+      {c.inconsistencyReason && (
+        <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3.5">
+          <Icon name="alertCircle" className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-rose-800">Inconsistency Detected</p>
+            <p className="text-xs text-rose-700 mt-0.5">{c.inconsistencyReason}</p>
           </div>
-          <ul className="divide-y divide-slate-100">
-            {c.deliverables.map((d, i) => (
-              <li key={d.specId ?? i} className="flex items-center gap-3 px-5 py-3">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-700 shrink-0">
-                  {i + 1}
-                </span>
-                <span className="text-sm font-medium text-slate-800">{d.granularTaskName || d.granularTaskId}</span>
-              </li>
-            ))}
-          </ul>
+        </div>
+      )}
+      {c.routingNotes && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+          <Icon name="alertCircle" className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-amber-800">Routing Note</p>
+            <p className="text-xs text-amber-700 mt-0.5">{c.routingNotes}</p>
+          </div>
         </div>
       )}
 
-      {/* Work Tasks */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3">
-          <h3 className="text-sm font-semibold text-slate-800">Work Tasks</h3>
-          <span className="text-xs text-slate-500">{c.workTasks?.length || 0} created</span>
-        </div>
+      {/* ── 3-col info sections ── */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <BriefCard title="Campaign Overview" icon="fileText" accent="blue">
+          <DetailRow label="Requirement Type" value={c.requirementTypeName} />
+          <DetailRow label="Audience Type"    value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
+          <DetailRow label="Language"         value={fmtMultiValue(c.language)} />
+          <DetailRow label="Tone / Style"     value={fmtMultiValue(c.tone)} />
+        </BriefCard>
+
+        <BriefCard title="Message & Offer" icon="messageSquare" accent="violet">
+          <DetailRow label="Has Offer"        value={c.hasOffer} />
+          {c.hasOffer === 'YES' && (
+            <>
+              <DetailRow label="Offer Type"       value={c.offerTypeId || c.offerTypeName} />
+              <DetailRow label="Supporting Proof" value={c.supportingProof} />
+            </>
+          )}
+          <DetailRow label="Key Message" value={c.keyMessage} multiline />
+        </BriefCard>
+
+        <BriefCard title="Budget & Goals" icon="trendingUp" accent="emerald">
+          <DetailRow label="Budget Tier"     value={c.budgetTier} />
+          <DetailRow label="KPI Type"        value={c.kpiType} />
+          <DetailRow label="Expected Output" value={c.expectedOutput} />
+          <DetailRow label="Vendor Required" value={c.vendorRequired} />
+          {c.vendorRequired === 'YES' && (
+            <DetailRow label="Vendor Type" value={fmtMultiValue(c.vendorType)} />
+          )}
+        </BriefCard>
+      </div>
+
+      {/* ── Deliverables ── */}
+      {c.deliverables?.length > 0 && (
+        <BriefCard title={`Deliverables (${c.deliverables.length})`} icon="checkSquare" accent="slate">
+          <div className="flex flex-wrap gap-2">
+            {c.deliverables.map((d, i) => (
+              <div key={d.specId ?? i}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full
+                                 bg-brand-100 text-[10px] font-bold text-brand-700">
+                  {i + 1}
+                </span>
+                <span className="text-xs font-medium text-slate-700">
+                  {d.granularTaskName || d.granularTaskId}
+                </span>
+              </div>
+            ))}
+          </div>
+        </BriefCard>
+      )}
+
+      {/* ── Work Tasks ── */}
+      <BriefCard
+        title={`Work Tasks${c.workTasks?.length ? ` (${c.workTasks.length})` : ''}`}
+        icon="clipboard"
+        accent="brand"
+      >
         {(!c.workTasks || c.workTasks.length === 0) ? (
-          <p className="text-center text-slate-400 py-8 text-sm">No work tasks yet — pending routing.</p>
+          <p className="text-center text-slate-400 py-6 text-sm">No work tasks yet — pending routing.</p>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="space-y-4">
             {c.workTasks.map(t => (
-              <div key={t.taskId} className="px-5 py-4 space-y-2.5">
+              <div key={t.taskId}
+                className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
                 {/* Task header */}
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex-1 min-w-[200px]">
+                <div className="flex flex-wrap items-start justify-between gap-3
+                                bg-slate-50/70 px-4 py-3 border-b border-slate-100">
+                  <div className="space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-500">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5
+                                       text-[10px] font-bold tabular-nums text-slate-500">
                         <span className="font-normal text-slate-400">TASK</span>{t.taskId}
                       </span>
-                      <span className="text-sm font-semibold text-slate-800">
+                      <span className="text-sm font-bold text-slate-900">
                         {t.granularTaskName || 'Task'}
                       </span>
                       <TaskBadge status={t.status} />
                       {t.reworkCount > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 ring-1 ring-orange-200"
-                          title="Times sent for rework by marketing manager">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5
+                                         text-xs font-medium text-orange-700 ring-1 ring-orange-200">
                           <Icon name="refresh" className="h-2.5 w-2.5" />
                           {t.reworkCount}× QC rework
                         </span>
                       )}
                       {t.requestorReworkCount > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200"
-                          title="Times sent for rework by requestor">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5
+                                         text-xs font-medium text-purple-700 ring-1 ring-purple-200">
                           <Icon name="refresh" className="h-2.5 w-2.5" />
                           {t.requestorReworkCount}× requestor rework
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 text-xs text-slate-500">
+                    <p className="text-xs text-slate-500">
                       {t.assigneeName ? `Assigned to ${t.assigneeName}` : 'Unassigned'}
-                      {t.totalTimeLoggedMinutes != null && ` • ${t.totalTimeLoggedMinutes} min logged`}
-                    </div>
+                      {t.totalTimeLoggedMinutes != null && ` · ${t.totalTimeLoggedMinutes} min logged`}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {/* Asset links */}
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
                     {parseAssetUrls(t.assetUrl).map((url, i, arr) => (
                       <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                        className="text-brand-600 hover:underline text-xs flex items-center gap-1">
-                        <Icon name="fileText" className="h-3.5 w-3.5" />
-                        {arr.length > 1 ? `File ${i + 1}` : 'View submitted file'}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200
+                                   bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700
+                                   hover:bg-brand-100 transition">
+                        <Icon name="fileText" className="h-3 w-3" />
+                        {arr.length > 1 ? `File ${i + 1}` : 'View file'}
                       </a>
                     ))}
-                    {/* Request Rework button — only for COMPLETED tasks and campaign owner/admin */}
                     {t.status === 'COMPLETED' && canRequestRework && (
                       <button
                         onClick={() => { setReworkTask(t); setReworkMsg('') }}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50
-                                   px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100 transition">
-                        <Icon name="refresh" className="h-3 w-3" />
-                        Request Rework
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200
+                                   bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700
+                                   hover:bg-amber-100 transition">
+                        <Icon name="refresh" className="h-3 w-3" /> Request Rework
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* Timeline */}
-                <TaskTimestamps task={t} />
-
-                {/* Submission notes */}
-                {t.submissionNotes && (
-                  <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700 ring-1 ring-slate-100">
-                    <span className="text-slate-400 font-medium">Submission notes: </span>
-                    {t.submissionNotes}
-                  </div>
-                )}
-
-                {/* Task-specific Q&A */}
-                <TaskQuestionnaireBrief items={t.questionnaire} />
+                {/* Task body */}
+                <div className="px-4 py-4 space-y-3">
+                  <TaskTimestamps task={t} />
+                  {t.submissionNotes && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+                        Submission notes
+                      </p>
+                      <p className="text-sm text-slate-700">{t.submissionNotes}</p>
+                    </div>
+                  )}
+                  <TaskQuestionnaireBrief items={t.questionnaire} />
+                </div>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </BriefCard>
 
       {/* Requestor Rework Modal */}
       {reworkTask && (
@@ -316,40 +431,47 @@ export default function CampaignDetailPage() {
 
 // ─── Shared sub-components ────────────────────────────────────────────────────
 
-/** Card section for work-task blocks (full-width header + content). */
-function Section({ title, children }) {
+const ACCENT_ICON = {
+  blue:    'from-blue-500 to-blue-600',
+  violet:  'from-violet-500 to-violet-600',
+  emerald: 'from-emerald-500 to-emerald-600',
+  amber:   'from-amber-500 to-amber-600',
+  brand:   'from-brand-500 to-brand-700',
+  slate:   'from-slate-500 to-slate-700',
+}
+
+function BriefCard({ title, icon, accent = 'slate', children }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-100 px-5 py-3">
-        <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+    <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2.5 border-b border-slate-100 px-5 py-3.5">
+        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg
+                         bg-gradient-to-br ${ACCENT_ICON[accent] || ACCENT_ICON.slate}
+                         text-white shadow-sm`}>
+          <Icon name={icon} className="h-3.5 w-3.5" strokeWidth={2} />
+        </div>
+        <h3 className="text-sm font-bold text-slate-800">{title}</h3>
       </div>
-      <div className="p-5">
+      <div className="px-5 py-4 space-y-3.5">
         {children}
       </div>
     </div>
   )
 }
 
-/** Brief section — compact header with a 3-column detail grid underneath. */
-function BriefSection({ title, children }) {
+function DetailRow({ label, value, multiline = false }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-100 bg-slate-50 px-5 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</span>
-      </div>
-      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function Detail({ label, value, span = 1 }) {
-  const cls = span === 3 ? 'sm:col-span-2 lg:col-span-3' : span === 2 ? 'sm:col-span-2' : ''
-  return (
-    <div className={cls}>
-      <div className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">{label}</div>
-      <div className="text-sm text-slate-800 font-medium break-words">{value || '—'}</div>
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">
+        {label}
+      </p>
+      {value ? (
+        <p className={`text-sm font-medium text-slate-800 leading-snug
+                       ${multiline ? 'whitespace-pre-wrap' : ''}`}>
+          {value}
+        </p>
+      ) : (
+        <p className="text-sm text-slate-300 select-none">—</p>
+      )}
     </div>
   )
 }
@@ -357,16 +479,22 @@ function Detail({ label, value, span = 1 }) {
 function TaskQuestionnaireBrief({ items }) {
   if (!items?.length) return null
   return (
-    <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-2.5 space-y-2">
-      <div className="text-xs font-semibold uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
-        <Icon name="clipboard" className="h-3 w-3 shrink-0" />
-        Task-specific Q&amp;A
+    <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 overflow-hidden">
+      <div className="flex items-center gap-1.5 border-b border-indigo-100 px-4 py-2.5">
+        <Icon name="clipboard" className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+        <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600">
+          Task Q&amp;A
+        </span>
       </div>
-      <ul className="space-y-2.5">
-        {items.map((row) => (
-          <li key={row.questionId} className="text-xs">
-            <div className="text-slate-600 font-medium leading-snug">{row.questionText}</div>
-            <div className="text-slate-900 mt-0.5 break-words">{row.answerDisplay ?? '—'}</div>
+      <ul className="divide-y divide-indigo-100/70">
+        {items.map(row => (
+          <li key={row.questionId} className="px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-0.5">
+              {row.questionText}
+            </p>
+            <p className="text-sm text-slate-800 font-medium whitespace-pre-wrap break-words">
+              {row.answerDisplay ?? <span className="text-slate-400 font-normal italic">—</span>}
+            </p>
           </li>
         ))}
       </ul>
@@ -420,25 +548,48 @@ function parseAssetUrls(assetUrl) {
 }
 
 function TaskTimestamps({ task }) {
+  const fmt = ts => new Date(ts).toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  })
   const steps = [
-    { key: 'assigned',  icon: 'inbox', label: 'Assigned',  ts: task.assignedAt || task.createdAt },
-    { key: 'accepted',  icon: 'play',  label: 'Accepted',  ts: task.acceptedAt },
-    { key: 'submitted', icon: 'send',  label: 'Submitted', ts: task.submittedAt },
-    { key: 'approved',  icon: 'check', label: 'Approved',  ts: task.completedAt },
+    { key: 'assigned',  label: 'Assigned',  ts: task.assignedAt || task.createdAt, done: { dot: 'bg-slate-500',   line: 'bg-slate-300',   text: 'text-slate-600',   card: 'bg-slate-50 border-slate-200'   } },
+    { key: 'accepted',  label: 'Accepted',  ts: task.acceptedAt,                   done: { dot: 'bg-blue-500',    line: 'bg-blue-200',    text: 'text-blue-700',    card: 'bg-blue-50 border-blue-200'     } },
+    { key: 'submitted', label: 'Submitted', ts: task.submittedAt,                  done: { dot: 'bg-violet-500',  line: 'bg-violet-200',  text: 'text-violet-700',  card: 'bg-violet-50 border-violet-200' } },
+    { key: 'approved',  label: 'Approved',  ts: task.completedAt,                  done: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' } },
   ]
   return (
-    <div className="rounded-md bg-slate-50 px-3 py-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-      {steps.map(s => (
-        <div key={s.key} className="flex items-center gap-1">
-          <Icon name={s.icon} className={`h-3 w-3 ${s.ts ? 'text-emerald-600' : 'text-slate-300'}`} />
-          <span className={`font-medium ${s.ts ? 'text-slate-700' : 'text-slate-400'}`}>{s.label}:</span>
-          <span className={s.ts ? 'text-slate-600' : 'text-slate-400'}>
-            {s.ts
-              ? new Date(s.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-              : '—'}
-          </span>
-        </div>
-      ))}
+    <div className="overflow-x-auto pb-0.5">
+      <div className="flex items-stretch min-w-max gap-0">
+        {steps.map((step, i) => {
+          const active = !!step.ts
+          const isLast = i === steps.length - 1
+          const s = step.done
+          return (
+            <div key={step.key} className="flex items-center">
+              <div className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 transition ${
+                active ? s.card : 'bg-slate-50 border-slate-100'
+              }`}>
+                <span className={`flex h-4 w-4 items-center justify-center rounded-full shrink-0 ${
+                  active ? `${s.dot} text-white` : 'bg-slate-200 text-slate-400'
+                }`}>
+                  <Icon name="check" className="h-2.5 w-2.5" strokeWidth={3} />
+                </span>
+                <div className="leading-tight">
+                  <div className={`text-[9px] font-bold uppercase tracking-wider ${active ? s.text : 'text-slate-400'}`}>
+                    {step.label}
+                  </div>
+                  <div className={`text-[10px] font-semibold whitespace-nowrap ${active ? 'text-slate-700' : 'text-slate-400'}`}>
+                    {active ? fmt(step.ts) : '—'}
+                  </div>
+                </div>
+              </div>
+              {!isLast && (
+                <div className={`h-px w-3 shrink-0 ${active ? s.line : 'bg-slate-200'}`} />
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

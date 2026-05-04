@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { MASTER_RESOURCES } from '../api/masterData'
@@ -146,15 +146,14 @@ export default function AppLayout() {
   const [managerOpen, setManagerOpen]   = useState(true)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
 
-  const showManagerTools = isMarketingManager || isAdmin
-  // "My Tasks" is only for marketing-team workers who actually execute tasks
-  // (e.g. Graphic Designer, Content Writer, Paid Ads Manager, SEO Owner, …).
-  // Managers, Requestors and Admin never have tasks routed to them.
+  // Admin alone does NOT get Manager Tools — the Marketing Manager role is required.
+  const showManagerTools = isMarketingManager
+  // "My Tasks" is only for marketing-team workers who actually execute tasks.
   const showMyTasks =
     !isRequestor && !isAdmin && !isMarketingManager && !isHead && !isRegionalManager
-  // "Requests" is for anyone who can submit or view their own requests:
-  // Requestors, Dept Heads, Regional Managers, and Admins.
-  const showRequests = isRequestor || isHead || isRegionalManager || isAdmin
+  // "Requests" is for anyone who submits briefs. Admin alone does not qualify —
+  // assign the Requestor role as well if an admin needs to submit requests.
+  const showRequests = isRequestor || isHead || isRegionalManager
 
   // Auto-expand groups based on current URL
   useEffect(() => {
@@ -189,25 +188,26 @@ export default function AppLayout() {
   }, [location.pathname])
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800">
+    <div className="min-h-screen bg-slate-100 text-slate-800">
       {/* ============ SIDEBAR ============ */}
       <aside
         className={`fixed inset-y-0 left-0 z-40 ${sidebarWidth} flex flex-col
-                    border-r border-slate-200 bg-white transition-all duration-200
+                    border-r border-slate-100 bg-white
+                    transition-all duration-200
                     ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
       >
         {/* Brand row — when collapsed, only the logo shows (centered, fixed 36px) */}
-        <div className={`flex h-14 shrink-0 items-center border-b border-slate-200
-                         ${collapsed ? 'justify-center px-2' : 'justify-between px-3'}`}>
+        <div className={`flex h-[60px] shrink-0 items-center border-b border-slate-100
+                         ${collapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
           {collapsed ? (
-            <Logo size={36} />
+            <Logo size={32} />
           ) : (
             <div className="flex min-w-0 items-center gap-2.5">
-              <Logo size={36} />
+              <Logo size={32} />
               <div className="min-w-0 leading-tight">
-                <div className="truncate text-sm font-semibold text-slate-900">MedPlus</div>
-                <div className="text-xs uppercase tracking-wider text-slate-400">
-                  Brand & Buzz
+                <div className="truncate text-[13px] font-bold tracking-tight text-slate-900">MedPlus</div>
+                <div className="text-[10px] uppercase tracking-widest text-slate-400">
+                  Brand &amp; Buzz
                 </div>
               </div>
             </div>
@@ -215,7 +215,7 @@ export default function AppLayout() {
         </div>
 
         {/* Nav */}
-        <nav className={`flex-1 overflow-y-auto py-3 ${collapsed ? 'px-2 space-y-1' : 'px-2.5 space-y-0.5'}`}>
+        <nav className={`flex-1 overflow-y-auto py-3 ${collapsed ? 'px-1.5 space-y-0.5' : 'px-2 space-y-0.5'}`}>
           {TOP_NAV.filter(item => {
             if (item.to === '/my-tasks')  return showMyTasks
             if (item.to === '/campaigns') return showRequests
@@ -271,6 +271,14 @@ export default function AppLayout() {
                 to="/manager/reports"
                 label="Time Reports"
                 icon="trendingUp"
+                collapsed={collapsed}
+                nested
+                onNavigate={() => setMobileOpen(false)}
+              />
+              <SidebarLink
+                to="/manager/analytics"
+                label="Analytics"
+                icon="barChart"
                 collapsed={collapsed}
                 nested
                 onNavigate={() => setMobileOpen(false)}
@@ -340,12 +348,12 @@ export default function AppLayout() {
         </nav>
 
         {/* Footer: collapse toggle + sign out */}
-        <div className="shrink-0 border-t border-slate-200 p-2 space-y-1">
+        <div className="shrink-0 border-t border-slate-100 p-2 space-y-0.5">
           <button
             onClick={() => setCollapsed((c) => !c)}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className={`hidden w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm
-                        font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800
+            className={`hidden w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm
+                        font-medium text-slate-400 transition hover:bg-slate-50 hover:text-slate-600
                         lg:flex ${collapsed ? 'justify-center' : ''}`}
           >
             <Icon
@@ -358,8 +366,8 @@ export default function AppLayout() {
           <button
             onClick={handleLogout}
             title={collapsed ? 'Sign out' : undefined}
-            className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm
-                        font-medium text-slate-600 transition hover:bg-brand-50 hover:text-brand-700
+            className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm
+                        font-medium text-slate-500 transition hover:bg-rose-50 hover:text-rose-600
                         ${collapsed ? 'justify-center' : ''}`}
           >
             <Icon name="logout" className="h-[18px] w-[18px] shrink-0" />
@@ -378,8 +386,9 @@ export default function AppLayout() {
       {/* ============ MAIN COLUMN ============ */}
       <div className={`flex min-h-screen flex-col transition-[padding] duration-200 ${padded}`}>
         {/* Header */}
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between
-                           border-b border-slate-200 bg-white/85 px-3 backdrop-blur sm:px-5">
+        <header className="sticky top-0 z-20 flex h-[60px] items-center justify-between
+                           border-b border-slate-100 bg-white/95 px-4 backdrop-blur-sm
+                           shadow-[0_1px_3px_0_rgb(0,0,0,0.04)] sm:px-6">
           <div className="flex min-w-0 items-center gap-2">
             <button
               className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 lg:hidden"
@@ -388,7 +397,7 @@ export default function AppLayout() {
             >
               <Icon name="menu" className="h-5 w-5" />
             </button>
-            <h1 className="truncate text-base font-semibold text-slate-800">
+            <h1 className="truncate text-sm font-semibold tracking-tight text-slate-700">
               {navHeader}
             </h1>
           </div>
@@ -396,8 +405,8 @@ export default function AppLayout() {
           <div className="relative shrink-0">
             <button
               onClick={() => setMenuOpen((m) => !m)}
-              className="flex items-center gap-2.5 rounded-md px-2 py-1.5
-                         text-left transition hover:bg-slate-100"
+              className="flex items-center gap-2 rounded-lg px-2.5 py-1.5
+                         text-left transition hover:bg-slate-50"
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-full
                               bg-gradient-to-br from-brand-500 to-brand-700 text-xs
@@ -417,8 +426,8 @@ export default function AppLayout() {
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-lg
-                                border border-slate-200 bg-white shadow-lg">
+                <div className="absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-xl
+                                border border-slate-100 bg-white shadow-xl shadow-slate-200/50">
                   <div className="flex items-center gap-2.5 border-b border-slate-100 px-3 py-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full
                                     bg-gradient-to-br from-brand-500 to-brand-700 text-xs
@@ -460,7 +469,7 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-5 sm:px-6 lg:px-8">
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <Outlet />
         </main>
       </div>
@@ -475,18 +484,16 @@ export default function AppLayout() {
 /* ----------------------------------------------------------------- */
 
 function SidebarLink({ to, label, icon, collapsed, nested = false, onNavigate }) {
-  // Icons stay legible when collapsed (20px); a touch smaller when nested + open.
   const iconClass = collapsed
-    ? 'h-5 w-5 shrink-0'
+    ? 'h-[18px] w-[18px] shrink-0'
     : nested
-      ? 'h-[17px] w-[17px] shrink-0'
-      : 'h-[18px] w-[18px] shrink-0'
+      ? 'h-[15px] w-[15px] shrink-0 opacity-70'
+      : 'h-[17px] w-[17px] shrink-0'
 
-  // Hit-area: square + centered icon when collapsed; pill row when expanded.
   const baseClass = collapsed
-    ? 'group relative flex h-10 items-center justify-center rounded-md font-medium transition'
-    : `group relative flex items-center gap-2.5 rounded-md font-medium transition
-       ${nested ? 'px-2.5 py-1.5 text-sm' : 'px-2.5 py-2 text-sm'}`
+    ? 'group relative mx-auto flex h-9 w-9 items-center justify-center rounded-lg transition'
+    : `group relative flex items-center gap-2.5 rounded-lg transition
+       ${nested ? 'px-2.5 py-1.5 text-[13px]' : 'px-2.5 py-2 text-[13.5px] font-medium'}`
 
   return (
     <NavLink
@@ -497,15 +504,15 @@ function SidebarLink({ to, label, icon, collapsed, nested = false, onNavigate })
       className={({ isActive }) =>
         `${baseClass} ${isActive
           ? 'bg-brand-50 text-brand-700'
-          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`
+          : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`
       }
     >
       {({ isActive }) => (
         <>
           {isActive && !collapsed && (
-            <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-brand-600" />
+            <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r-full bg-brand-600" />
           )}
-          <Icon name={icon} className={iconClass} />
+          <Icon name={icon} className={iconClass} strokeWidth={isActive && !collapsed ? 2 : 1.7} />
           {!collapsed && <span className="truncate">{label}</span>}
         </>
       )}
@@ -515,30 +522,28 @@ function SidebarLink({ to, label, icon, collapsed, nested = false, onNavigate })
 
 function SidebarGroup({ label, icon, collapsed, open, onToggle, children }) {
   if (collapsed) {
-    // No group header in collapsed mode — children render as a plain icon strip.
-    // A subtle divider gives the group a visible boundary.
     return (
-      <div className="space-y-1 pt-2">
-        <div className="mx-3 border-t border-slate-100" />
+      <div className="space-y-0.5 pt-2">
+        <div className="mx-2 mb-1.5 border-t border-slate-100" />
         {children}
       </div>
     )
   }
   return (
-    <div className="pt-2">
+    <div className="pt-3">
       <button
         onClick={onToggle}
-        className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm
-                   font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+        className="flex w-full select-none items-center justify-between px-2.5 py-1
+                   text-[10px] font-semibold uppercase tracking-widest text-slate-400
+                   transition-colors hover:text-slate-600"
       >
-        <Icon name={icon} className="h-[18px] w-[18px] shrink-0" />
-        <span className="flex-1 text-left">{label}</span>
+        <span>{label}</span>
         <Icon
           name="chevron"
-          className={`h-3.5 w-3.5 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`}
+          className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`}
         />
       </button>
-      {open && <div className="mt-0.5 space-y-0.5 pl-3.5">{children}</div>}
+      {open && <div className="mt-1 space-y-0.5">{children}</div>}
     </div>
   )
 }

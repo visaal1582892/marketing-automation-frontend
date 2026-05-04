@@ -587,6 +587,8 @@ export default function AllRequestsPage() {
                   <Th>Task Type</Th>
                   <Th width="w-24">Priority</Th>
                   <Th width="w-28">Status</Th>
+                  <Th width="w-20" title="Times sent back by QC manager">QC Reworks</Th>
+                  <Th width="w-24" title="Times sent back by requestor">Req. Reworks</Th>
                   <Th width="w-28">Assigned On</Th>
                   <Th align="right" width="w-44">Actions</Th>
                 </tr>
@@ -600,12 +602,14 @@ export default function AllRequestsPage() {
                   <td className="px-2 py-1.5"><SelectFilter value={fStatus}    onChange={setFStatus}    options={statusOptions} /></td>
                   <td className="px-2 py-1.5" />
                   <td className="px-2 py-1.5" />
+                  <td className="px-2 py-1.5" />
+                  <td className="px-2 py-1.5" />
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-14 text-center">
+                    <td colSpan={11} className="py-14 text-center">
                       <Icon name="inbox" className="mx-auto h-8 w-8 text-slate-300 mb-2" />
                       <p className="text-sm text-slate-500">No tasks match the current filters.</p>
                       <button onClick={clearFilters} className="mt-2 text-xs text-brand-600 hover:underline">
@@ -753,6 +757,24 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
                           font-medium ring-1 ${STATUS_STYLES[t.status] || 'bg-slate-100 text-slate-600'}`}>
           {STATUS_LABELS[t.status] || t.status}
         </span>
+      </td>
+
+      <td className="px-3 py-2.5 text-center">
+        {t.reworkCount > 0
+          ? <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5
+                             text-xs font-semibold text-orange-700 ring-1 ring-orange-200">
+              {t.reworkCount}
+            </span>
+          : <span className="text-slate-300">—</span>}
+      </td>
+
+      <td className="px-3 py-2.5 text-center">
+        {t.requestorReworkCount > 0
+          ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5
+                             text-xs font-semibold text-purple-700 ring-1 ring-purple-200">
+              {t.requestorReworkCount}
+            </span>
+          : <span className="text-slate-300">—</span>}
       </td>
 
       <td className="px-3 py-2.5 whitespace-nowrap text-slate-500 text-xs">

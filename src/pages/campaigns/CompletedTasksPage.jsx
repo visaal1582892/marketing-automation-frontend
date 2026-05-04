@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import campaignsApi from '../../api/campaigns'
 import { useToast } from '../../components/Toast'
@@ -14,8 +14,8 @@ export default function CompletedTasksPage() {
   const toast    = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
 
-  const [campaigns, setCampaigns] = useState([])
-  const [loading, setLoading]     = useState(true)
+  const [tasks, setTasks]       = useState([])
+  const [loading, setLoading]   = useState(true)
 
   // Rework modal
   const [reworkTask,    setReworkTask]    = useState(null)
@@ -27,30 +27,13 @@ export default function CompletedTasksPage() {
 
   const load = () => {
     setLoading(true)
-    campaignsApi.list()
-      .then(res => setCampaigns(res.data || []))
-      .catch(() => showToast('Failed to load campaigns', 'error'))
+    campaignsApi.completedTasks()
+      .then(res => setTasks(res.data || []))
+      .catch(() => showToast('Failed to load completed tasks', 'error'))
       .finally(() => setLoading(false))
   }
 
   useEffect(load, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  /** Flatten all COMPLETED work tasks across all campaigns */
-  const completedItems = useMemo(() => {
-    const out = []
-    for (const c of campaigns) {
-      const tasks = (c.workTasks || []).filter(t => t.status === 'COMPLETED')
-      for (const t of tasks) {
-        out.push({ ...t, campaignName: c.requirementTypeName || `Campaign #${c.campaignId}`, campaignId: c.campaignId })
-      }
-    }
-    out.sort((a, b) => {
-      const ta = a.completedAt ? new Date(a.completedAt).getTime() : 0
-      const tb = b.completedAt ? new Date(b.completedAt).getTime() : 0
-      return tb - ta // newest first
-    })
-    return out
-  }, [campaigns])
 
   const openRework = (task) => {
     setReworkTask(task)
@@ -86,7 +69,7 @@ export default function CompletedTasksPage() {
         {!loading && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 border border-green-200 px-3 py-1.5 text-sm font-semibold text-green-700">
             <Icon name="check" className="h-4 w-4" />
-            {completedItems.length} approved task{completedItems.length !== 1 ? 's' : ''}
+            {tasks.length} approved task{tasks.length !== 1 ? 's' : ''}
           </span>
         )}
       </div>
@@ -95,7 +78,7 @@ export default function CompletedTasksPage() {
         <div className="flex items-center justify-center py-20">
           <span className="animate-spin h-6 w-6 rounded-full border-2 border-brand-300 border-t-brand-600" />
         </div>
-      ) : completedItems.length === 0 ? (
+      ) : tasks.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white py-20 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
             <Icon name="inbox" className="h-7 w-7 text-slate-400" />
@@ -105,7 +88,7 @@ export default function CompletedTasksPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {completedItems.map(t => (
+          {tasks.map(t => (
             <CompletedTaskCard
               key={t.taskId}
               task={t}
@@ -143,7 +126,9 @@ export default function CompletedTasksPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CompletedTaskCard({ task, onRework, onViewAssets }) {
-  const assetCount = parseAssetUrls(task.assetUrl).length
+  const assetUrls  = parseAssetUrls(task.assetUrl)
+  const assetCount = assetUrls.length
+  const hasAssets  = assetCount > 0
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -157,11 +142,8 @@ function CompletedTaskCard({ task, onRework, onViewAssets }) {
             <span className="text-sm font-semibold text-slate-900">
               {task.granularTaskName || task.requirementTypeName || 'Task'}
             </span>
-            {task.platformName && (
-              <span className="text-xs text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">{task.platformName}</span>
-            )}
-            {task.formatName && (
-              <span className="text-xs text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">{task.formatName}</span>
+            {task.taskTypeName && (
+              <span className="text-xs text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">{task.taskTypeName}</span>
             )}
             <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 ring-1 ring-green-200">
               <Icon name="check" className="h-3 w-3" /> Approved
@@ -169,9 +151,15 @@ function CompletedTaskCard({ task, onRework, onViewAssets }) {
           </div>
 
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-            <span className="text-slate-700 font-medium">{task.campaignName}</span>
-            {task.assigneeName && <span>Created by {task.assigneeName}</span>}
-            {task.quantity && <span>• Qty: {task.quantity}</span>}
+            <span className="text-slate-700 font-medium">
+              {task.requirementTypeName || `Campaign #${task.campaignId}`}
+            </span>
+            {task.assigneeName && (
+              <span>Completed by <span className="font-medium text-slate-700">{task.assigneeName}</span></span>
+            )}
+            {task.completedAt && (
+              <span>• {new Date(task.completedAt).toLocaleDateString()}</span>
+            )}
           </div>
 
           {task.submissionNotes && (
@@ -184,18 +172,30 @@ function CompletedTaskCard({ task, onRework, onViewAssets }) {
 
         {/* Right actions */}
         <div className="flex flex-col items-end gap-2 shrink-0">
-          {assetCount > 0 && (
-            <button
-              onClick={onViewAssets}
-              className="flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition"
-            >
-              <Icon name="fileText" className="h-3.5 w-3.5" />
-              Assets
+          {/* Assets button — always shown; disabled/greyed when no assets uploaded */}
+          <button
+            onClick={hasAssets ? onViewAssets : undefined}
+            disabled={!hasAssets}
+            className={[
+              'flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition',
+              hasAssets
+                ? 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 cursor-pointer'
+                : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed',
+            ].join(' ')}
+            title={hasAssets ? 'View submitted assets' : 'No assets uploaded for this task'}
+          >
+            <Icon name="fileText" className="h-3.5 w-3.5" />
+            Assets
+            {hasAssets ? (
               <span className="rounded-full bg-brand-100 px-1.5 py-px text-[10px] font-bold text-brand-700 ring-1 ring-brand-200">
                 {assetCount}
               </span>
-            </button>
-          )}
+            ) : (
+              <span className="rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-bold text-slate-400">
+                0
+              </span>
+            )}
+          </button>
           <button
             onClick={onRework}
             className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition"

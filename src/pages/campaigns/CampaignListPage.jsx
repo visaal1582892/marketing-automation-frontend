@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { useToast } from '../../components/Toast'
@@ -75,6 +75,30 @@ function PriorityBadge({ priority }) {
       {priority || '—'}
     </span>
   )
+}
+
+// ─── Derived status helpers (requestor view) ──────────────────────────────────
+
+/**
+ * For active campaigns returns the most "advanced" individual task status so
+ * the requestor can see "QC Review" or "Rework" instead of always "In Progress".
+ * ASSIGNED / ACCEPTED are intentionally excluded — they just mean a task is
+ * waiting to start, which is already covered by the campaign-level IN_PROGRESS.
+ * Priority: REWORK > QC_REVIEW > IN_PROGRESS > HELD
+ * Terminal campaigns always show their campaign-level status.
+ */
+const DERIVED_STATUS_ORDER = ['REWORK', 'QC_REVIEW', 'IN_PROGRESS', 'HELD']
+
+function derivedStatus(campaign) {
+  const TERMINAL = ['COMPLETED', 'REJECTED', 'CANCELLED']
+  if (TERMINAL.includes(campaign.status)) return { status: campaign.status, isTask: false }
+  const tasks = campaign.workTasks || []
+  if (tasks.length === 0) return { status: campaign.status, isTask: false }
+  const statuses = tasks.map(t => t.status).filter(Boolean)
+  for (const s of DERIVED_STATUS_ORDER) {
+    if (statuses.includes(s)) return { status: s, isTask: true }
+  }
+  return { status: campaign.status, isTask: false }
 }
 
 // ─── File display helpers ─────────────────────────────────────────────────────
@@ -1349,13 +1373,61 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
 // ─── Requestor campaign-level view ───────────────────────────────────────────
 
 function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefresh }) {
+  const navigate = useNavigate()
+  const toast    = useToast()
+
   const [briefId,        setBriefId]        = useState(null)
-  const [editCampaign,   setEditCampaign]   = useState(null) // campaign object for the edit modal
+  const [editCampaign,   setEditCampaign]   = useState(null)
   const [fCampaign,  setFCampaign]  = useState('')
   const [fReqType,   setFReqType]   = useState('')
   const [fPriority,  setFPriority]  = useState('')
   const [fStatus,    setFStatus]    = useState('')
-  const [activeTab,  setActiveTab]  = useState('open')  // 'open' | 'rework' | 'all' | 'closed'
+  const [activeTab,  setActiveTab]  = useState('inProgress')
+
+  // Bookmark state — derived from campaign.bookmarked returned by API
+  const [bookmarkedIds, setBookmarkedIds] = useState(() =>
+    new Set(campaigns.filter(c => c.bookmarked).map(c => c.campaignId))
+  )
+  const [bookmarkingId, setBookmarkingId] = useState(null)
+
+  // Keep bookmarkedIds in sync when campaigns prop updates (e.g. after refresh)
+  useEffect(() => {
+    setBookmarkedIds(new Set(campaigns.filter(c => c.bookmarked).map(c => c.campaignId)))
+  }, [campaigns])
+
+  const toggleBookmark = async (e, campaignId) => {
+    e.stopPropagation()
+    setBookmarkingId(campaignId)
+    try {
+      const res = await campaignsApi.toggleBookmark(campaignId)
+      const isNow = res.data?.bookmarked ?? false
+      setBookmarkedIds(prev => {
+        const next = new Set(prev)
+        isNow ? next.add(campaignId) : next.delete(campaignId)
+        return next
+      })
+    } catch {
+      toast.error?.('Failed to update bookmark.')
+    } finally {
+      setBookmarkingId(null)
+    }
+  }
+
+  const [cloningId, setCloningId] = useState(null)
+  const handleClone = async (e, campaignId) => {
+    e.stopPropagation()
+    setCloningId(campaignId)
+    try {
+      const res = await campaignsApi.cloneCampaign(campaignId)
+      const newId = res.data?.campaignId
+      toast.success?.('Campaign cloned — loading form to review and submit.')
+      navigate(`/campaigns/${newId}/edit`)
+    } catch {
+      toast.error?.('Failed to clone campaign.')
+    } finally {
+      setCloningId(null)
+    }
+  }
 
   const reqTypeOptions  = useMemo(() => [...new Set(campaigns.map(c => c.requirementTypeName).filter(Boolean))].sort(), [campaigns])
   const priorityOptions = useMemo(() => [...new Set(campaigns.map(c => c.priority).filter(Boolean))].sort(), [campaigns])
@@ -1365,19 +1437,17 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
 
   // Tab counts
   const tabCounts = useMemo(() => ({
-    open:   campaigns.filter(c => !TERMINAL.includes(c.status) &&
-              !(c.workTasks || []).some(t => t.status === 'REWORK')).length,
-    rework: campaigns.filter(c => (c.workTasks || []).some(t => t.status === 'REWORK')).length,
-    closed: campaigns.filter(c => TERMINAL.includes(c.status)).length,
-    all:    campaigns.length,
-  }), [campaigns]) // eslint-disable-line react-hooks/exhaustive-deps
+    inProgress: campaigns.filter(c => !TERMINAL.includes(c.status)).length,
+    completed:  campaigns.filter(c => TERMINAL.includes(c.status)).length,
+    bookmarked: campaigns.filter(c => bookmarkedIds.has(c.campaignId)).length,
+  }), [campaigns, bookmarkedIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabFiltered = useMemo(() => campaigns.filter(c => {
-    if (activeTab === 'open')   return !TERMINAL.includes(c.status) && !(c.workTasks || []).some(t => t.status === 'REWORK')
-    if (activeTab === 'rework') return (c.workTasks || []).some(t => t.status === 'REWORK')
-    if (activeTab === 'closed') return TERMINAL.includes(c.status)
+    if (activeTab === 'inProgress') return !TERMINAL.includes(c.status)
+    if (activeTab === 'completed')  return TERMINAL.includes(c.status)
+    if (activeTab === 'bookmarked') return bookmarkedIds.has(c.campaignId)
     return true
-  }), [campaigns, activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
+  }), [campaigns, activeTab, bookmarkedIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => tabFiltered.filter(c => {
     if (fCampaign && !String(c.campaignId).includes(fCampaign.trim())) return false
@@ -1394,33 +1464,25 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
     placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-300 focus:border-brand-400`
 
   const tabs = [
-    { id: 'open',   label: 'Open',   count: tabCounts.open },
-    { id: 'rework', label: 'Rework', count: tabCounts.rework, highlight: true },
-    { id: 'closed', label: 'Closed', count: tabCounts.closed },
-    { id: 'all',    label: 'All',    count: tabCounts.all },
+    { id: 'inProgress', label: 'In Progress', count: tabCounts.inProgress },
+    { id: 'completed',  label: 'Completed',   count: tabCounts.completed  },
+    { id: 'bookmarked', label: '★ Bookmarked', count: tabCounts.bookmarked },
   ]
 
   return (
     <div className="space-y-3">
       {/* Tabs */}
-      <div className="flex items-center gap-1.5 flex-wrap border-b border-slate-200 pb-3">
+      <div className="flex items-center gap-2 flex-wrap border-b border-slate-200 pb-3">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ring-1 ${
+            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition ring-1 ${
               activeTab === tab.id
-                ? tab.highlight
-                  ? 'bg-amber-500 text-white ring-amber-500 shadow-sm'
-                  : 'bg-brand-600 text-white ring-brand-600 shadow-sm'
-                : tab.highlight
-                  ? tabCounts.rework > 0
-                    ? 'bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100'
-                    : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50'
-                  : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
+                ? 'bg-brand-600 text-white ring-brand-600 shadow-sm'
+                : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
             }`}
           >
-            {tab.highlight && tab.count > 0 && <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />}
             {tab.label}
             <span className={`rounded-full px-1.5 py-px text-[10px] font-bold ${
               activeTab === tab.id ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-500'
@@ -1467,6 +1529,7 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Status</th>
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Tasks</th>
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Submitted</th>
+                  <th className="px-3 pt-3 pb-1 w-8" title="Bookmark" />
                   <th className="px-3 pt-3 pb-1" />
                 </tr>
                 <tr className="bg-slate-50 border-b border-slate-200">
@@ -1494,6 +1557,7 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                   <td className="px-2 pb-2 pt-1" />
                   <td className="px-2 pb-2 pt-1" />
                   <td className="px-2 pb-2 pt-1" />
+                  <td className="px-2 pb-2 pt-1" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1504,6 +1568,8 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                   const fmtDate      = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
                   const commentTasks = (c.workTasks || []).filter(t => t.status === 'HELD' && t.workerComment)
                   const hasComment   = commentTasks.length > 0
+                  const { status: ds, isTask } = derivedStatus(c)
+                  const isBookmarked = bookmarkedIds.has(c.campaignId)
                   return (
                     <tr key={c.campaignId}
                       className={`transition ${hasComment
@@ -1514,7 +1580,11 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                       </td>
                       <td className="px-3 py-3 font-medium text-slate-800">{c.requirementTypeName || '—'}</td>
                       <td className="px-3 py-3"><PriorityBadge priority={c.priority} /></td>
-                      <td className="px-3 py-3"><CampaignStatusBadge status={c.status} /></td>
+                      <td className="px-3 py-3">
+                        {isTask
+                          ? <TaskStatusBadge status={ds} />
+                          : <CampaignStatusBadge status={ds} />}
+                      </td>
                       <td className="px-3 py-3 text-slate-600">
                         <div className="flex items-center gap-2 flex-wrap">
                           {taskCount === 0
@@ -1525,14 +1595,51 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                               ↩ Rework
                             </span>
                           )}
+                          {(c.workTasks || []).some(t => t.status === 'QC_REVIEW') && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 ring-1 ring-purple-200">
+                              ⏳ QC
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-3 text-slate-500">{fmtDate(c.createdAt)}</td>
+
+                      {/* Bookmark toggle */}
+                      <td className="px-1 py-3 text-center">
+                        <button
+                          onClick={(e) => toggleBookmark(e, c.campaignId)}
+                          disabled={bookmarkingId === c.campaignId}
+                          title={isBookmarked ? 'Remove bookmark' : 'Bookmark this request'}
+                          className={`rounded p-1 transition ${isBookmarked
+                            ? 'text-amber-500 hover:text-amber-700'
+                            : 'text-slate-300 hover:text-amber-400'}`}
+                        >
+                          <svg className="h-4 w-4" viewBox="0 0 24 24"
+                            fill={isBookmarked ? 'currentColor' : 'none'}
+                            stroke="currentColor" strokeWidth="2"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+                          </svg>
+                        </button>
+                      </td>
+
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
                           <button onClick={() => setBriefId(c.campaignId)}
                             className="flex items-center gap-1 text-brand-600 hover:text-brand-800 text-xs font-medium whitespace-nowrap">
                             <Icon name="eye" className="h-3.5 w-3.5" /> Brief
+                          </button>
+                          {/* Clone */}
+                          <button
+                            onClick={(e) => handleClone(e, c.campaignId)}
+                            disabled={cloningId === c.campaignId}
+                            title="Clone this request"
+                            className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                            </svg>
+                            {cloningId === c.campaignId ? 'Cloning…' : 'Clone'}
                           </button>
                           {canEdit && (
                             <button

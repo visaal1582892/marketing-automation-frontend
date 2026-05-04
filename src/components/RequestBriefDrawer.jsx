@@ -1,70 +1,77 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import campaignsApi from '../api/campaigns'
 import Icon from './Icon'
 import PriorityEditor from './PriorityEditor'
 import { useAuth } from '../auth/AuthContext'
 import { useToast } from './Toast'
-import { generateBriefPdf } from '../utils/generateBriefPdf'
+import { printBrief } from '../utils/printBrief'
 
 /**
- * Slide-in drawer that shows the *complete* request brief for a campaign.
- *
- * Used everywhere a manager / member needs to see the full context of a
- * request (approvals, QC review, intervention, accept-task) — so people
- * can make informed decisions without leaving the page.
+ * Full-screen brief viewer — replaced the old slide-in drawer.
+ * Shown wherever a complete request context is needed (QC, My Tasks,
+ * campaign list, interventions, etc.).
  */
-export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChanged, filterTaskId }) {
+export default function RequestBriefDrawer({
+  campaignId, onClose, onCampaignChanged, filterTaskId,
+}) {
   const [campaign, setCampaign] = useState(null)
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState(null)
+  const [loading,  setLoading]  = useState(true)
+  const [error,    setError]    = useState(null)
 
-  // Marketing Head / Admin can edit priority directly from the brief.
   const { isMarketingManager, isAdmin, isRequestor, user } = useAuth()
-  const toast = useToast()
+  const toast           = useToast()
   const canEditPriority = isMarketingManager || isAdmin
 
-  const [downloading, setDownloading] = useState(false)
-
-  const handleDownloadPdf = useCallback(async () => {
+  const [printing, setPrinting] = useState(false)
+  const handlePrint = useCallback(() => {
     if (!campaign) return
-    setDownloading(true)
-    try {
-      await generateBriefPdf(campaign)
-    } catch (e) {
-      console.error('PDF generation failed:', e)
-    } finally {
-      setDownloading(false)
-    }
-  }, [campaign])
+    setPrinting(true)
+    try   { printBrief(campaign, filterTaskId) }
+    catch (e) { console.error('Print failed:', e) }
+    finally   { setPrinting(false) }
+  }, [campaign, filterTaskId])
 
-  // Requestor rework state
-  const [reworkTask,    setReworkTask]    = useState(null)
-  const [reworkMsg,     setReworkMsg]     = useState('')
-  const [submittingRw,  setSubmittingRw]  = useState(false)
+  const [reworkTask,   setReworkTask]   = useState(null)
+  const [reworkMsg,    setReworkMsg]    = useState('')
+  const [submittingRw, setSubmittingRw] = useState(false)
+
+  // ── Slide-in / slide-out animation ────────────────────────────────────────
+  const [visible, setVisible] = useState(false)
+  const [closing, setClosing] = useState(false)
+
+  // Trigger slide-in on the frame after mount so the transition plays
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setVisible(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  const handleClose = useCallback(() => {
+    setClosing(true)
+    setTimeout(() => onClose(), 310)
+  }, [onClose])
+  // ──────────────────────────────────────────────────────────────────────────
 
   const myUserId = user?.userId ?? user?.id
-  const canRequestRework = campaign != null && (
-    isAdmin ||
-    (isRequestor && myUserId != null && Number(campaign.requestorId) === Number(myUserId))
-  )
+  const canRequestRework =
+    campaign != null &&
+    (isAdmin || (isRequestor && myUserId != null &&
+      Number(campaign.requestorId) === Number(myUserId)))
 
   const handleRequestorRework = async () => {
     if (!reworkTask || !reworkMsg.trim()) return
     setSubmittingRw(true)
     try {
-      await campaignsApi.requestorRework(campaign.campaignId, reworkTask.taskId, reworkMsg.trim())
+      await campaignsApi.requestorRework(
+        campaign.campaignId, reworkTask.taskId, reworkMsg.trim(),
+      )
       toast.success?.('Task sent for rework.')
-      setReworkTask(null)
-      setReworkMsg('')
-      // Refresh campaign to reflect updated task statuses
+      setReworkTask(null); setReworkMsg('')
       const res = await campaignsApi.getById(campaign.campaignId)
       setCampaign(res.data)
       onCampaignChanged?.(res.data)
     } catch (e) {
       toast.error?.(e?.response?.data?.message || 'Failed to send for rework.')
-    } finally {
-      setSubmittingRw(false)
-    }
+    } finally { setSubmittingRw(false) }
   }
 
   const handlePriorityChange = (updated) => {
@@ -75,50 +82,405 @@ export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChan
 
   useEffect(() => {
     if (!campaignId) return
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     campaignsApi.getById(campaignId)
-      .then(res => setCampaign(res.data))
-      .catch(() => setError('Failed to load request details.'))
+      .then(res  => setCampaign(res.data))
+      .catch(()  => setError('Failed to load request details.'))
       .finally(() => setLoading(false))
   }, [campaignId])
 
-  // Lock background scroll while the drawer is open
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
 
-  return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-slate-900/40 transition" onClick={onClose} aria-hidden="true" />
-      <aside className="w-full max-w-2xl bg-slate-50 shadow-2xl overflow-y-auto flex flex-col">
-        <DrawerHeader
-          campaign={campaign}
-          onClose={onClose}
-          canEditPriority={canEditPriority}
-          onPriorityChanged={handlePriorityChange}
-          onPriorityError={(msg) => toast.error?.(msg)}
-          onDownloadPdf={handleDownloadPdf}
-          downloading={downloading}
-          canDownload={!!campaign && !loading}
-        />
-        <div className="flex-1 px-5 py-5 space-y-4 bg-slate-50/50">
-          {loading ? (
-            <p className="text-center text-slate-400 py-12 text-sm">Loading full brief…</p>
-          ) : error ? (
-            <p className="text-center text-red-500 py-12 text-sm">{error}</p>
-          ) : campaign ? (
-            <RequestBriefBody
-              campaign={campaign}
-              filterTaskId={filterTaskId}
-              canRequestRework={canRequestRework}
-              onRequestRework={(t) => { setReworkTask(t); setReworkMsg('') }}
-            />
-          ) : null}
-        </div>
-      </aside>
+  const c          = campaign
+  const isTerminal = ['COMPLETED', 'REJECTED'].includes(c?.status)
+  const visibleTasks = filterTaskId
+    ? (c?.workTasks || []).filter(t => String(t.taskId) === String(filterTaskId))
+    : (c?.workTasks || [])
 
+  const isOpen = visible && !closing
+
+  return (
+    <>
+      {/* ── Backdrop ── */}
+      <div
+        aria-hidden="true"
+        onClick={handleClose}
+        className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-300"
+        style={{ opacity: isOpen ? 1 : 0, pointerEvents: isOpen ? 'auto' : 'none' }}
+      />
+
+      {/* ── Sliding panel ── */}
+      <div
+        className="fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-slate-50 shadow-2xl overflow-hidden"
+        style={{
+          transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 310ms cubic-bezier(0.32, 0.72, 0, 1)',
+        }}
+      >
+
+      {/* ── Sticky top bar ─────────────────────────────────────────── */}
+      <div className="shrink-0 bg-white border-b border-slate-100 shadow-[0_1px_3px_0_rgb(0,0,0,0.05)]">
+        <div className="max-w-5xl mx-auto px-5 h-[60px] flex items-center justify-between gap-4">
+          {/* Left */}
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={handleClose}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium
+                         text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition shrink-0"
+            >
+              <Icon name="chevron" className="h-4 w-4 rotate-180" />
+              <span className="hidden sm:block">Back</span>
+            </button>
+            <div className="h-5 w-px bg-slate-200 shrink-0" />
+            {c && (
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <IdChip label="REQ" value={c.campaignId} />
+                <StatusBadge status={c.status} />
+                {canEditPriority && !isTerminal ? (
+                  <PriorityEditor
+                    campaignId={c.campaignId}
+                    value={c.priority}
+                    editable
+                    onChanged={handlePriorityChange}
+                    onError={msg => toast.error?.(msg)}
+                  />
+                ) : (
+                  <PriorityBadge v={c?.priority} />
+                )}
+                <span className="text-sm font-semibold text-slate-800 truncate hidden sm:block">
+                  {c.requirementTypeName}
+                </span>
+              </div>
+            )}
+          </div>
+          {/* Right */}
+          <div className="flex items-center gap-2 shrink-0">
+            {c && !loading && (
+              <button
+                onClick={handlePrint}
+                disabled={printing}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white
+                           px-3 py-1.5 text-xs font-semibold text-slate-600
+                           hover:bg-slate-50 disabled:opacity-50 transition"
+              >
+                <Icon name="printer" className="h-3.5 w-3.5" />
+                Print / PDF
+              </button>
+            )}
+            <button
+              onClick={handleClose}
+              className="rounded-lg p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+            >
+              <Icon name="x" className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Scrollable body ─────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-5xl mx-auto px-5 py-8 space-y-5 pb-16">
+
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-28 gap-3 text-slate-400">
+              <svg className="h-8 w-8 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+              </svg>
+              <span className="text-sm">Loading brief…</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-center justify-center py-28">
+              <p className="text-sm text-rose-500">{error}</p>
+            </div>
+          )}
+
+          {!loading && !error && c && (
+            <>
+              {/* ── Hero card ── */}
+              <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-slate-800 via-slate-800 to-slate-900 text-white shadow-md">
+                <div className="px-7 py-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">
+                        Campaign Brief
+                      </p>
+                      <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">
+                        {c.requirementTypeName || 'Request Brief'}
+                      </h1>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-white/55">
+                        {c.requestorName && <span>{c.requestorName}</span>}
+                        {c.departmentName && (
+                          <><span className="text-white/25">·</span><span>{c.departmentName}</span></>
+                        )}
+                        {c.createdAt && (
+                          <><span className="text-white/25">·</span><span>{fmtDateTime(c.createdAt)}</span></>
+                        )}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <span className="text-4xl font-black text-white/10 tabular-nums select-none">
+                        #{c.campaignId}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {(c.businessObjective || fmtTargetLocation(c.targetLocation)) && (
+                  <div className="border-t border-white/10 px-7 py-3 flex flex-wrap gap-x-8 gap-y-1.5">
+                    {c.businessObjective && (
+                      <span className="text-xs text-white/60">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
+                          Objective
+                        </span>
+                        {c.businessObjective}
+                      </span>
+                    )}
+                    {fmtTargetLocation(c.targetLocation) && (
+                      <span className="text-xs text-white/60">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
+                          Location
+                        </span>
+                        {fmtTargetLocation(c.targetLocation)}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Inline alerts ── */}
+              {c.inconsistencyReason && (
+                <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3.5">
+                  <Icon name="alertCircle" className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-rose-800">Inconsistency Detected</p>
+                    <p className="text-xs text-rose-700 mt-0.5">{c.inconsistencyReason}</p>
+                  </div>
+                </div>
+              )}
+              {c.routingNotes && (
+                <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+                  <Icon name="alertCircle" className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">Routing Note</p>
+                    <p className="text-xs text-amber-700 mt-0.5">{c.routingNotes}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Approval trail ── */}
+              <ApprovalTrail c={c} />
+
+              {/* ── 3-column info sections ── */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <BriefCard title="Campaign Overview" icon="fileText" accent="blue">
+                  <DetailRow label="Requirement Type" value={c.requirementTypeName} />
+                  <DetailRow label="Audience Type"    value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
+                  <DetailRow label="Language"         value={fmtMultiValue(c.language)} />
+                  <DetailRow label="Tone / Style"     value={fmtMultiValue(c.tone)} />
+                </BriefCard>
+
+                <BriefCard title="Message & Offer" icon="messageSquare" accent="violet">
+                  <DetailRow label="Has Offer"        value={c.hasOffer} />
+                  {c.hasOffer === 'YES' && (
+                    <>
+                      <DetailRow label="Offer Type"       value={c.offerTypeId || c.offerTypeName} />
+                      <DetailRow label="Supporting Proof" value={c.supportingProof} />
+                    </>
+                  )}
+                  <DetailRow label="Key Message" value={c.keyMessage} multiline />
+                </BriefCard>
+
+                <BriefCard title="Budget & Goals" icon="trendingUp" accent="emerald">
+                  <DetailRow label="Budget Tier"     value={c.budgetTier} />
+                  <DetailRow label="KPI Type"        value={c.kpiType} />
+                  <DetailRow label="Expected Output" value={c.expectedOutput} />
+                  <DetailRow label="Vendor Required" value={c.vendorRequired} />
+                  {c.vendorRequired === 'YES' && (
+                    <DetailRow label="Vendor Type" value={fmtMultiValue(c.vendorType)} />
+                  )}
+                </BriefCard>
+              </div>
+
+              {/* ── Files ── */}
+              {c.fileUrls?.length > 0 && (
+                <BriefCard title={`Campaign Files (${c.fileUrls.length})`} icon="paperclip" accent="slate">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {c.fileUrls.map((url, i) => {
+                      const { label, icon } = fileDisplayInfo(url, i)
+                      return (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                          className="group flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50
+                                     px-3 py-2.5 text-xs font-medium text-slate-700
+                                     hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 transition">
+                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${icon.cls}`}>
+                            {icon.tag}
+                          </span>
+                          <span className="truncate">{label}</span>
+                        </a>
+                      )
+                    })}
+                  </div>
+                </BriefCard>
+              )}
+
+              {/* ── Deliverables ── */}
+              {c.deliverables?.length > 0 && (
+                <BriefCard title={`Deliverables (${c.deliverables.length})`} icon="checkSquare" accent="slate">
+                  <div className="flex flex-wrap gap-2">
+                    {c.deliverables.map((d, i) => (
+                      <div key={d.specId ?? i}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200
+                                   bg-white px-3 py-1.5">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full
+                                         bg-brand-100 text-[10px] font-bold text-brand-700">
+                          {i + 1}
+                        </span>
+                        <span className="text-xs font-medium text-slate-700">
+                          {d.granularTaskName || d.granularTaskId}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </BriefCard>
+              )}
+
+              {/* ── Work tasks ── */}
+              {visibleTasks.length > 0 && (
+                <BriefCard
+                  title={filterTaskId ? 'Your Task' : `Work Tasks (${visibleTasks.length})`}
+                  icon="clipboard"
+                  accent="brand"
+                >
+                  <div className="space-y-4">
+                    {visibleTasks.map(t => (
+                      <div key={t.taskId}
+                        className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                        {/* Task header */}
+                        <div className="flex flex-wrap items-start justify-between gap-3
+                                        bg-slate-50/70 px-4 py-3 border-b border-slate-100">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <IdChip label="TASK" value={t.taskId} />
+                              <span className="text-sm font-bold text-slate-900">
+                                {t.granularTaskName || 'Task'}
+                              </span>
+                              <TaskBadge status={t.status} />
+                              {t.reworkCount > 0 && (
+                                <span className="inline-flex items-center gap-1 rounded-full
+                                                 bg-orange-50 px-2 py-0.5 text-xs font-medium
+                                                 text-orange-700 ring-1 ring-orange-200"
+                                  title={`QC Manager sent back ${t.reworkCount} time${t.reworkCount === 1 ? '' : 's'}`}>
+                                  <Icon name="refresh" className="h-2.5 w-2.5" />
+                                  QC {t.reworkCount}×
+                                </span>
+                              )}
+                              {t.requestorReworkCount > 0 && (
+                                <span className="inline-flex items-center gap-1 rounded-full
+                                                 bg-purple-50 px-2 py-0.5 text-xs font-medium
+                                                 text-purple-700 ring-1 ring-purple-200"
+                                  title={`Requestor sent back ${t.requestorReworkCount} time${t.requestorReworkCount === 1 ? '' : 's'}`}>
+                                  <Icon name="refresh" className="h-2.5 w-2.5" />
+                                  Requestor {t.requestorReworkCount}×
+                                </span>
+                              )}
+                              {t.workerComment && (
+                                <span className="inline-flex items-center gap-1 rounded-full
+                                                 bg-amber-50 px-2 py-0.5 text-xs font-medium
+                                                 text-amber-700 ring-1 ring-amber-200">
+                                  <Icon name="messageSquare" className="h-2.5 w-2.5" /> On Hold
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              {t.assigneeName ? `Assigned to ${t.assigneeName}` : 'Unassigned'}
+                              {t.totalTimeLoggedMinutes != null &&
+                                ` · ${t.totalTimeLoggedMinutes} min logged`}
+                            </p>
+                          </div>
+                          {t.status === 'COMPLETED' && canRequestRework && (
+                            <button
+                              onClick={() => { setReworkTask(t); setReworkMsg('') }}
+                              className="flex items-center gap-1.5 rounded-lg border border-amber-200
+                                         bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700
+                                         hover:bg-amber-100 transition shrink-0"
+                            >
+                              <Icon name="refresh" className="h-3 w-3" /> Request Rework
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Task body */}
+                        <div className="px-4 py-4 space-y-3">
+                          <TaskTimestamps task={t} />
+
+                          {t.submissionNotes && (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+                                Submission notes
+                              </p>
+                              <p className="text-sm text-slate-700">{t.submissionNotes}</p>
+                            </div>
+                          )}
+
+                          {t.workerComment && (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <Icon name="messageSquare" className="h-3.5 w-3.5 text-amber-600" />
+                                <span className="text-xs font-bold text-amber-800">
+                                  Worker comment — task on hold
+                                </span>
+                              </div>
+                              <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">
+                                {t.workerComment}
+                              </p>
+                            </div>
+                          )}
+
+                          {t.latestManagerReworkComment && t.status === 'REWORK' && (
+                            <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <Icon name="alertCircle" className="h-3.5 w-3.5 text-orange-500" />
+                                <span className="text-xs font-bold text-orange-700">
+                                  Manager rework note
+                                </span>
+                              </div>
+                              <p className="text-sm text-orange-800 whitespace-pre-wrap leading-relaxed">
+                                {t.latestManagerReworkComment}
+                              </p>
+                            </div>
+                          )}
+                          {t.latestRequestorReworkComment && t.status === 'REWORK' && (
+                            <div className="rounded-xl border border-purple-200 bg-purple-50 px-4 py-3">
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <Icon name="alertCircle" className="h-3.5 w-3.5 text-purple-500" />
+                                <span className="text-xs font-bold text-purple-700">
+                                  Requestor rework note
+                                </span>
+                              </div>
+                              <p className="text-sm text-purple-800 whitespace-pre-wrap leading-relaxed">
+                                {t.latestRequestorReworkComment}
+                              </p>
+                            </div>
+                          )}
+
+                          <TaskQuestionnaireBrief items={t.questionnaire} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </BriefCard>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Rework modal */}
       {reworkTask && (
         <RequestorReworkModal
           task={reworkTask}
@@ -129,28 +491,24 @@ export default function RequestBriefDrawer({ campaignId, onClose, onCampaignChan
           submitting={submittingRw}
         />
       )}
-    </div>
+      </div>{/* end sliding panel */}
+    </>
   )
 }
 
-// ─── Compact header summary used inside confirmation modals ───────────────────
-
-/**
- * One-glance summary card for use *inside* an action modal (approve, reject,
- * accept, submit, etc.) — supplements the modal with the most-decision-
- * relevant brief facts so the actor doesn't have to open the full drawer.
- */
+// ─── Compact summary card (used inside action modals elsewhere) ───────────────
 export function RequestSummaryCard({ campaign }) {
   if (!campaign) return null
   const deliverables = campaign.deliverables?.length ?? null
   return (
-    <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700 space-y-1.5 ring-1 ring-slate-200">
+    <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-700 space-y-1.5 ring-1 ring-slate-200">
       <div className="flex items-center gap-2 flex-wrap">
         <IdChip value={campaign.campaignId} />
         <span className="font-semibold text-slate-800">{campaign.requirementTypeName || '—'}</span>
         <PriorityBadge v={campaign.priority} />
         {campaign.flaggedInconsistency && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200">
+          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5
+                           text-xs font-medium text-rose-700 ring-1 ring-rose-200">
             <Icon name="alertCircle" className="h-3 w-3" /> Inconsistent
           </span>
         )}
@@ -168,440 +526,125 @@ export function RequestSummaryCard({ campaign }) {
   )
 }
 
-// ─── Internals ───────────────────────────────────────────────────────────────
+// ─── Section card ─────────────────────────────────────────────────────────────
+const ACCENT_ICON = {
+  blue:    'from-blue-500 to-blue-600',
+  violet:  'from-violet-500 to-violet-600',
+  emerald: 'from-emerald-500 to-emerald-600',
+  amber:   'from-amber-500 to-amber-600',
+  brand:   'from-brand-500 to-brand-700',
+  slate:   'from-slate-500 to-slate-700',
+}
 
-function DrawerHeader({ campaign, onClose, canEditPriority, onPriorityChanged, onPriorityError, onDownloadPdf, downloading, canDownload }) {
-  const editablePriority = canEditPriority
-    && campaign
-    && !['COMPLETED', 'REJECTED'].includes(campaign.status)
-
+function BriefCard({ title, icon, accent = 'slate', children }) {
   return (
-    <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-5 py-4 flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <IdChip label="REQ" value={campaign?.campaignId ?? '—'} />
-          {campaign && <StatusBadge status={campaign.status} />}
-          {campaign && (
-            editablePriority ? (
-              <PriorityEditor
-                campaignId={campaign.campaignId}
-                value={campaign.priority}
-                editable
-                onChanged={onPriorityChanged}
-                onError={onPriorityError}
-              />
-            ) : (
-              <PriorityBadge v={campaign.priority} />
-            )
-          )}
-          {campaign?.flaggedInconsistency && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200">
-              <Icon name="alertCircle" className="h-3 w-3" /> Inconsistent
-            </span>
-          )}
+    <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2.5 border-b border-slate-100 px-5 py-3.5">
+        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg
+                         bg-gradient-to-br ${ACCENT_ICON[accent] || ACCENT_ICON.slate}
+                         text-white shadow-sm`}>
+          <Icon name={icon} className="h-3.5 w-3.5" strokeWidth={2} />
         </div>
-        <h3 className="mt-1.5 text-base font-bold text-slate-900 truncate">
-          {campaign?.requirementTypeName || 'Request Brief'}
-        </h3>
-        <p className="text-xs text-slate-500 truncate">
-          {campaign?.requestorName || '—'} • {campaign?.departmentName || '—'}
-          {campaign?.createdAt && ` • ${fmtDateTime(campaign.createdAt)}`}
+        <h3 className="text-sm font-bold text-slate-800">{title}</h3>
+      </div>
+      <div className="px-5 py-4 space-y-3.5">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function DetailRow({ label, value, multiline = false }) {
+  return (
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">
+        {label}
+      </p>
+      {value ? (
+        <p className={`text-sm font-medium text-slate-800 leading-snug
+                       ${multiline ? 'whitespace-pre-wrap' : ''}`}>
+          {value}
         </p>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        {canDownload && (
-          <button
-            onClick={onDownloadPdf}
-            disabled={downloading}
-            title="Download brief as PDF"
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50
-                       px-2.5 py-1.5 text-xs font-medium text-slate-600
-                       hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50 transition"
-          >
-            {downloading ? (
-              <>
-                <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                </svg>
-                Generating…
-              </>
-            ) : (
-              <>
-                <Icon name="download" className="h-3.5 w-3.5" />
-                Download PDF
-              </>
-            )}
-          </button>
-        )}
-        <button
-          onClick={onClose}
-          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 transition"
-          aria-label="Close brief"
-        >
-          <Icon name="x" className="h-4 w-4" />
-        </button>
-      </div>
+      ) : (
+        <p className="text-sm text-slate-300 select-none">—</p>
+      )}
     </div>
   )
 }
 
-function RequestBriefBody({ campaign: c, filterTaskId, canRequestRework = false, onRequestRework }) {
-  // When opened from a worker's task card, only show their specific task.
-  const visibleTasks = filterTaskId
-    ? (c.workTasks || []).filter(t => String(t.taskId) === String(filterTaskId))
-    : (c.workTasks || [])
-  return (
-    <>
-      {/* Inline alerts */}
-      {c.inconsistencyReason && (
-        <div className="flex items-start gap-2 rounded-lg bg-rose-50 p-2.5 text-xs text-rose-800 ring-1 ring-rose-200">
-          <Icon name="alertCircle" className="h-4 w-4 shrink-0 mt-0.5" />
-          <div>
-            <div className="font-semibold">Inconsistency Detected</div>
-            <div>{c.inconsistencyReason}</div>
-          </div>
-        </div>
-      )}
-      {c.routingNotes && (
-        <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 ring-1 ring-amber-200">
-          <Icon name="alertCircle" className="h-4 w-4 shrink-0 mt-0.5" />
-          <div>
-            <div className="font-semibold">Routing Note</div>
-            <div>{c.routingNotes}</div>
-          </div>
-        </div>
-      )}
-
-      {/* Approval audit trail */}
-      <ApprovalTrail c={c} />
-
-      {/* ── Campaign Overview ── */}
-      <Section title="Campaign Overview">
-        <Detail label="Requirement Type"   value={c.requirementTypeName} />
-        <Detail label="Business Objective" value={c.businessObjective} span={2} />
-        <Detail label="Target Location"    value={fmtTargetLocation(c.targetLocation)} span={3} />
-        <Detail label="Audience Type"      value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
-        <Detail label="Language"           value={fmtMultiValue(c.language)} />
-        <Detail label="Tone / Style"       value={fmtMultiValue(c.tone)} />
-      </Section>
-
-      {/* ── Message & Offer ── */}
-      <Section title="Message & Offer">
-        <Detail label="Key Message"      value={c.keyMessage}      span={3} />
-        <Detail label="Supporting Proof" value={c.supportingProof} />
-        <Detail label="Has Offer"        value={c.hasOffer} />
-        <Detail label="Offer Type"       value={c.offerTypeId || c.offerTypeName} />
-      </Section>
-
-      {/* ── Budget & Goals ── */}
-      <Section title="Budget & Goals">
-        <Detail label="Budget Tier"     value={c.budgetTier} />
-        <Detail label="KPI Type"        value={c.kpiType} />
-        <Detail label="Expected Output" value={c.expectedOutput} />
-        <Detail label="Vendor Required" value={c.vendorRequired} />
-        <Detail label="Vendor Type"     value={fmtMultiValue(c.vendorType)} span={2} />
-      </Section>
-
-      {/* Campaign Files */}
-      {c.fileUrls?.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 px-4 py-2.5 flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-slate-800">Campaign Files</h4>
-            <span className="text-xs text-slate-500">{c.fileUrls.length}</span>
-          </div>
-          <ul className="divide-y divide-slate-100">
-            {c.fileUrls.map((url, i) => {
-              const { label, icon } = fileDisplayInfo(url, i)
-              return (
-                <li key={i} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className={`text-xs font-bold shrink-0 rounded px-1.5 py-0.5 ${icon.cls}`}>{icon.tag}</span>
-                  <a href={url} target="_blank" rel="noopener noreferrer"
-                    className="text-sm text-brand-600 hover:underline truncate flex-1">
-                    {label}
-                  </a>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      )}
-
-      {/* Deliverables */}
-      {c.deliverables?.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 px-4 py-2.5 flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-slate-800">Deliverables</h4>
-            <span className="text-xs text-slate-500">{c.deliverables.length}</span>
-          </div>
-          <ul className="divide-y divide-slate-100">
-            {c.deliverables.map((d, i) => (
-              <li key={d.specId ?? i} className="flex items-center gap-3 px-4 py-2.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-700 shrink-0">
-                  {i + 1}
-                </span>
-                <span className="text-sm font-medium text-slate-800">{d.granularTaskName || d.granularTaskId}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Work Tasks */}
-      {visibleTasks.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 px-4 py-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="text-sm font-semibold text-slate-800">
-                {filterTaskId ? 'Your Task' : 'Work Tasks'}
-              </h4>
-              {!filterTaskId && <span className="text-xs text-slate-500">{visibleTasks.length}</span>}
-            </div>
-            {!filterTaskId && (
-              <p className="mt-1 text-xs text-slate-500 leading-snug">
-                Assignment, timing, and any <span className="font-medium text-slate-600">task questionnaire</span> answers
-                (from the request form or updated by the assignee).
-              </p>
-            )}
-          </div>
-          <div className="divide-y divide-slate-100">
-            {visibleTasks.map(t => (
-              <div key={t.taskId} className="px-4 py-4 space-y-3">
-                {/* Task header */}
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <IdChip label="TASK" value={t.taskId} />
-                      <span className="text-sm font-bold text-slate-900">{t.granularTaskName || 'Task'}</span>
-                      <TaskBadge status={t.status} />
-                      {t.reworkCount > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 ring-1 ring-orange-200"
-                          title={`Reworked ${t.reworkCount} time${t.reworkCount === 1 ? '' : 's'}`}>
-                          <Icon name="refresh" className="h-2.5 w-2.5" />
-                          {t.reworkCount}× rework
-                        </span>
-                      )}
-                      {t.workerComment && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
-                          <Icon name="messageSquare" className="h-2.5 w-2.5" />
-                          On Hold
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {t.assigneeName ? `Assigned to ${t.assigneeName}` : 'Unassigned'}
-                      {t.totalTimeLoggedMinutes != null && ` · ${t.totalTimeLoggedMinutes} min logged`}
-                    </div>
-                  </div>
-                  {t.status === 'COMPLETED' && canRequestRework && (
-                    <button
-                      onClick={() => onRequestRework?.(t)}
-                      className="flex items-center gap-1.5 rounded-md border border-amber-200
-                                 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700
-                                 hover:bg-amber-100 transition shrink-0">
-                      <Icon name="refresh" className="h-3 w-3" />
-                      Request Rework
-                    </button>
-                  )}
-                </div>
-
-                {/* Timeline */}
-                <TaskTimestamps task={t} />
-
-                {/* Submission notes */}
-                {t.submissionNotes && (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Submission notes</p>
-                    <p>{t.submissionNotes}</p>
-                  </div>
-                )}
-
-                {/* Worker comment / on-hold alert */}
-                {t.workerComment && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-xs">
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <Icon name="messageSquare" className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                      <span className="font-bold text-amber-800 text-xs">Worker comment — task is on hold</span>
-                    </div>
-                    <p className="text-amber-900 whitespace-pre-wrap leading-relaxed">{t.workerComment}</p>
-                  </div>
-                )}
-
-                {/* Task-specific Q&A */}
-                <TaskQuestionnaireBrief items={t.questionnaire} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
-  )
-}
-
-// ─── Tiny subcomponents (kept local for portability) ──────────────────────────
-
-function Section({ title, children }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-100 px-4 py-2.5 flex items-center gap-2">
-        <span className="text-xs font-bold uppercase tracking-wider text-slate-600">{title}</span>
-      </div>
-      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">{children}</div>
-    </div>
-  )
-}
-
-function Detail({ label, value, span = 1 }) {
-  const cls = span === 3 ? 'sm:col-span-2 lg:col-span-3'
-            : span === 2 ? 'sm:col-span-2'
-            : ''
-  return (
-    <div className={cls}>
-      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">{label}</div>
-      <div className="text-sm text-slate-800 font-medium break-words">{value || <span className="text-slate-400 font-normal">—</span>}</div>
-    </div>
-  )
-}
-
-function StatusBadge({ status }) {
-  const STYLES = {
-    IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
-    QC_REVIEW:                  'bg-purple-50 text-purple-700 ring-purple-200',
-    COMPLETED:                  'bg-green-50 text-green-700 ring-green-200',
-    REJECTED:                   'bg-red-50 text-red-700 ring-red-200',
-    CANCELLED:                  'bg-slate-100 text-slate-500 ring-slate-200',
-  }
-  const LABELS = {
-    IN_PROGRESS:                'In Progress',
-    QC_REVIEW:                  'QC Review',
-    COMPLETED:                  'Completed',
-    REJECTED:                   'Rejected',
-    CANCELLED:                  'Cancelled',
-  }
-  const cls = STYLES[status] || 'bg-slate-100 text-slate-600'
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{LABELS[status] || status}</span>
-}
-
-function TaskBadge({ status }) {
-  const TASK_STYLES = {
-    ASSIGNED:    'bg-blue-50 text-blue-700 ring-blue-200',
-    IN_PROGRESS: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-    REWORK:      'bg-amber-50 text-amber-700 ring-amber-200',
-    QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
-    COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
-    HELD:        'bg-amber-50 text-amber-600 ring-amber-200',
-    CANCELLED:   'bg-slate-100 text-slate-500 ring-slate-200',
-  }
-  const TASK_LABELS = {
-    ASSIGNED: 'Assigned', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
-    QC_REVIEW: 'In QC',   COMPLETED: 'Completed', HELD: 'Held', CANCELLED: 'Cancelled',
-  }
-  const cls = TASK_STYLES[status] || 'bg-slate-100 text-slate-600'
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{TASK_LABELS[status] || status}</span>
-}
-
-/** Compact ID chip — replaces bare "#N" displays with a legible badge. */
-function IdChip({ label, value }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-500 shrink-0">
-      {label && <span className="font-normal text-slate-400">{label}</span>}
-      {value}
-    </span>
-  )
-}
-
-function PriorityBadge({ v }) {
-  const m = { HIGH: 'bg-red-50 text-red-700 ring-red-200', MEDIUM: 'bg-yellow-50 text-yellow-700 ring-yellow-200', LOW: 'bg-green-50 text-green-700 ring-green-200' }
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || '—'}</span>
-}
-
+// ─── Approval trail ───────────────────────────────────────────────────────────
 function ApprovalTrail({ c }) {
-  // Don't render the trail at all if no decisions have been made yet — keeps
-  // the drawer clean while a request is still freshly submitted.
   const hasAny = c.deptDecision || c.marketingDecision || c.interventionDecision
   if (!hasAny) return null
 
   const Stage = ({ label, decision, byName, at }) => (
-    <div className="flex items-center gap-2 flex-wrap text-xs">
-      <span className="text-slate-400 w-[110px] shrink-0">{label}</span>
+    <div className="flex items-center gap-3 flex-wrap text-xs">
+      <span className="w-[100px] shrink-0 text-slate-400 font-medium">{label}</span>
       {decision === 'APPROVED' && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5
+                         text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
           <Icon name="check" className="h-3 w-3" /> Approved
         </span>
       )}
       {decision === 'REJECTED' && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200">
+        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5
+                         text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
           <Icon name="x" className="h-3 w-3" /> Rejected
         </span>
       )}
       {!decision && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5
+                         text-xs font-medium text-slate-500">
           Pending
         </span>
       )}
-      {byName && <span className="text-slate-600">by <span className="font-medium">{byName}</span></span>}
-      {at && <span className="text-slate-400">• {fmtDateTime(at)}</span>}
+      {byName && <span className="text-slate-500">by <span className="font-semibold">{byName}</span></span>}
+      {at && <span className="text-slate-400">· {fmtDateTime(at)}</span>}
     </div>
   )
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-100 px-4 py-2.5">
-        <h4 className="text-sm font-semibold text-slate-800">Approval Trail</h4>
-      </div>
-      <div className="p-4 space-y-2">
-        <Stage
-          label="Department"
-          decision={c.deptDecision}
-          byName={c.deptDecisionByName}
-          at={c.deptDecisionAt}
-        />
-        <Stage
-          label="Marketing"
-          decision={c.marketingDecision}
-          byName={c.marketingDecisionByName}
-          at={c.marketingDecisionAt}
-        />
+    <BriefCard title="Approval Trail" icon="checkCircle" accent="emerald">
+      <div className="space-y-3">
+        <Stage label="Department"  decision={c.deptDecision}         byName={c.deptDecisionByName}         at={c.deptDecisionAt} />
+        <Stage label="Marketing"   decision={c.marketingDecision}    byName={c.marketingDecisionByName}    at={c.marketingDecisionAt} />
         {c.interventionDecision && (
-          // Manager intervention rejection — recorded in its own audit slot
-          // so the original marketing-stage approval row is preserved.
-          <Stage
-            label="Intervention"
-            decision={c.interventionDecision}
-            byName={c.interventionDecisionByName}
-            at={c.interventionDecisionAt}
-          />
+          <Stage label="Intervention" decision={c.interventionDecision} byName={c.interventionDecisionByName} at={c.interventionDecisionAt} />
         )}
         {c.rejectionReason && (
           c.deptDecision === 'REJECTED' ||
           c.marketingDecision === 'REJECTED' ||
           c.interventionDecision === 'REJECTED'
         ) && (
-          <div className="mt-2 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-800 ring-1 ring-rose-200">
-            <span className="font-semibold">Rejection reason:</span> {c.rejectionReason}
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-800">
+            <span className="font-bold">Rejection reason:</span> {c.rejectionReason}
           </div>
         )}
       </div>
-    </div>
+    </BriefCard>
   )
 }
 
-/** Renders requestor/worker answers for dynamic questions on this work task (from campaign API). */
+// ─── Task Q&A ─────────────────────────────────────────────────────────────────
 function TaskQuestionnaireBrief({ items }) {
   if (!items?.length) return null
   return (
-    <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 overflow-hidden">
-      <div className="px-3 py-2 border-b border-indigo-100 flex items-center gap-1.5">
-        <Icon name="clipboard" className="h-3 w-3 text-indigo-500 shrink-0" />
-        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Task Q&amp;A</span>
+    <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 overflow-hidden">
+      <div className="flex items-center gap-1.5 border-b border-indigo-100 px-4 py-2.5">
+        <Icon name="clipboard" className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+        <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600">
+          Task Q&amp;A
+        </span>
       </div>
       <ul className="divide-y divide-indigo-100/70">
-        {items.map((row) => (
-          <li key={row.questionId} className="px-3 py-2.5">
-            <div className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider mb-0.5">{row.questionText}</div>
-            <div className="text-sm text-slate-800 font-medium whitespace-pre-wrap break-words">
+        {items.map(row => (
+          <li key={row.questionId} className="px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-0.5">
+              {row.questionText}
+            </p>
+            <p className="text-sm text-slate-800 font-medium whitespace-pre-wrap break-words">
               {row.answerDisplay ?? <span className="text-slate-400 font-normal italic">—</span>}
-            </div>
+            </p>
           </li>
         ))}
       </ul>
@@ -609,69 +652,43 @@ function TaskQuestionnaireBrief({ items }) {
   )
 }
 
+// ─── Task timestamps strip ────────────────────────────────────────────────────
 function TaskTimestamps({ task }) {
   const steps = [
     {
-      key: 'assigned',
-      label: 'Assigned',
-      ts: task.assignedAt || task.createdAt,
-      icon: (
-        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
-          <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm4 1.5a4.5 4.5 0 0 1 1 2.833V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-.667A4.5 4.5 0 0 1 4 9.5h8Z"/>
-        </svg>
-      ),
+      key: 'assigned', label: 'Assigned', ts: task.assignedAt || task.createdAt,
       done: { dot: 'bg-slate-500', line: 'bg-slate-300', text: 'text-slate-600', card: 'bg-slate-50 border-slate-200' },
+      icon: <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm4 1.5a4.5 4.5 0 0 1 1 2.833V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-.667A4.5 4.5 0 0 1 4 9.5h8Z"/></svg>,
     },
     {
-      key: 'accepted',
-      label: 'Accepted',
-      ts: task.acceptedAt,
-      icon: (
-        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
-          <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.78-1.72a.75.75 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25Z"/>
-        </svg>
-      ),
+      key: 'accepted', label: 'Accepted', ts: task.acceptedAt,
       done: { dot: 'bg-blue-500', line: 'bg-blue-200', text: 'text-blue-700', card: 'bg-blue-50 border-blue-200' },
+      icon: <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5"><path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.78-1.72a.75.75 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25Z"/></svg>,
     },
     {
-      key: 'submitted',
-      label: 'Submitted',
-      ts: task.submittedAt,
-      icon: (
-        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
-          <path d="M.5 9.9a.5.5 0 0 1 .5.5V13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.6a.5.5 0 0 1 1 0V13a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.6a.5.5 0 0 1 .5-.5Z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3Z"/>
-        </svg>
-      ),
+      key: 'submitted', label: 'Submitted', ts: task.submittedAt,
       done: { dot: 'bg-violet-500', line: 'bg-violet-200', text: 'text-violet-700', card: 'bg-violet-50 border-violet-200' },
+      icon: <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5"><path d="M.5 9.9a.5.5 0 0 1 .5.5V13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.6a.5.5 0 0 1 1 0V13a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.6a.5.5 0 0 1 .5-.5Z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3Z"/></svg>,
     },
     {
-      key: 'approved',
-      label: 'Approved',
-      ts: task.completedAt,
-      icon: (
-        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
-          <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0Z"/>
-        </svg>
-      ),
+      key: 'approved', label: 'Approved', ts: task.completedAt,
       done: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' },
+      icon: <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0Z"/></svg>,
     },
   ]
-
-  const fmt = (ts) => new Date(ts).toLocaleString('en-IN', {
+  const fmt = ts => new Date(ts).toLocaleString('en-IN', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
   })
-
   return (
     <div className="overflow-x-auto pb-0.5">
       <div className="flex items-stretch min-w-max gap-0">
         {steps.map((step, i) => {
           const active = !!step.ts
           const isLast = i === steps.length - 1
-          const s = step.done
+          const s      = step.done
           return (
             <div key={step.key} className="flex items-center">
-              {/* Step card */}
-              <div className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 transition ${
+              <div className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 transition ${
                 active ? s.card : 'bg-slate-50 border-slate-100'
               }`}>
                 <span className={`flex h-5 w-5 items-center justify-center rounded-full shrink-0 ${
@@ -680,15 +697,14 @@ function TaskTimestamps({ task }) {
                   <span className="scale-75">{step.icon}</span>
                 </span>
                 <div className="leading-tight">
-                  <div className={`text-[9px] font-bold uppercase tracking-wider ${active ? s.text : 'text-slate-400'}`}>
-                    {step.label}
-                  </div>
-                  <div className={`text-[10px] font-semibold whitespace-nowrap ${active ? 'text-slate-700' : 'text-slate-400'}`}>
-                    {active ? fmt(step.ts) : '—'}
-                  </div>
+                  <div className={`text-[9px] font-bold uppercase tracking-wider ${
+                    active ? s.text : 'text-slate-400'
+                  }`}>{step.label}</div>
+                  <div className={`text-[10px] font-semibold whitespace-nowrap ${
+                    active ? 'text-slate-700' : 'text-slate-400'
+                  }`}>{active ? fmt(step.ts) : '—'}</div>
                 </div>
               </div>
-              {/* Connector */}
               {!isLast && (
                 <div className={`h-px w-3 shrink-0 ${active ? s.line : 'bg-slate-200'}`} />
               )}
@@ -700,70 +716,71 @@ function TaskTimestamps({ task }) {
   )
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Returns a human-readable label and a type tag/colour for a file URL.
- * Avoids showing raw server-generated hash filenames to users.
- */
-function fileDisplayInfo(url, index) {
-  const clean = (url || '').split('?')[0].toLowerCase()
-  const ext   = clean.split('.').pop()
-
-  const MAP = {
-    jpg: { name: 'Image',        cls: 'bg-blue-50 text-blue-600'   },
-    jpeg:{ name: 'Image',        cls: 'bg-blue-50 text-blue-600'   },
-    png: { name: 'Image',        cls: 'bg-blue-50 text-blue-600'   },
-    gif: { name: 'Image',        cls: 'bg-blue-50 text-blue-600'   },
-    webp:{ name: 'Image',        cls: 'bg-blue-50 text-blue-600'   },
-    svg: { name: 'Graphic',      cls: 'bg-cyan-50 text-cyan-600'   },
-    mp4: { name: 'Video',        cls: 'bg-violet-50 text-violet-600'},
-    mov: { name: 'Video',        cls: 'bg-violet-50 text-violet-600'},
-    avi: { name: 'Video',        cls: 'bg-violet-50 text-violet-600'},
-    webm:{ name: 'Video',        cls: 'bg-violet-50 text-violet-600'},
-    wmv: { name: 'Video',        cls: 'bg-violet-50 text-violet-600'},
-    pdf: { name: 'PDF',          cls: 'bg-red-50 text-red-600'     },
-    doc: { name: 'Document',     cls: 'bg-indigo-50 text-indigo-600'},
-    docx:{ name: 'Document',     cls: 'bg-indigo-50 text-indigo-600'},
-    xls: { name: 'Spreadsheet',  cls: 'bg-green-50 text-green-600' },
-    xlsx:{ name: 'Spreadsheet',  cls: 'bg-green-50 text-green-600' },
-    ppt: { name: 'Presentation', cls: 'bg-orange-50 text-orange-600'},
-    pptx:{ name: 'Presentation', cls: 'bg-orange-50 text-orange-600'},
+// ─── Shared badge / chip components ──────────────────────────────────────────
+function IdChip({ label, value }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5
+                     text-[10px] font-bold tabular-nums text-slate-500 shrink-0">
+      {label && <span className="font-normal text-slate-400">{label}</span>}
+      {value}
+    </span>
+  )
+}
+function PriorityBadge({ v }) {
+  const m = {
+    HIGH:   'bg-red-50 text-red-700 ring-red-200',
+    MEDIUM: 'bg-yellow-50 text-yellow-700 ring-yellow-200',
+    LOW:    'bg-green-50 text-green-700 ring-green-200',
   }
-
-  const entry = MAP[ext]
-  const num   = index + 1
-  const label = entry ? `${entry.name} ${num}` : `Attachment ${num}`
-  const icon  = entry
-    ? { tag: entry.name.slice(0, 3).toUpperCase(), cls: entry.cls }
-    : { tag: 'FILE', cls: 'bg-slate-100 text-slate-500' }
-
-  return { label, icon }
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1
+                      ${m[v] || 'bg-slate-100 text-slate-600'}`}>
+      {v || '—'}
+    </span>
+  )
+}
+function StatusBadge({ status }) {
+  const S = {
+    IN_PROGRESS: 'bg-blue-50 text-blue-700 ring-blue-200',
+    QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
+    COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
+    REJECTED:    'bg-red-50 text-red-700 ring-red-200',
+    CANCELLED:   'bg-slate-100 text-slate-500 ring-slate-200',
+  }
+  const L = {
+    IN_PROGRESS: 'In Progress', QC_REVIEW: 'QC Review',
+    COMPLETED: 'Completed', REJECTED: 'Rejected', CANCELLED: 'Cancelled',
+  }
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1
+                      ${S[status] || 'bg-slate-100 text-slate-600'}`}>
+      {L[status] || status}
+    </span>
+  )
+}
+function TaskBadge({ status }) {
+  const S = {
+    ASSIGNED:    'bg-blue-50 text-blue-700 ring-blue-200',
+    IN_PROGRESS: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    REWORK:      'bg-amber-50 text-amber-700 ring-amber-200',
+    QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
+    COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
+    HELD:        'bg-amber-50 text-amber-600 ring-amber-200',
+    CANCELLED:   'bg-slate-100 text-slate-500 ring-slate-200',
+  }
+  const L = {
+    ASSIGNED: 'Assigned', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
+    QC_REVIEW: 'In QC',   COMPLETED: 'Completed', HELD: 'Held', CANCELLED: 'Cancelled',
+  }
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1
+                      ${S[status] || 'bg-slate-100 text-slate-600'}`}>
+      {L[status] || status}
+    </span>
+  )
 }
 
-/**
- * Multi-select fields are stored as comma-separated display names.
- * Splits and re-joins to normalise spacing.
- */
-function fmtMultiValue(v) {
-  if (!v) return ''
-  return String(v).split(',').map(s => s.trim()).filter(Boolean).join(', ')
-}
-function fmtDateTime(d) {
-  return d ? new Date(d).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : ''
-}
-/** target_location is stored as a JSON-string of city names — pretty-print it. */
-function fmtTargetLocation(raw) {
-  if (!raw) return ''
-  try {
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed)) return parsed.join(', ')
-  } catch { /* fall through — raw was not JSON */ }
-  return raw
-}
-
-// ─── Requestor Rework Modal ───────────────────────────────────────────────────
-
+// ─── Requestor rework modal ───────────────────────────────────────────────────
 function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClose, submitting }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
@@ -772,47 +789,38 @@ function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClo
           <div>
             <h3 className="text-sm font-bold text-slate-900">Request Rework</h3>
             <p className="mt-0.5 text-xs text-slate-500">
-              Tell the team what needs to be changed for task{' '}
-              <span className="font-medium text-slate-700">#{task.taskId}</span>.
+              Task <span className="font-semibold text-slate-700">#{task.taskId}</span>
+              {' · '}{task.granularTaskName}
             </p>
           </div>
           <button onClick={onClose}
-            className="rounded-full p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+            className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition">
             <Icon name="x" className="h-4 w-4" />
           </button>
         </div>
-        <div className="mx-5 mt-4 rounded-lg border border-rose-200 bg-rose-50/50 px-4 py-3">
-          <p className="text-xs font-semibold text-slate-600 mb-0.5">
-            {task.granularTaskName || 'Task'}
-          </p>
-          <p className="text-xs text-slate-500">
-            Task {task.taskId} · Currently{' '}
-            <span className="font-medium text-green-700">Delivered</span>
-          </p>
-        </div>
-        <div className="px-5 py-4">
-          <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-            Rework Message <span className="text-rose-500">*</span>
+        <div className="px-5 py-4 space-y-3">
+          <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">
+            Rework Message <span className="text-rose-500 normal-case font-normal">*</span>
           </label>
           <textarea
             value={message}
             onChange={e => onMessageChange(e.target.value)}
             rows={4}
             placeholder="Describe what needs to be changed or improved…"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-800
                        placeholder:text-slate-400 focus:border-rose-400 focus:outline-none
-                       focus:ring-1 focus:ring-rose-300 resize-none"
+                       focus:ring-2 focus:ring-rose-100 resize-none transition"
           />
-          <p className="mt-1 text-xs text-slate-400">This message will be visible to the marketing team.</p>
+          <p className="text-xs text-slate-400">This message will be visible to the marketing team.</p>
         </div>
         <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-100">
           <button onClick={onClose} disabled={submitting}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600
                        hover:bg-slate-50 transition disabled:opacity-60">
             Cancel
           </button>
           <button onClick={onConfirm} disabled={submitting || !message?.trim()}
-            className="flex items-center gap-2 rounded-lg bg-rose-600 px-5 py-2 text-sm font-semibold
+            className="flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-2 text-sm font-bold
                        text-white hover:bg-rose-700 disabled:opacity-50 transition shadow-sm">
             {submitting ? (
               <><span className="animate-spin h-4 w-4 rounded-full border-2 border-white border-t-transparent" /> Sending…</>
@@ -824,4 +832,53 @@ function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClo
       </div>
     </div>
   )
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function fileDisplayInfo(url, index) {
+  const clean = (url || '').split('?')[0].toLowerCase()
+  const ext   = clean.split('.').pop()
+  const MAP = {
+    jpg:  { name: 'Image',        cls: 'bg-blue-50 text-blue-600' },
+    jpeg: { name: 'Image',        cls: 'bg-blue-50 text-blue-600' },
+    png:  { name: 'Image',        cls: 'bg-blue-50 text-blue-600' },
+    gif:  { name: 'Image',        cls: 'bg-blue-50 text-blue-600' },
+    webp: { name: 'Image',        cls: 'bg-blue-50 text-blue-600' },
+    svg:  { name: 'Graphic',      cls: 'bg-cyan-50 text-cyan-600' },
+    mp4:  { name: 'Video',        cls: 'bg-violet-50 text-violet-600' },
+    mov:  { name: 'Video',        cls: 'bg-violet-50 text-violet-600' },
+    avi:  { name: 'Video',        cls: 'bg-violet-50 text-violet-600' },
+    webm: { name: 'Video',        cls: 'bg-violet-50 text-violet-600' },
+    wmv:  { name: 'Video',        cls: 'bg-violet-50 text-violet-600' },
+    pdf:  { name: 'PDF',          cls: 'bg-red-50 text-red-600' },
+    doc:  { name: 'Document',     cls: 'bg-indigo-50 text-indigo-600' },
+    docx: { name: 'Document',     cls: 'bg-indigo-50 text-indigo-600' },
+    xls:  { name: 'Spreadsheet',  cls: 'bg-green-50 text-green-600' },
+    xlsx: { name: 'Spreadsheet',  cls: 'bg-green-50 text-green-600' },
+    ppt:  { name: 'Presentation', cls: 'bg-orange-50 text-orange-600' },
+    pptx: { name: 'Presentation', cls: 'bg-orange-50 text-orange-600' },
+  }
+  const entry = MAP[ext]
+  const num   = index + 1
+  return {
+    label: entry ? `${entry.name} ${num}` : `Attachment ${num}`,
+    icon:  entry
+      ? { tag: entry.name.slice(0, 3).toUpperCase(), cls: entry.cls }
+      : { tag: 'FILE', cls: 'bg-slate-100 text-slate-500' },
+  }
+}
+function fmtMultiValue(v) {
+  if (!v) return ''
+  return String(v).split(',').map(s => s.trim()).filter(Boolean).join(', ')
+}
+function fmtDateTime(d) {
+  return d ? new Date(d).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : ''
+}
+function fmtTargetLocation(raw) {
+  if (!raw) return ''
+  try {
+    const p = JSON.parse(raw)
+    if (Array.isArray(p)) return p.join(', ')
+  } catch { /* not JSON */ }
+  return raw
 }
