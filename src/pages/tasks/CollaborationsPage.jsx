@@ -12,14 +12,24 @@ import { useAuth } from '../../auth/AuthContext'
 function fmtTime(iso) {
   if (!iso) return ''
   try {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
   } catch { return '' }
 }
 
 function fmtDate(iso) {
   if (!iso) return ''
   try {
-    return new Date(iso).toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' })
+    const d   = new Date(iso)
+    const now = new Date()
+    const sameDay = (a, b) =>
+      a.getDate() === b.getDate() &&
+      a.getMonth() === b.getMonth() &&
+      a.getFullYear() === b.getFullYear()
+    const yesterday = new Date(now)
+    yesterday.setDate(now.getDate() - 1)
+    if (sameDay(d, now))       return 'Today'
+    if (sameDay(d, yesterday)) return 'Yesterday'
+    return d.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' })
   } catch { return '' }
 }
 
@@ -71,7 +81,7 @@ function ChatPanel({ task, onClose }) {
   const typingTimer = useRef(null)
 
   const isCompleted   = task.status === 'COMPLETED'
-  const currentUserId = user?.userId
+  const currentUserId = user?.id     // auth context stores id (not userId)
 
   const { messages, isConnected, typingUsers, sendTyping, setMessages } =
     useTaskChat(task.taskId, true, currentUserId)
