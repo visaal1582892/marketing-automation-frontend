@@ -6,6 +6,7 @@ import campaignsApi from '../../api/campaigns'
 import { masterApi, granularTasksApi } from '../../api/masterData'
 import { enumsApi } from '../../api/enums'
 import api from '../../api/client'
+import tasksApi from '../../api/tasks'
 import Icon from '../../components/Icon'
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
@@ -559,41 +560,62 @@ function CampaignFilesSection({ files, onFilesChange, uploading, setUploading })
   const fileInputRef = useRef(null)
 
   const handleFileSelect = async (e) => {
-    const selected = Array.from(e.target.files)
+    const selected = Array.from(e.target.files || [])
     if (!selected.length) return
     e.target.value = ''
 
-    // Add placeholder entries
-    const placeholders = selected.map(f => ({ name: f.name, url: null, uploading: true, error: null }))
-    onFilesChange(prev => [...prev, ...placeholders])
+    // Client-side: block doc/docx
+    const blocked = selected.filter(f => /\.(docx?)$/i.test(f.name))
+    if (blocked.length) {
+      blocked.forEach(f => {
+        onFilesChange(prev => [...prev, { name: f.name, url: null, uploading: false, error: 'DOC/DOCX not allowed — convert to PDF' }])
+      })
+    }
+    const allowed = selected.filter(f => !/\.(docx?)$/i.test(f.name))
+    if (!allowed.length) return
+
+    // Add uploading placeholders immediately (one per file)
+    onFilesChange(prev => [
+      ...prev,
+      ...allowed.map(f => ({ name: f.name, url: null, uploading: true, error: null })),
+    ])
     setUploading(true)
 
-    try {
-      const formData = new FormData()
-      selected.forEach(f => formData.append('files', f))
-      const res = await api.post('/upload/asset', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+    // Upload each file independently with a 120 s timeout (via tasksApi.uploadAssets)
+    // so a single failure doesn't kill the whole batch.
+    const results = await Promise.allSettled(
+      allowed.map(async (file) => {
+        const fd = new FormData()
+        fd.append('files', file)
+        const res = await tasksApi.uploadAssets(fd)
+        return {
+          name: file.name,
+          url:              res.data?.urls?.[0]              || null,
+          thumbnailUrl:     res.data?.thumbnailUrls?.[0]     || null,
+          originalFilename: res.data?.originalFilenames?.[0] || file.name,
+        }
       })
-      const urls = res.data?.urls || []
-      onFilesChange(prev => {
-        const next = [...prev]
-        // Replace placeholder entries for the files we just uploaded
-        let urlIdx = 0
-        for (let i = 0; i < next.length; i++) {
-          if (next[i].uploading && next[i].error === null) {
-            next[i] = { ...next[i], url: urls[urlIdx++] || null, uploading: false }
-            if (urlIdx >= urls.length) break
+    )
+
+    // Update each placeholder in order
+    onFilesChange(prev => {
+      const next  = [...prev]
+      let pending = 0   // index into results
+      for (let i = 0; i < next.length; i++) {
+        if (next[i].uploading && next[i].error === null && pending < results.length) {
+          const result = results[pending++]
+          if (result.status === 'fulfilled') {
+            next[i] = { ...next[i], url: result.value.url, uploading: false }
+          } else {
+            const msg = result.reason?.response?.data?.message || result.reason?.message || 'Upload failed'
+            next[i] = { ...next[i], uploading: false, error: msg.length > 60 ? 'Upload failed' : msg }
           }
         }
-        return next
-      })
-    } catch {
-      onFilesChange(prev => prev.map(f =>
-        f.uploading ? { ...f, uploading: false, error: 'Upload failed' } : f
-      ))
-    } finally {
-      setUploading(false)
-    }
+      }
+      return next
+    })
+
+    setUploading(false)
   }
 
   const removeFile = (idx) => {
@@ -618,6 +640,7 @@ function CampaignFilesSection({ files, onFilesChange, uploading, setUploading })
           type="file"
           multiple
           className="hidden"
+          accept="image/*,video/*,.pdf,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.doc,.docx"
           onChange={handleFileSelect}
         />
       </div>

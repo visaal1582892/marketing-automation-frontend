@@ -79,10 +79,11 @@ function TypingDots() {
 }
 
 function ChatPanel({ task, onClose }) {
-  const toast                 = useToast()
-  const { user }              = useAuth()
-  const [text, setText]       = useState('')
-  const [sending, setSending] = useState(false)
+  const toast                   = useToast()
+  const { user }                = useAuth()
+  const [text, setText]         = useState('')
+  const [sending, setSending]   = useState(false)
+  const [members, setMembers]   = useState([])
   const bottomRef   = useRef(null)
   const typingTimer = useRef(null)
 
@@ -108,6 +109,12 @@ function ChatPanel({ task, onClose }) {
   useEffect(() => {
     collaborationApi.getMessages(task.taskId)
       .then(res => setMessages(res.data || []))
+      .catch(() => {})
+  }, [task.taskId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    collaborationApi.getMembers(task.taskId)
+      .then(res => setMembers(res.data || []))
       .catch(() => {})
   }, [task.taskId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -147,19 +154,27 @@ function ChatPanel({ task, onClose }) {
 
         {/* ── Header ─────────────────────────────────────────────────────────── */}
         <div className="shrink-0 bg-brand-600 px-5 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <Icon name="messageSquare" className="h-4.5 w-4.5 text-white" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="h-9 w-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0 mt-0.5">
+                <Icon name="messageSquare" className="h-4 w-4 text-white" />
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-white leading-tight truncate max-w-[260px]">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-white leading-tight truncate max-w-[240px]">
                   {task.granularTaskName || task.taskId}
                 </h3>
-                <p className="text-[11px] text-brand-100 mt-px">Campaign {task.campaignId}</p>
+                <p className="text-[10px] text-brand-200 mt-0.5">Campaign #{task.campaignId}</p>
+                {members.length > 0 && (
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <Icon name="users" className="h-3 w-3 text-white/60 shrink-0" />
+                    <p className="text-[10px] text-white/80 leading-tight line-clamp-1">
+                      {members.map(m => (m.userName || m.fullName || '').split(' ')[0]).join(', ')}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 shrink-0">
               <div className="flex items-center gap-1.5">
                 <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-accent-400' : 'bg-white/40'}`} />
                 <span className="text-[10px] text-brand-100">{isConnected ? 'Live' : 'Connecting…'}</span>
@@ -283,58 +298,158 @@ function ChatPanel({ task, onClose }) {
   )
 }
 
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
+const isImage    = (url) => url && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url)
+const isVideo    = (url) => url && /\.(mp4|mov|webm|avi)(\?|$)/i.test(url)
+
+/** Returns true for Office / spreadsheet formats that browsers cannot render natively. */
+const isOfficeDoc = (url, filename) => {
+  const name = filename || url || ''
+  return /\.(xls|xlsx|ppt|pptx|doc|docx)(\?|$)/i.test(name)
+}
+
+const displayName = (a)  => a.originalFilename || (
+  (() => { try { return decodeURIComponent(a.url.split('/').pop().split('?')[0]) } catch { return 'File' } })()
+)
+
+/**
+ * Returns the URL to open the file.
+ * Office files are routed through Microsoft Office Online viewer so they render
+ * in the browser rather than silently downloading.
+ * Images, videos and PDFs open directly at their CDN URL.
+ */
+const openUrl = (assetUrl, filename) => {
+  if (isOfficeDoc(assetUrl, filename)) {
+    return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(assetUrl)}`
+  }
+  return assetUrl
+}
+
+/** Trigger download via the backend proxy (avoids cross-origin restriction). */
+const triggerDownload = (taskId, assetId, filename) => {
+  const a = document.createElement('a')
+  a.href = `/api/collaborations/${taskId}/assets/${assetId}/download`
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
+// ─── Reusable file-row with spinner ──────────────────────────────────────────
+
+function UploadRow({ name, status, error }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+      {status === 'uploading' ? (
+        <svg className="h-3.5 w-3.5 animate-spin text-brand-500 shrink-0" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+        </svg>
+      ) : status === 'done' ? (
+        <Icon name="check" className="h-3.5 w-3.5 text-accent-500 shrink-0" />
+      ) : (
+        <Icon name="alertCircle" className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+      )}
+      <span className="flex-1 text-xs text-slate-700 truncate">{name}</span>
+      {status === 'uploading' && <span className="text-[10px] text-slate-400 shrink-0">Uploading…</span>}
+      {error && <span className="text-[10px] text-rose-500 shrink-0 truncate max-w-[120px]" title={error}>{error}</span>}
+    </div>
+  )
+}
+
 // ─── Asset Panel ──────────────────────────────────────────────────────────────
 
 function AssetPanel({ task, onClose }) {
   const toast = useToast()
   const { user } = useAuth()
-  const [assets,      setAssets]      = useState([])
-  const [loading,     setLoading]     = useState(true)
-  const [uploading,   setUploading]   = useState(false)
-  const [uploadError, setUploadError] = useState('')
+  const [assets,       setAssets]       = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [uploadError,  setUploadError]  = useState('')
+  const [pendingFiles, setPendingFiles] = useState([])   // { name, status, error }
   const fileRef = useRef(null)
 
   const currentUserId = user?.id
+  const isUploading   = pendingFiles.some(f => f.status === 'uploading')
 
-  useEffect(() => {
+  const refreshAssets = () =>
     collaborationApi.getAssets(task.taskId)
       .then(res => setAssets(res.data || []))
       .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [task.taskId])
+
+  useEffect(() => {
+    refreshAssets().finally(() => setLoading(false))
+  }, [task.taskId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const showError = (msg) => {
     setUploadError(msg)
-    setTimeout(() => setUploadError(''), 5000)
+    setTimeout(() => setUploadError(''), 6000)
   }
 
-  const uploadFile = async (file) => {
+  const uploadFiles = async (files) => {
     setUploadError('')
-    if (/\.(docx?)$/i.test(file.name)) {
-      showError('DOC and DOCX files are not allowed. Please convert to PDF or an image and try again.')
-      return
-    }
-    setUploading(true)
-    const fd = new FormData()
-    fd.append('files', file)
-    try {
-      const res = await tasksApi.uploadAssets(fd)
-      const url              = res.data?.urls?.[0]
-      const thumbnailUrl     = res.data?.thumbnailUrls?.[0] || null
-      const originalFilename = res.data?.originalFilenames?.[0] || file.name
-      if (url) {
-        await collaborationApi.addAsset(task.taskId, url, thumbnailUrl, originalFilename)
-        const refresh = await collaborationApi.getAssets(task.taskId)
-        setAssets(refresh.data || [])
-        toast.success?.('Asset uploaded.')
+    const blocked = []
+    const allowed = []
+    for (const file of files) {
+      if (/\.(docx?)$/i.test(file.name)) {
+        blocked.push(file.name)
+      } else {
+        allowed.push(file)
       }
-    } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Upload failed.'
-      showError(msg.toLowerCase().includes('unsupported') || msg.toLowerCase().includes('format')
-        ? 'File format not supported. DOC/DOCX files are not accepted — please convert to PDF or an image.'
-        : msg)
-    } finally {
-      setUploading(false)
+    }
+    if (blocked.length) {
+      showError(`DOC/DOCX not allowed: ${blocked.join(', ')} — convert to PDF.`)
+    }
+    if (!allowed.length) return
+
+    // Add one placeholder per file immediately
+    const placeholders = allowed.map(f => ({ name: f.name, status: 'uploading', error: null }))
+    // Snapshot current length BEFORE the state update so we know which indices are ours
+    const startIdx = pendingFiles.length
+    setPendingFiles(prev => [...prev, ...placeholders])
+
+    // Upload EACH file independently so one failure doesn't cancel the rest
+    const results = await Promise.allSettled(
+      allowed.map(async (file) => {
+        const fd = new FormData()
+        fd.append('files', file)
+        const res = await tasksApi.uploadAssets(fd)
+        const url              = res.data?.urls?.[0]              || null
+        const thumbnailUrl     = res.data?.thumbnailUrls?.[0]     || null
+        const originalFilename = res.data?.originalFilenames?.[0] || file.name
+        if (!url) throw new Error('No URL returned from server')
+        await collaborationApi.addAsset(task.taskId, url, thumbnailUrl, originalFilename)
+        return { url, thumbnailUrl, originalFilename }
+      })
+    )
+
+    // Update each placeholder with its own result
+    setPendingFiles(prev => {
+      const next = [...prev]
+      results.forEach((result, i) => {
+        const idx = startIdx + i
+        if (idx >= next.length) return
+        if (result.status === 'fulfilled') {
+          next[idx] = { ...next[idx], status: 'done' }
+        } else {
+          const raw = result.reason?.response?.data?.message || result.reason?.message || 'Upload failed'
+          const msg = raw.toLowerCase().includes('unsupported') || raw.toLowerCase().includes('format')
+            ? 'Format not supported'
+            : raw.length > 50 ? 'Upload failed' : raw
+          next[idx] = { ...next[idx], status: 'error', error: msg }
+        }
+      })
+      return next
+    })
+
+    const succeeded = results.filter(r => r.status === 'fulfilled').length
+    const failed    = results.length - succeeded
+    if (succeeded > 0) {
+      await refreshAssets()
+      toast.success?.(`${succeeded} file${succeeded > 1 ? 's' : ''} uploaded${failed > 0 ? `, ${failed} failed` : ''}.`)
+    }
+    if (failed > 0 && succeeded === 0) {
+      showError(`${failed} file${failed > 1 ? 's' : ''} failed to upload. Check the format and try again.`)
     }
   }
 
@@ -348,15 +463,15 @@ function AssetPanel({ task, onClose }) {
     }
   }
 
-  const isImage    = (url) => url && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url)
-  const isVideo    = (url) => url && /\.(mp4|mov|webm|avi)(\?|$)/i.test(url)
-  const displayName = (a)  => a.originalFilename || (
-    (() => { try { return decodeURIComponent(a.url.split('/').pop().split('?')[0]) } catch { return 'File' } })()
-  )
+  const downloadAll = () => {
+    assets.forEach(a => triggerDownload(task.taskId, a.assetId, displayName(a)))
+  }
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg max-h-[88vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden">
+
+        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
           <div>
             <h3 className="text-sm font-bold text-slate-900">Assets</h3>
@@ -364,28 +479,45 @@ function AssetPanel({ task, onClose }) {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={downloadAll}
+              disabled={assets.length === 0}
+              title={assets.length === 0 ? 'No assets to download' : `Download all ${assets.length} asset${assets.length !== 1 ? 's' : ''}`}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Icon name="download" className="h-3.5 w-3.5" />
+              Download All
+            </button>
+            <button
               onClick={() => fileRef.current?.click()}
-              disabled={uploading}
+              disabled={isUploading}
               className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 transition disabled:opacity-50"
             >
               <Icon name="upload" className="h-3.5 w-3.5" />
-              {uploading ? 'Uploading…' : 'Add Asset'}
+              {isUploading ? 'Uploading…' : 'Add Files'}
             </button>
             <button onClick={onClose} className="rounded-full p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
               <Icon name="x" className="h-4 w-4" />
             </button>
           </div>
         </div>
+
+        {/* Hidden multi-file input */}
         <input
           ref={fileRef}
           type="file"
+          multiple
           className="sr-only"
-          onChange={e => { if (e.target.files?.[0]) uploadFile(e.target.files[0]); e.target.value = '' }}
           accept="image/*,video/*,.pdf,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.doc,.docx"
+          onChange={e => {
+            const files = Array.from(e.target.files || [])
+            if (files.length) uploadFiles(files)
+            e.target.value = ''
+          }}
         />
 
+        {/* Error banner */}
         {uploadError && (
-          <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700">
+          <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700 shrink-0">
             <svg className="h-4 w-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
             </svg>
@@ -393,17 +525,27 @@ function AssetPanel({ task, onClose }) {
           </div>
         )}
 
-        <div className="overflow-y-auto p-4 space-y-2">
+        {/* In-progress uploads */}
+        {pendingFiles.length > 0 && (
+          <div className="mx-4 mt-3 space-y-1 shrink-0">
+            {pendingFiles.map((f, i) => (
+              <UploadRow key={i} name={f.name} status={f.status} error={f.error} />
+            ))}
+          </div>
+        )}
+
+        {/* Asset list */}
+        <div className="overflow-y-auto p-4 space-y-2 flex-1">
           {loading ? (
             <p className="text-center text-slate-400 text-sm py-8">Loading…</p>
           ) : assets.length === 0 ? (
             <div className="text-center py-10">
               <Icon name="upload" className="mx-auto h-8 w-8 text-slate-200 mb-2" />
-              <p className="text-sm text-slate-400">No assets yet. Upload one above.</p>
+              <p className="text-sm text-slate-400">No assets yet. Upload files above.</p>
             </div>
           ) : assets.map((a, i) => (
             <div key={a.assetId ?? i} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
-              {/* Preview — prefer thumbnail when available, fall back to full URL for images */}
+              {/* Preview */}
               {(a.thumbnailUrl || isImage(a.url)) ? (
                 <img src={a.thumbnailUrl || a.url} alt="" className="h-14 w-14 rounded-lg object-cover shrink-0 border border-slate-200" />
               ) : isVideo(a.url) ? (
@@ -421,17 +563,16 @@ function AssetPanel({ task, onClose }) {
                 <p className="text-xs font-semibold text-slate-800 truncate">{displayName(a)}</p>
                 <p className="text-[10px] text-slate-400 mt-0.5">by {a.userName} · {fmtDate(a.createdAt)}</p>
                 <div className="flex items-center gap-2 mt-1.5">
-                  <a
-                    href={a.url}
-                    download={displayName(a)}
+                  <button
+                    onClick={() => triggerDownload(task.taskId, a.assetId, displayName(a))}
                     className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-600 hover:text-brand-800 transition"
                   >
                     <Icon name="download" className="h-3 w-3" />
                     Download
-                  </a>
+                  </button>
                   <span className="text-slate-200">|</span>
                   <a
-                    href={a.url}
+                    href={openUrl(a.url, displayName(a))}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 hover:text-slate-700 transition"
@@ -588,114 +729,111 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh, unreadCount = 
 
   return (
     <>
-      <div className={`relative rounded-2xl border-l-4 ${cfg.border} bg-white shadow-sm hover:shadow-md transition-shadow overflow-hidden ${isCardBlocked ? 'opacity-70' : ''}`}>
-        {/* Top strip */}
-        <div className="flex items-start justify-between px-4 pt-4 pb-3 border-b border-slate-100">
-          <div className="flex-1 min-w-0 pr-3">
-            <p className="text-sm font-bold text-slate-900 leading-tight truncate">
+      {/* Fixed-height card — uniform across all cards */}
+      <div className={`relative flex flex-col rounded-2xl border-l-4 ${cfg.border} bg-white shadow-sm hover:shadow-md transition-shadow overflow-hidden ${isCardBlocked ? 'opacity-70' : ''}`}
+           style={{ height: '178px' }}>
+
+        {/* ── Content area ── */}
+        <div className="flex-1 flex flex-col px-4 pt-3.5 pb-2 min-h-0 overflow-hidden">
+
+          {/* Row 1: title + all badges on the same line */}
+          <div className="flex items-center gap-2">
+            <p className="flex-1 text-sm font-bold text-slate-900 leading-tight truncate min-w-0">
               {task.granularTaskName || task.requirementTypeName || 'Task'}
             </p>
-            <p className="text-[11px] text-slate-400 mt-0.5 truncate">{task.requirementTypeName || ''} · Campaign #{task.campaignId}</p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
             {unreadCount > 0 && (
-              <span className="animate-pulse inline-flex items-center rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
-                {unreadCount} new
+              <span className="animate-pulse inline-flex items-center rounded-full bg-brand-600 px-1.5 py-0.5 text-[9px] font-bold text-white shrink-0">
+                {unreadCount}
               </span>
             )}
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cfg.badge}`}>
+            <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[9px] font-semibold shrink-0 ${cfg.badge}`}>
               <Icon name={cfg.icon} className="h-2.5 w-2.5" />
               {cfg.label}
             </span>
             <StatusBadge status={task.status} />
           </div>
+
+          {/* Row 2: campaign + task ID on one line */}
+          <p className="text-[10px] text-slate-400 mt-1 truncate">
+            Campaign #{task.campaignId}
+            <span className="mx-1.5 text-slate-200">·</span>
+            <span className="font-mono text-[9px]">{task.taskId}</span>
+          </p>
+
+          {/* Row 3: assignee & requestor on one line with separator */}
+          <div className="flex items-center gap-1 mt-1.5 text-[10px] text-slate-500 min-w-0 overflow-hidden">
+            {task.assigneeName && (
+              <>
+                <Icon name="user" className="h-2.5 w-2.5 text-slate-300 shrink-0" />
+                <span className="font-medium text-slate-700 truncate max-w-[100px]">{task.assigneeName}</span>
+                <span className="text-slate-300 shrink-0">assignee</span>
+              </>
+            )}
+            {task.assigneeName && task.requestorName && (
+              <span className="text-slate-200 mx-0.5 shrink-0">·</span>
+            )}
+            {task.requestorName && (
+              <>
+                <Icon name="briefcase" className="h-2.5 w-2.5 text-slate-300 shrink-0" />
+                <span className="font-medium text-slate-700 truncate max-w-[100px]">{task.requestorName}</span>
+                <span className="text-slate-300 shrink-0">requestor</span>
+              </>
+            )}
+          </div>
+
+          {/* Row 4: inline status banner (single compact line, only when needed) */}
+          {isCardBlocked ? (
+            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-brand-700">
+              <Icon name="lock" className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{{
+                HELD:      'On hold — collaboration paused.',
+                QC_REVIEW: 'In QC review — collaboration paused.',
+                CANCELLED: 'Task cancelled.',
+              }[task.status]}</span>
+            </div>
+          ) : task.chatPaused ? (
+            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-amber-600">
+              <Icon name="lock" className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">Chat paused — assets still available.</span>
+            </div>
+          ) : null}
         </div>
 
-        {/* Meta row */}
-        <div className="flex flex-wrap gap-x-5 gap-y-1 px-4 py-2.5 text-[11px] text-slate-500">
-          {task.assigneeName && (
-            <span className="flex items-center gap-1">
-              <Icon name="user" className="h-3 w-3 text-slate-300" />
-              <span className="font-medium text-slate-700">{task.assigneeName}</span>
-              <span className="text-slate-400">assignee</span>
-            </span>
-          )}
-          {task.requestorName && (
-            <span className="flex items-center gap-1">
-              <Icon name="briefcase" className="h-3 w-3 text-slate-300" />
-              <span className="font-medium text-slate-700">{task.requestorName}</span>
-              <span className="text-slate-400">requestor</span>
-            </span>
-          )}
-          <span className="font-mono text-slate-300">{task.taskId}</span>
-        </div>
+        {/* ── Action row — icon-only circular buttons, all in one line ── */}
+        <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-t border-slate-100">
 
-        {/* Blocked banner */}
-        {isCardBlocked && (
-          <div className="mx-4 mb-2 rounded-lg bg-brand-50 border border-brand-100 px-3 py-2 flex items-center gap-1.5">
-            <Icon name="lock" className="h-3.5 w-3.5 text-brand-600 shrink-0" />
-            <span className="text-xs text-brand-700 font-medium">
-              {{
-                HELD:      'Task is on hold — collaboration paused.',
-                QC_REVIEW: 'Task is in QC review — collaboration paused.',
-                CANCELLED: 'Task has been cancelled.',
-              }[task.status]}
-            </span>
-          </div>
-        )}
-
-        {/* Chat paused banner (card not fully blocked) */}
-        {task.chatPaused && !isCardBlocked && (
-          <div className="mx-4 mb-2 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 flex items-center gap-1.5">
-            <Icon name="lock" className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-            <span className="text-xs text-amber-700 font-medium">Chat paused — assets still available.</span>
-          </div>
-        )}
-
-        {/* Action buttons */}
-        <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-slate-50 border-t border-slate-100">
-          {/* Primary: Chat */}
-          <button onClick={isCardBlocked ? undefined : onChat} disabled={isCardBlocked}
-            className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 active:scale-95 transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
+          <button title="Chat" onClick={isCardBlocked ? undefined : onChat} disabled={isCardBlocked}
+            className="h-8 w-8 rounded-full bg-brand-600 flex items-center justify-center text-white hover:bg-brand-700 active:scale-95 transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed shrink-0">
             <Icon name="messageSquare" className="h-3.5 w-3.5" />
-            Chat
           </button>
 
-          {/* Assets — always accessible even when chat paused; blocked only when card is blocked */}
-          <button onClick={isCardBlocked ? undefined : onAssets} disabled={isCardBlocked}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed">
+          <button title="Assets" onClick={isCardBlocked ? undefined : onAssets} disabled={isCardBlocked}
+            className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed shrink-0">
             <Icon name="upload" className="h-3.5 w-3.5" />
-            Assets
           </button>
 
-          {/* Brief */}
-          <button onClick={onBrief}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition">
+          <button title="Brief" onClick={onBrief}
+            className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-100 transition shrink-0">
             <Icon name="eye" className="h-3.5 w-3.5" />
-            Brief
           </button>
 
-          {/* Add People — owner/admin/manager only, not when card blocked */}
           {canManage && !isCardBlocked && (
-            <button onClick={() => setShowAddPeople(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-accent-200 bg-accent-50 px-3 py-1.5 text-xs font-medium text-accent-700 hover:bg-accent-100 transition">
+            <button title="Add People" onClick={() => setShowAddPeople(true)}
+              className="h-8 w-8 rounded-full border border-accent-200 bg-accent-50 flex items-center justify-center text-accent-700 hover:bg-accent-100 transition shrink-0">
               <Icon name="userPlus" className="h-3.5 w-3.5" />
-              Add People
             </button>
           )}
 
-          {/* Pause / Resume Chat — owner/admin only, not when card is blocked */}
           {canPauseChat && (
-            <button onClick={handleToggleChat} disabled={togglingChat}
-              className={`ml-auto flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50
+            <button title={task.chatPaused ? 'Resume Chat' : 'Pause Chat'}
+              onClick={handleToggleChat} disabled={togglingChat}
+              className={`h-8 w-8 rounded-full flex items-center justify-center transition disabled:opacity-50 shrink-0 ml-auto
                 ${task.chatPaused
-                  ? 'border-accent-300 bg-accent-500 text-white hover:bg-accent-600'
-                  : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'}`}>
+                  ? 'bg-accent-500 text-white hover:bg-accent-600'
+                  : 'border border-slate-300 bg-white text-slate-500 hover:bg-slate-100'}`}>
               <Icon name={task.chatPaused ? 'play' : 'lock'} className="h-3.5 w-3.5" />
-              {togglingChat ? '…' : task.chatPaused ? 'Resume Chat' : 'Pause Chat'}
             </button>
           )}
-
         </div>
       </div>
 

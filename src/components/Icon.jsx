@@ -301,6 +301,52 @@ const PATHS = {
       <line x1="12" y1="3" x2="12" y2="15" />
     </>
   ),
+  user: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+    </>
+  ),
+  userPlus: (
+    <>
+      <circle cx="10" cy="8" r="4" />
+      <path d="M2 20c0-4 3.6-7 8-7s8 3 8 7" />
+      <path d="M20 11v6M17 14h6" />
+    </>
+  ),
+  briefcase: (
+    <>
+      <rect x="2" y="7" width="20" height="14" rx="2" />
+      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+      <path d="M2 13h20" />
+    </>
+  ),
+  star: (
+    <polygon points="12 2 15.1 8.3 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 8.9 8.3 12 2" />
+  ),
+  refreshCw: (
+    <>
+      <polyline points="23 4 23 10 17 10" />
+      <polyline points="1 20 1 14 7 14" />
+      <path d="M3.5 9A9 9 0 0 1 20.5 6L23 10" />
+      <path d="M20.5 15A9 9 0 0 1 3.5 18L1 14" />
+    </>
+  ),
+  externalLink: (
+    <>
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <polyline points="15 3 21 3 21 9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
+    </>
+  ),
+  trash2: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+    </>
+  ),
 }
 
 export default function Icon({ name, className = 'h-5 w-5', strokeWidth = 1.7 }) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import tasksApi from '../../api/tasks'
 import collaborationApi from '../../api/collaboration'
@@ -831,15 +831,111 @@ function ActiveCommentsList({ taskId, comments, onAnswered }) {
 }
 
 // ─── Submit-for-QC modal ──────────────────────────────────────────────────────
+// ── Helpers shared with SubmitModal ─────────────────────────────────────────
+const _isImage = (url) => url && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url)
+const _isVideo = (url) => url && /\.(mp4|mov|webm|avi)(\?|$)/i.test(url)
+const _displayName = (a) => a.originalFilename || (
+  (() => { try { return decodeURIComponent(a.url.split('/').pop().split('?')[0]) } catch { return 'File' } })()
+)
+const _triggerDownload = (taskId, assetId, filename) => {
+  const el = document.createElement('a')
+  el.href     = `/api/collaborations/${taskId}/assets/${assetId}/download`
+  el.download = filename
+  document.body.appendChild(el); el.click(); document.body.removeChild(el)
+}
+
+function QcUploadRow({ name, status, error }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+      {status === 'uploading' ? (
+        <svg className="h-3.5 w-3.5 animate-spin text-brand-500 shrink-0" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+        </svg>
+      ) : status === 'done' ? (
+        <Icon name="check" className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+      ) : (
+        <Icon name="alertCircle" className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+      )}
+      <span className="flex-1 text-xs text-slate-700 truncate">{name}</span>
+      {status === 'uploading' && <span className="text-[10px] text-slate-400 shrink-0">Uploading…</span>}
+      {error && <span className="text-[10px] text-rose-500 truncate max-w-[120px]" title={error}>{error}</span>}
+    </div>
+  )
+}
+
 function SubmitModal({
   task, campaign, form, setForm,
   onCancel, onConfirm, onViewBrief, saving,
 }) {
+  const [assets,       setAssets]       = useState([])
+  const [assetsLoaded, setAssetsLoaded] = useState(false)
+  const [pendingFiles, setPendingFiles] = useState([])
+  const [uploadError,  setUploadError]  = useState('')
+  const fileRef = useRef(null)
+
+  const isUploading = pendingFiles.some(f => f.status === 'uploading')
+
+  // Load existing collaboration assets when modal opens
+  useEffect(() => {
+    collaborationApi.getAssets(task.taskId)
+      .then(res => setAssets(res.data || []))
+      .catch(() => {})
+      .finally(() => setAssetsLoaded(true))
+  }, [task.taskId])
+
+  const refreshAssets = () =>
+    collaborationApi.getAssets(task.taskId).then(res => setAssets(res.data || [])).catch(() => {})
+
+  const showError = (msg) => {
+    setUploadError(msg); setTimeout(() => setUploadError(''), 6000)
+  }
+
+  const uploadFiles = async (files) => {
+    setUploadError('')
+    const allowed = []
+    for (const file of files) {
+      if (/\.(docx?)$/i.test(file.name)) {
+        showError(`"${file.name}" — DOC/DOCX not allowed. Convert to PDF or an image.`); continue
+      }
+      allowed.push(file)
+    }
+    if (!allowed.length) return
+
+    const offset = pendingFiles.length
+    setPendingFiles(prev => [...prev, ...allowed.map(f => ({ name: f.name, status: 'uploading', error: null }))])
+
+    const fd = new FormData()
+    allowed.forEach(f => fd.append('files', f))
+    try {
+      const res = await tasksApi.uploadAssets(fd)
+      const urls      = res.data?.urls              || []
+      const thumbUrls = res.data?.thumbnailUrls     || []
+      const origNames = res.data?.originalFilenames || []
+      await Promise.all(allowed.map((_, i) => {
+        const url = urls[i]; if (!url) return Promise.resolve()
+        return collaborationApi.addAsset(task.taskId, url, thumbUrls[i] || null, origNames[i] || allowed[i].name)
+      }))
+      setPendingFiles(prev => prev.map((f, idx) =>
+        idx >= offset && idx < offset + allowed.length ? { ...f, status: 'done' } : f
+      ))
+      await refreshAssets()
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Upload failed.'
+      showError(msg.toLowerCase().includes('unsupported') || msg.toLowerCase().includes('format')
+        ? 'File format not supported — use images, PDFs, or videos.'
+        : msg)
+      setPendingFiles(prev => prev.map((f, idx) =>
+        idx >= offset && idx < offset + allowed.length ? { ...f, status: 'error', error: 'Failed' } : f
+      ))
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
       <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
           <div>
             <h3 className="text-base font-semibold text-slate-900">Submit for QC review</h3>
             <p className="mt-0.5 text-xs text-slate-500">
@@ -858,41 +954,126 @@ function SubmitModal({
           </div>
         </div>
 
-        {/* Body — submission notes only (files are added via the Collaboration page) */}
-        <div className="overflow-y-auto px-6 py-4 space-y-4">
-          <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 flex items-start gap-2">
-            <Icon name="info" className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-            <p className="text-xs text-blue-700">
-              Asset files can be added through the <strong>Collaborations</strong> page before or after submission.
-            </p>
-          </div>
+        {/* Body */}
+        <div className="overflow-y-auto px-6 py-4 space-y-5 flex-1">
+
+          {/* ── Submission notes ── */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Submission notes
-            </label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Submission notes</label>
             <textarea
-              rows={4}
+              rows={3}
               value={form.submissionNotes}
               onChange={(e) => setForm({ ...form, submissionNotes: e.target.value })}
               placeholder="Anything the reviewer should know…"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500 resize-none"
             />
           </div>
+
+          {/* ── Collaboration assets ── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium text-slate-700">
+                Assets
+                {assetsLoaded && assets.length > 0 && (
+                  <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">{assets.length}</span>
+                )}
+              </h4>
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={isUploading}
+                className="flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100 transition disabled:opacity-50"
+              >
+                <Icon name="upload" className="h-3 w-3" />
+                {isUploading ? 'Uploading…' : 'Upload Files'}
+              </button>
+            </div>
+
+            {/* Hidden multi-file input */}
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              className="sr-only"
+              accept="image/*,video/*,.pdf,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.doc,.docx"
+              onChange={e => {
+                const files = Array.from(e.target.files || [])
+                if (files.length) uploadFiles(files)
+                e.target.value = ''
+              }}
+            />
+
+            {/* Error */}
+            {uploadError && (
+              <div className="mb-2 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+                <Icon name="alertCircle" className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <span>{uploadError}</span>
+              </div>
+            )}
+
+            {/* In-progress rows */}
+            {pendingFiles.length > 0 && (
+              <div className="mb-2 space-y-1">
+                {pendingFiles.map((f, i) => (
+                  <QcUploadRow key={i} name={f.name} status={f.status} error={f.error} />
+                ))}
+              </div>
+            )}
+
+            {/* Existing assets */}
+            {!assetsLoaded ? (
+              <p className="text-xs text-slate-400 py-3 text-center">Loading assets…</p>
+            ) : assets.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 py-6 text-center">
+                <Icon name="upload" className="mx-auto h-6 w-6 text-slate-200 mb-1" />
+                <p className="text-xs text-slate-400">No assets uploaded yet. Add files above.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                {assets.map((a, i) => (
+                  <div key={a.assetId ?? i} className="flex items-center gap-2.5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                    {/* Tiny thumbnail or icon */}
+                    {(a.thumbnailUrl || _isImage(a.url)) ? (
+                      <img src={a.thumbnailUrl || a.url} alt="" className="h-8 w-8 rounded object-cover shrink-0 border border-slate-200" />
+                    ) : _isVideo(a.url) ? (
+                      <div className="h-8 w-8 rounded bg-purple-100 flex items-center justify-center shrink-0">
+                        <Icon name="play" className="h-3.5 w-3.5 text-purple-500" />
+                      </div>
+                    ) : (
+                      <div className="h-8 w-8 rounded bg-slate-100 flex items-center justify-center shrink-0">
+                        <Icon name="fileText" className="h-3.5 w-3.5 text-slate-400" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-slate-800 truncate">{_displayName(a)}</p>
+                      <p className="text-[10px] text-slate-400">by {a.userName}</p>
+                    </div>
+                    <button
+                      onClick={() => _triggerDownload(task.taskId, a.assetId, _displayName(a))}
+                      title="Download"
+                      className="rounded p-1 text-brand-500 hover:text-brand-700 hover:bg-brand-50 transition shrink-0"
+                    >
+                      <Icon name="download" className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 shrink-0">
           <button onClick={onCancel}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            disabled={saving}
+            disabled={saving || isUploading}
             className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition disabled:opacity-60 flex items-center gap-2"
           >
             <Icon name="send" className="h-3.5 w-3.5" />
-            {saving ? 'Submitting…' : 'Submit for QC'}
+            {saving ? 'Submitting…' : isUploading ? 'Wait — uploading…' : 'Submit for QC'}
           </button>
         </div>
       </div>
