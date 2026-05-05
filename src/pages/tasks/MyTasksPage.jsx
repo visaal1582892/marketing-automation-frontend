@@ -99,25 +99,25 @@ export default function MyTasksPage() {
     t.campaignStatus === 'COMPLETED'
 
   // ── Queue rules ─────────────────────────────────────────────────────────
-  // The worker can have AT MOST ONE task in flight at a time. The backend
+  // The worker can have UP TO 3 tasks in flight simultaneously. The backend
   // already returns tasks ordered by priority (HIGH first, then MEDIUM, LOW)
-  // and within each priority by status precedence + creation time, so the
-  // first ASSIGNED/REWORK task in this list is the "top of queue".
+  // and within each priority by status precedence + creation time.
   //
-  //  - If something is already IN_PROGRESS → no Start buttons appear at all;
-  //    the only allowed next action is "Submit for QC" on that task.
-  //  - Otherwise → only the very first ASSIGNED/REWORK task gets a "Start"
-  //    button. Every other ASSIGNED/REWORK task shows a Locked indicator.
-  const inFlightTaskId = useMemo(
-    () => tasks.find(t => t.status === 'IN_PROGRESS' && !isTaskClosed(t))?.taskId ?? null,
+  //  - While fewer than 3 tasks are IN_PROGRESS → the first ASSIGNED/REWORK
+  //    task gets a "Start" button.
+  //  - Once 3 tasks are IN_PROGRESS → no more Start buttons appear.
+  const MAX_IN_FLIGHT = 3
+  const inFlightCount = useMemo(
+    () => tasks.filter(t => t.status === 'IN_PROGRESS' && !isTaskClosed(t)).length,
     [tasks] // eslint-disable-line react-hooks/exhaustive-deps
   )
+  const canStartMore = inFlightCount < MAX_IN_FLIGHT
   const nextStartableTaskId = useMemo(() => {
-    if (inFlightTaskId != null) return null
+    if (!canStartMore) return null
     return tasks.find(t =>
       (t.status === 'ASSIGNED' || t.status === 'REWORK') && !isTaskClosed(t)
     )?.taskId ?? null
-  }, [tasks, inFlightTaskId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tasks, canStartMore]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     if (filter === 'ALL') return tasks
@@ -346,7 +346,7 @@ export default function MyTasksPage() {
         <div>
           <h2 className="text-xl font-bold text-slate-900">My Tasks</h2>
           <p className="mt-0.5 text-sm text-slate-500">
-            Your live work queue, ordered by priority. Start the top task first — only one task can be active at a time.
+            Your live work queue, ordered by priority. Up to 3 tasks can be active at a time.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -380,7 +380,7 @@ export default function MyTasksPage() {
               busy={savingId === t.taskId}
               closed={isTaskClosed(t)}
               isNextUp={t.taskId === nextStartableTaskId}
-              hasInFlight={inFlightTaskId != null}
+              hasInFlight={!canStartMore}
               onAccept={() => accept(t)}
               onSubmit={() => openSubmit(t)}
               onView={() => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}

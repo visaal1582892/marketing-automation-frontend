@@ -59,9 +59,10 @@ function StatusBadge({ status }) {
 
 // ─── Chat Panel ───────────────────────────────────────────────────────────────
 
-// Chat is open only while the task is held for collaboration.
-// Once the worker resumes (IN_PROGRESS / REWORK), chat is paused.
-const CHAT_OPEN_STATUSES = ['HELD']
+// Chat is open for active working statuses (task not blocked by hold/QC)
+// and also requires collaboration_chat_paused to be false.
+const CARD_BLOCKED_STATUSES = ['HELD', 'QC_REVIEW', 'CANCELLED']
+const CHAT_OPEN_STATUSES    = ['IN_PROGRESS', 'ASSIGNED', 'REWORK', 'REQUESTOR_REWORK']
 
 function TypingDots() {
   return (
@@ -85,16 +86,19 @@ function ChatPanel({ task, onClose }) {
   const bottomRef   = useRef(null)
   const typingTimer = useRef(null)
 
-  const isChatOpen  = CHAT_OPEN_STATUSES.includes(task.status)
-  const isCompleted = task.status === 'COMPLETED'
-  const blockReason = {
-    IN_PROGRESS:       'Worker has resumed the task — collaboration chat is paused. Assets can still be shared.',
-    REWORK:            'Task is in rework — collaboration chat is paused. Assets can still be shared.',
-    ASSIGNED:          'Task is in queue — collaboration chat is paused. Assets can still be shared.',
-    QC_REVIEW:         'Task is in QC review — chat is paused.',
-    CANCELLED:         'Task has been cancelled.',
-    REQUESTOR_REWORK:  'Task needs requestor rework — chat is paused.',
+  const isCompleted   = task.status === 'COMPLETED'
+  const isCardBlocked = CARD_BLOCKED_STATUSES.includes(task.status)
+  const isChatOpen    = CHAT_OPEN_STATUSES.includes(task.status) && !task.chatPaused && !isCardBlocked
+
+  const cardBlockReason = {
+    HELD:      'Task is on hold — collaboration is paused.',
+    QC_REVIEW: 'Task is in QC review — collaboration is paused.',
+    CANCELLED: 'Task has been cancelled.',
   }[task.status]
+
+  const chatBlockReason = task.chatPaused
+    ? 'Chat paused by owner — assets can still be uploaded.'
+    : null
 
   const currentUserId = user?.id
 
@@ -235,10 +239,16 @@ function ChatPanel({ task, onClose }) {
         </div>
 
         {/* ── Status banners ─────────────────────────────────────────────────── */}
-        {blockReason && (
+        {cardBlockReason && (
           <div className="shrink-0 px-4 py-2.5 bg-brand-50 border-t border-brand-100 flex items-center justify-center gap-1.5">
             <Icon name="lock" className="h-3.5 w-3.5 text-brand-600" />
-            <span className="text-xs text-brand-700 font-medium">{blockReason}</span>
+            <span className="text-xs text-brand-700 font-medium">{cardBlockReason}</span>
+          </div>
+        )}
+        {chatBlockReason && !cardBlockReason && (
+          <div className="shrink-0 px-4 py-2.5 bg-amber-50 border-t border-amber-100 flex items-center justify-center gap-1.5">
+            <Icon name="lock" className="h-3.5 w-3.5 text-amber-600" />
+            <span className="text-xs text-amber-700 font-medium">{chatBlockReason}</span>
           </div>
         )}
         {isCompleted && (
@@ -553,31 +563,32 @@ function AddPeopleModal({ task, onClose, onDone }) {
 // ─── Collaboration Card ────────────────────────────────────────────────────────
 
 function CollabCard({ task, onChat, onAssets, onBrief, onRefresh, unreadCount = 0 }) {
-  const toast     = useToast()
-  const role      = task.myRole || 'COLLABORATOR'
-  const cfg       = rc(role)
-  const canManage = ['OWNER', 'ADMIN', 'MANAGER'].includes(role)
-  const canResume = (role === 'OWNER' || role === 'ADMIN') && task.status === 'HELD'
+  const toast          = useToast()
+  const role           = task.myRole || 'COLLABORATOR'
+  const cfg            = rc(role)
+  const canManage      = ['OWNER', 'ADMIN', 'MANAGER'].includes(role)
+  const isCardBlocked  = CARD_BLOCKED_STATUSES.includes(task.status)
+  const canPauseChat   = ['OWNER', 'ADMIN'].includes(role) && !isCardBlocked
 
   const [showAddPeople, setShowAddPeople] = useState(false)
-  const [resuming,      setResuming]      = useState(false)
+  const [togglingChat,  setTogglingChat]  = useState(false)
 
-  const handleResume = async () => {
-    setResuming(true)
+  const handleToggleChat = async () => {
+    setTogglingChat(true)
     try {
       await collaborationApi.pauseCollaboration(task.taskId)
-      toast.success?.('Task resumed — collaboration chat is now paused.')
+      toast.success?.(task.chatPaused ? 'Chat resumed.' : 'Chat paused — assets still available.')
       onRefresh()
     } catch (e) {
-      toast.error?.(e?.response?.data?.message || 'Could not resume task.')
+      toast.error?.(e?.response?.data?.message || 'Could not toggle chat.')
     } finally {
-      setResuming(false)
+      setTogglingChat(false)
     }
   }
 
   return (
     <>
-      <div className={`relative rounded-2xl border-l-4 ${cfg.border} bg-white shadow-sm hover:shadow-md transition-shadow overflow-hidden`}>
+      <div className={`relative rounded-2xl border-l-4 ${cfg.border} bg-white shadow-sm hover:shadow-md transition-shadow overflow-hidden ${isCardBlocked ? 'opacity-70' : ''}`}>
         {/* Top strip */}
         <div className="flex items-start justify-between px-4 pt-4 pb-3 border-b border-slate-100">
           <div className="flex-1 min-w-0 pr-3">
@@ -619,18 +630,40 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh, unreadCount = 
           <span className="font-mono text-slate-300">{task.taskId}</span>
         </div>
 
+        {/* Blocked banner */}
+        {isCardBlocked && (
+          <div className="mx-4 mb-2 rounded-lg bg-brand-50 border border-brand-100 px-3 py-2 flex items-center gap-1.5">
+            <Icon name="lock" className="h-3.5 w-3.5 text-brand-600 shrink-0" />
+            <span className="text-xs text-brand-700 font-medium">
+              {{
+                HELD:      'Task is on hold — collaboration paused.',
+                QC_REVIEW: 'Task is in QC review — collaboration paused.',
+                CANCELLED: 'Task has been cancelled.',
+              }[task.status]}
+            </span>
+          </div>
+        )}
+
+        {/* Chat paused banner (card not fully blocked) */}
+        {task.chatPaused && !isCardBlocked && (
+          <div className="mx-4 mb-2 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 flex items-center gap-1.5">
+            <Icon name="lock" className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <span className="text-xs text-amber-700 font-medium">Chat paused — assets still available.</span>
+          </div>
+        )}
+
         {/* Action buttons */}
         <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-slate-50 border-t border-slate-100">
           {/* Primary: Chat */}
-          <button onClick={onChat}
-            className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 active:scale-95 transition shadow-sm">
+          <button onClick={isCardBlocked ? undefined : onChat} disabled={isCardBlocked}
+            className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 active:scale-95 transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
             <Icon name="messageSquare" className="h-3.5 w-3.5" />
             Chat
           </button>
 
-          {/* Assets */}
-          <button onClick={onAssets}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition">
+          {/* Assets — always accessible even when chat paused; blocked only when card is blocked */}
+          <button onClick={isCardBlocked ? undefined : onAssets} disabled={isCardBlocked}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed">
             <Icon name="upload" className="h-3.5 w-3.5" />
             Assets
           </button>
@@ -642,8 +675,8 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh, unreadCount = 
             Brief
           </button>
 
-          {/* Add People — owner/admin/manager only */}
-          {canManage && (
+          {/* Add People — owner/admin/manager only, not when card blocked */}
+          {canManage && !isCardBlocked && (
             <button onClick={() => setShowAddPeople(true)}
               className="flex items-center gap-1.5 rounded-lg border border-accent-200 bg-accent-50 px-3 py-1.5 text-xs font-medium text-accent-700 hover:bg-accent-100 transition">
               <Icon name="userPlus" className="h-3.5 w-3.5" />
@@ -651,12 +684,15 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh, unreadCount = 
             </button>
           )}
 
-          {/* Resume Task — owner/admin, only when HELD */}
-          {canResume && (
-            <button onClick={handleResume} disabled={resuming}
-              className="ml-auto flex items-center gap-1.5 rounded-lg border border-accent-300 bg-accent-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-600 transition disabled:opacity-50">
-              <Icon name="play" className="h-3.5 w-3.5" />
-              {resuming ? 'Resuming…' : 'Resume Task'}
+          {/* Pause / Resume Chat — owner/admin only, not when card is blocked */}
+          {canPauseChat && (
+            <button onClick={handleToggleChat} disabled={togglingChat}
+              className={`ml-auto flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50
+                ${task.chatPaused
+                  ? 'border-accent-300 bg-accent-500 text-white hover:bg-accent-600'
+                  : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'}`}>
+              <Icon name={task.chatPaused ? 'play' : 'lock'} className="h-3.5 w-3.5" />
+              {togglingChat ? '…' : task.chatPaused ? 'Resume Chat' : 'Pause Chat'}
             </button>
           )}
 
@@ -673,9 +709,6 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh, unreadCount = 
     </>
   )
 }
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
