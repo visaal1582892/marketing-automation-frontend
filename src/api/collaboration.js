@@ -3,6 +3,18 @@ import api from './client'
 const BASE = '/collaborations'
 
 const collaborationApi = {
+  /**
+   * Start collaboration on a task — auto-holds the task and ensures the
+   * requestor is a collaborator. Only the task's assigned worker calls this.
+   */
+  startCollaboration: (taskId) => api.post(`${BASE}/${taskId}/start`),
+
+  /**
+   * Pause collaboration — restores the task to its pre-hold status so it
+   * re-enters the active queue.
+   */
+  pauseCollaboration: (taskId) => api.post(`${BASE}/${taskId}/pause`),
+
   /** Invite collaborators to a task. body: { userIds: number[] } */
   invite: (taskId, userIds) =>
     api.post(`${BASE}/${taskId}/invite`, { userIds }),
@@ -23,9 +35,13 @@ const collaborationApi = {
   /** Get full message history for a task (initial load). */
   getMessages: (taskId) => api.get(`${BASE}/${taskId}/messages`),
 
-  /** Add an asset URL to a task. */
-  addAsset: (taskId, url) =>
-    api.post(`${BASE}/${taskId}/assets`, { url }),
+  /** Add an asset to a task (url, optional thumbnailUrl, original filename). */
+  addAsset: (taskId, url, thumbnailUrl, originalFilename) =>
+    api.post(`${BASE}/${taskId}/assets`, { url, thumbnailUrl, originalFilename }),
+
+  /** Delete an asset (only the uploader can delete). */
+  deleteAsset: (taskId, assetId) =>
+    api.delete(`${BASE}/${taskId}/assets/${assetId}`),
 
   /** Get all assets for a task. */
   getAssets: (taskId) => api.get(`${BASE}/${taskId}/assets`),

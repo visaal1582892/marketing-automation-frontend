@@ -97,7 +97,7 @@ export default function App() {
                 path="/collaborations"
                 element={
                   <ProtectedRoute
-                    excludeRole={['Requestor', 'Admin', 'Marketing Manager', 'Head', 'Regional Manager']}
+                    excludeRole={['Head', 'Regional Manager']}
                   >
                     <CollaborationsPage />
                   </ProtectedRoute>

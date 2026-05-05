@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import tasksApi from '../../api/tasks'
 import collaborationApi from '../../api/collaboration'
 import Icon from '../../components/Icon'
@@ -17,6 +17,7 @@ import AssetPreviewModal from '../../components/AssetPreviewModal'
  */
 export default function MyTasksPage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const toast    = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
 
@@ -37,8 +38,8 @@ export default function MyTasksPage() {
   // Asset preview modal
   const [assetPreviewTask, setAssetPreviewTask] = useState(null)
 
-  // Collaborate modal
-  const [collaborateTask,  setCollaborateTask]  = useState(null)
+  // Collaborate — no modal, just start + navigate
+  const [collaboratingId, setCollaboratingId] = useState(null)
 
   // Full-brief drawer (any task → click "View brief")
   const [briefCampaignId, setBriefCampaignId] = useState(null)
@@ -184,22 +185,6 @@ export default function MyTasksPage() {
     // Pre-fill notes from the previous submission so the worker can amend them.
     setSubmitForm({ submissionNotes: task.submissionNotes || '' })
 
-    // Pre-populate previously uploaded files as already-done items.
-    // Assets live in asset_info now — load them from the collaboration endpoint.
-    collaborationApi.getAssets(task.taskId)
-      .then(res => {
-        const prevUrls = (res.data || []).map(a => a.url)
-        setFileItems(prevUrls.map((url, i) => ({
-          id:           `prev-${i}-${Date.now()}`,
-          file:         null,
-          status:       'done',
-          url,
-          fromPrevious: true,
-          errorMsg:     null,
-        })))
-      })
-      .catch(() => {})
-
     campaignsApi.getById(task.campaignId)
       .then(res => setSubmittingCampaign(res.data))
       .catch(() => { /* show task-only modal */ })
@@ -236,7 +221,6 @@ export default function MyTasksPage() {
       return
     }
 
-    const uploadedUrls = fileItems.filter(f => f.status === 'done').map(f => f.url)
     setSavingId(submitting.taskId)
     try {
       // Save question answers first (if any exist)
@@ -251,11 +235,9 @@ export default function MyTasksPage() {
 
       await tasksApi.complete(submitting.taskId, {
         submissionNotes: submitForm.submissionNotes,
-        assetUrls: uploadedUrls,
       })
       showToast('Submitted for QC review.', 'success')
       setSubmitting(null)
-      setFileItems([])
       setTaskQuestions([])
       setTaskAnswers({})
       refresh()
@@ -340,6 +322,24 @@ export default function MyTasksPage() {
     }
   }
 
+  const handleCollaborate = async (task) => {
+    setCollaboratingId(task.taskId)
+    try {
+      await collaborationApi.startCollaboration(task.taskId)
+    } catch (e) {
+      // If already held or already a collaborator, ignore and navigate anyway
+      const msg = e?.response?.data?.message || ''
+      if (!msg.toLowerCase().includes('already') && e?.response?.status !== 400) {
+        showToast(msg || 'Could not start collaboration', 'error')
+        setCollaboratingId(null)
+        return
+      }
+    } finally {
+      setCollaboratingId(null)
+    }
+    navigate('/collaborations')
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -387,7 +387,8 @@ export default function MyTasksPage() {
               onComment={() => openCommentModal(t)}
               onWorkerUnhold={() => workerUnhold(t)}
               onViewAssets={() => setAssetPreviewTask(t)}
-              onCollaborate={() => setCollaborateTask(t)}
+              onCollaborate={() => handleCollaborate(t)}
+              collaborating={collaboratingId === t.taskId}
             />
           ))}
         </div>
@@ -399,13 +400,11 @@ export default function MyTasksPage() {
           campaign={submittingCampaign}
           form={submitForm}
           setForm={setSubmitForm}
-          fileItems={fileItems}
-          onAddFiles={addFiles}
-          onRemoveFile={removeFileItem}
-          onRetryFile={retryFileItem}
           onCancel={() => {
-            setSubmitting(null); setSubmittingCampaign(null)
-            setFileItems([]); setTaskQuestions([]); setTaskAnswers({})
+            setSubmitting(null)
+            setSubmittingCampaign(null)
+            setTaskQuestions([])
+            setTaskAnswers({})
           }}
           onConfirm={submitForQc}
           onViewBrief={() => { setBriefCampaignId(submitting.campaignId); setBriefTaskId(submitting.taskId) }}
@@ -429,13 +428,6 @@ export default function MyTasksPage() {
           taskId={assetPreviewTask.taskId}
           taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
           onClose={() => setAssetPreviewTask(null)}
-        />
-      )}
-
-      {collaborateTask && (
-        <CollaborateModal
-          task={collaborateTask}
-          onClose={() => setCollaborateTask(null)}
         />
       )}
 
@@ -467,13 +459,13 @@ export default function MyTasksPage() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onViewAssets, onCollaborate }) {
+function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onViewAssets, onCollaborate, collaborating }) {
   const elapsed      = formatElapsed(task, now)
   const isAssigned   = (task.status === 'ASSIGNED' || task.status === 'REWORK') && !closed
   const isInProgress = task.status === 'IN_PROGRESS' && !closed
   const isHeld       = task.status === 'HELD'
-  // Only worker-held tasks (those with a workerComment) can be self-unholded.
-  const isSelfHeld   = isHeld && !!task.workerComment
+  // Self-held tasks (the worker put themselves on hold) have active comments.
+  const isSelfHeld   = isHeld && task.activeComments?.length > 0
   // Queue rule: only the top-of-queue task can be started, and only when no
   // other task is in flight. Everything else in ASSIGNED/REWORK gets locked.
   const canStart     = isAssigned && isNextUp && !hasInFlight
@@ -617,14 +609,15 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
             <Icon name="eye" className="h-3.5 w-3.5" />
             View Brief
           </button>
-          {!isCancelled && (
+          {!isCancelled && task.status !== 'COMPLETED' && (
             <button
               onClick={onCollaborate}
-              className="flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition"
-              title="Invite collaborators to this task"
+              disabled={collaborating}
+              className="flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100 transition disabled:opacity-50"
+              title="Open collaboration chat for this task"
             >
               <Icon name="users" className="h-3.5 w-3.5" />
-              Collaborate
+              {collaborating ? 'Opening…' : 'Collaborate'}
             </button>
           )}
         </div>
@@ -632,14 +625,12 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
 
       <TaskTimeline task={task} />
 
-      {isSelfHeld && task.workerComment && (
-        <div className="border-t border-amber-100 bg-amber-50/60 px-4 py-2.5 flex items-start gap-2">
-          <Icon name="messageSquare" className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="text-xs font-semibold text-amber-700">Your comment to requestor:</span>
-            <p className="mt-0.5 text-xs text-amber-800 whitespace-pre-wrap">{task.workerComment}</p>
-          </div>
-        </div>
+      {isSelfHeld && task.activeComments?.length > 0 && (
+        <ActiveCommentsList
+          taskId={task.taskId}
+          comments={task.activeComments}
+          onAnswered={onWorkerUnhold}
+        />
       )}
 
       {task.status === 'REWORK' && task.latestManagerReworkComment && (
@@ -798,22 +789,52 @@ function QuestionField({ question, value, onChange }) {
   )
 }
 
+// ─── Active Worker Comments ───────────────────────────────────────────────────
+function ActiveCommentsList({ taskId, comments, onAnswered }) {
+  const toast = useToast()
+  const [marking, setMarking] = useState({})
+
+  const markAnswered = async (commentId) => {
+    setMarking(prev => ({ ...prev, [commentId]: true }))
+    try {
+      await tasksApi.markCommentAnswered(taskId, commentId)
+      toast.success?.('Comment marked as answered.')
+      onAnswered?.()
+    } catch {
+      toast.error?.('Could not mark comment.')
+    } finally {
+      setMarking(prev => ({ ...prev, [commentId]: false }))
+    }
+  }
+
+  return (
+    <div className="border-t border-amber-100 bg-amber-50/60 px-4 py-3 space-y-2">
+      <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide">Active comments (task is on hold)</p>
+      {comments.map(c => (
+        <div key={c.commentId} className="flex items-start gap-2">
+          <Icon name="messageSquare" className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-amber-800 whitespace-pre-wrap">{c.comment}</p>
+            <p className="text-[10px] text-amber-600 mt-0.5">by {c.userName}</p>
+          </div>
+          <button
+            onClick={() => markAnswered(c.commentId)}
+            disabled={marking[c.commentId]}
+            className="shrink-0 rounded-md bg-amber-100 border border-amber-200 px-2 py-1 text-[10px] font-semibold text-amber-800 hover:bg-amber-200 transition disabled:opacity-50"
+          >
+            {marking[c.commentId] ? '…' : 'Mark Answered'}
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Submit-for-QC modal ──────────────────────────────────────────────────────
 function SubmitModal({
   task, campaign, form, setForm,
-  fileItems, onAddFiles, onRemoveFile, onRetryFile,
   onCancel, onConfirm, onViewBrief, saving,
 }) {
-  const uploading  = fileItems.some(f => f.status === 'uploading')
-  const doneCount  = fileItems.filter(f => f.status === 'done').length
-  const errorCount = fileItems.filter(f => f.status === 'error').length
-
-  const handleDrop = (e) => {
-    e.preventDefault()
-    if (e.dataTransfer.files?.length) onAddFiles(e.dataTransfer.files)
-  }
-  const handleDragOver = (e) => e.preventDefault()
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
       <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl flex flex-col max-h-[90vh]">
@@ -837,127 +858,20 @@ function SubmitModal({
           </div>
         </div>
 
-        {/* Scrollable body */}
+        {/* Body — submission notes only (files are added via the Collaboration page) */}
         <div className="overflow-y-auto px-6 py-4 space-y-4">
-          {/* ── File upload zone ── */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Attach files
-              <span className="ml-1 text-slate-400 font-normal">(images, videos, PDFs, Word, Excel)</span>
-            </label>
-
-            {/* Drop zone */}
-            <label
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 transition cursor-pointer py-6 px-4 text-center"
-            >
-              <input
-                type="file"
-                multiple
-                accept={ACCEPTED_FILE_TYPES}
-                className="sr-only"
-                onChange={e => { if (e.target.files?.length) onAddFiles(e.target.files); e.target.value = '' }}
-              />
-              <Icon name="upload" className="h-7 w-7 text-slate-400" />
-              <span className="text-sm text-slate-600 font-medium">
-                Drag & drop files here, or <span className="text-brand-600">click to browse</span>
-              </span>
-              <span className="text-xs text-slate-400">
-                Images · MP4 / MOV / AVI · PDF · DOCX · XLSX — up to 100 MB each
-              </span>
-            </label>
-
-            {/* File list */}
-            {fileItems.length > 0 && (
-              <ul className="mt-3 space-y-1.5">
-                {fileItems.map(item => (
-                  <li key={item.id}
-                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
-                      item.fromPrevious               ? 'border-blue-200 bg-blue-50' :
-                      item.status === 'done'          ? 'border-emerald-200 bg-emerald-50' :
-                      item.status === 'error'         ? 'border-red-200 bg-red-50' :
-                                                        'border-slate-200 bg-white'
-                    }`}
-                  >
-                    {/* Status icon */}
-                    {item.status === 'uploading' && (
-                      <span className="h-3.5 w-3.5 rounded-full border-2 border-brand-400 border-t-transparent animate-spin flex-shrink-0" />
-                    )}
-                    {item.status === 'done' && !item.fromPrevious && (
-                      <Icon name="check" className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                    )}
-                    {item.status === 'done' && item.fromPrevious && (
-                      <Icon name="fileText" className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
-                    )}
-                    {item.status === 'error' && (
-                      <Icon name="alertCircle" className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
-                    )}
-                    {item.status === 'pending' && (
-                      <Icon name="fileText" className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-                    )}
-
-                    {/* File name + info */}
-                    <span className="flex-1 truncate text-slate-700">
-                      {item.fromPrevious
-                        ? <span className="text-blue-700 text-xs">Previously uploaded</span>
-                        : item.file?.name
-                      }
-                    </span>
-                    {!item.fromPrevious && item.file && (
-                      <span className="text-slate-400 flex-shrink-0">
-                        {(item.file.size / 1024 / 1024).toFixed(1)} MB
-                      </span>
-                    )}
-
-                    {/* Error message */}
-                    {item.status === 'error' && (
-                      <span className="text-red-600 text-xs">{item.errorMsg}</span>
-                    )}
-
-                    {/* URL preview for done items */}
-                    {item.status === 'done' && item.url && (
-                      <a href={item.url} target="_blank" rel="noopener noreferrer"
-                        className="text-brand-600 hover:underline text-xs flex-shrink-0 flex items-center gap-0.5">
-                        <Icon name="eye" className="h-3 w-3" /> View
-                      </a>
-                    )}
-
-                    {/* Retry button for errors */}
-                    {item.status === 'error' && (
-                      <button onClick={() => onRetryFile(item)}
-                        className="text-xs text-red-600 hover:underline flex-shrink-0">
-                        Retry
-                      </button>
-                    )}
-
-                    {/* Remove button — works for both previous and new files */}
-                    <button onClick={() => onRemoveFile(item.id)}
-                      className="text-slate-400 hover:text-red-500 transition flex-shrink-0"
-                      title={item.fromPrevious ? 'Remove from this submission' : 'Remove'}>
-                      <Icon name="x" className="h-3.5 w-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {/* Status summary */}
-            {fileItems.length > 0 && (
-              <p className="mt-1.5 text-xs text-slate-500">
-                {doneCount} of {fileItems.length} file{fileItems.length !== 1 ? 's' : ''} uploaded
-                {errorCount > 0 && <span className="text-red-500 ml-1">· {errorCount} error{errorCount !== 1 ? 's' : ''}</span>}
-              </p>
-            )}
+          <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 flex items-start gap-2">
+            <Icon name="info" className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-blue-700">
+              Asset files can be added through the <strong>Collaborations</strong> page before or after submission.
+            </p>
           </div>
-
-          {/* Submission notes */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Submission notes
             </label>
             <textarea
-              rows={3}
+              rows={4}
               value={form.submissionNotes}
               onChange={(e) => setForm({ ...form, submissionNotes: e.target.value })}
               placeholder="Anything the reviewer should know…"
@@ -974,11 +888,11 @@ function SubmitModal({
           </button>
           <button
             onClick={onConfirm}
-            disabled={saving || uploading}
+            disabled={saving}
             className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition disabled:opacity-60 flex items-center gap-2"
           >
             <Icon name="send" className="h-3.5 w-3.5" />
-            {saving ? 'Submitting…' : uploading ? 'Uploading files…' : 'Submit for QC'}
+            {saving ? 'Submitting…' : 'Submit for QC'}
           </button>
         </div>
       </div>

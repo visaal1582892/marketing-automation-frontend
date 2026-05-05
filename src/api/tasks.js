@@ -54,6 +54,12 @@ const tasksApi = {
    * Worker clears their comment and resumes the task (status → ASSIGNED).
    */
   workerUnhold: (taskId) => api.patch(`${BASE}/${taskId}/worker-unhold`),
+
+  /**
+   * Mark a single worker comment as answered (hides it from the task card).
+   */
+  markCommentAnswered: (taskId, commentId) =>
+    api.patch(`${BASE}/${taskId}/comments/${commentId}/answer`),
 }
 
 export default tasksApi

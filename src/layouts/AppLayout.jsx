@@ -152,6 +152,8 @@ export default function AppLayout() {
   // "My Tasks" is only for marketing-team workers who actually execute tasks.
   const showMyTasks =
     !isRequestor && !isAdmin && !isMarketingManager && !isHead && !isRegionalManager
+  // "Collaborations" is visible to workers, requestors, marketing managers, and admins.
+  const showCollaborations = showMyTasks || isRequestor || isMarketingManager || isAdmin
   // "Requests" is for anyone who submits briefs. Admin alone does not qualify —
   // assign the Requestor role as well if an admin needs to submit requests.
   const showRequests = isRequestor || isHead || isRegionalManager
@@ -220,7 +222,7 @@ export default function AppLayout() {
         <nav className={`flex-1 overflow-y-auto py-3 ${collapsed ? 'px-1.5 space-y-0.5' : 'px-2 space-y-0.5'}`}>
           {TOP_NAV.filter(item => {
             if (item.to === '/my-tasks')        return showMyTasks
-            if (item.to === '/collaborations')  return showMyTasks
+            if (item.to === '/collaborations')  return showCollaborations
             if (item.to === '/campaigns')       return showRequests
             return true
           }).map((item) => (
