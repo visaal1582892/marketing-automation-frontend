@@ -7,6 +7,7 @@ import { useToast } from '../../components/Toast'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
 import campaignsApi from '../../api/campaigns'
 import AssetPanel from '../../components/AssetPanel'
+import AppSelect from '../../components/AppSelect'
 
 /**
  * Module 3 — Employee Dashboard.
@@ -605,7 +606,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
             <Icon name="eye" className="h-3.5 w-3.5" />
             View Brief
           </button>
-          {!['CANCELLED', 'COMPLETED', 'HELD', 'QC_REVIEW'].includes(task.status) && (
+          {isInProgress && (
             <button
               onClick={onCollaborate}
               disabled={collaborating}
@@ -662,7 +663,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
       )}
 
       {showAssets && (
-        <AssetPanel task={task} onClose={() => setShowAssets(false)} />
+        <AssetPanel task={task} allowUpload={isInProgress} onClose={() => setShowAssets(false)} />
       )}
     </div>
   )
@@ -762,10 +763,7 @@ function QuestionField({ question, value, onChange }) {
         <input type="date" value={value || ''} onChange={e => onChange(e.target.value)} className={controlCls} />
       )}
       {fieldType === 'DROPDOWN' && (
-        <select value={value || ''} onChange={e => onChange(e.target.value)} className={controlCls}>
-          <option value="">Select…</option>
-          {parsedOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-        </select>
+        <AppSelect value={value || ''} onChange={onChange} options={parsedOptions} placeholder="Select…" />
       )}
       {fieldType === 'MULTISELECT' && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 space-y-1.5">
@@ -834,11 +832,10 @@ function SubmitModal({
   task, campaign, form, setForm,
   onCancel, onConfirm, onViewBrief, saving,
 }) {
-  const [showAssets, setShowAssets] = useState(false)
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-      <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl flex flex-col max-h-[92vh]">
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
           <div>
@@ -849,10 +846,6 @@ function SubmitModal({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setShowAssets(true)}
-              className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1">
-              <Icon name="paperclip" className="h-3 w-3" /> Assets
-            </button>
             <button type="button" onClick={onViewBrief}
               className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1">
               <Icon name="eye" className="h-3 w-3" /> Brief
@@ -864,7 +857,15 @@ function SubmitModal({
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto px-6 py-4 space-y-5 flex-1">
+        <div className="overflow-y-auto px-6 py-5 space-y-5 flex-1">
+
+          {/* ── Assets (inline panel with drag-and-drop) ── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-700">Assets</label>
+            </div>
+            <AssetPanel task={task} allowUpload inline />
+          </div>
 
           {/* ── Submission notes ── */}
           <div>
@@ -896,14 +897,6 @@ function SubmitModal({
           </button>
         </div>
       </div>
-
-      {showAssets && (
-        <AssetPanel
-          task={task}
-          allowUpload
-          onClose={() => setShowAssets(false)}
-        />
-      )}
     </div>
   )
 }

@@ -129,13 +129,18 @@ export function UploadRow({ name, status, error, onRetry, onClear }) {
  *                   collaborationActive flag. Useful in contexts like the QC submit modal
  *                   where the worker should always be able to add files.
  */
-export default function AssetPanel({ task, onClose, allowUpload = false }) {
+/**
+ * When inline=true the panel renders as plain content (no modal backdrop, no
+ * close button). Useful for embedding inside another modal.
+ */
+export default function AssetPanel({ task, onClose, allowUpload = false, inline = false }) {
   const toast = useToast()
   const { user } = useAuth()
   const [assets,       setAssets]       = useState([])
   const [loading,      setLoading]      = useState(true)
   const [uploadError,  setUploadError]  = useState('')
   const [pendingFiles, setPendingFiles] = useState([])
+  const [isDragOver,   setIsDragOver]   = useState(false)
   const fileRef = useRef(null)
 
   const currentUserId = user?.id
@@ -274,145 +279,193 @@ export default function AssetPanel({ task, onClose, allowUpload = false }) {
     assets.forEach(a => triggerDownload(task.taskId, a.assetId, displayName(a)))
   }
 
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg max-h-[88vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden">
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragOver(true) }
+  const handleDragLeave = (e) => { e.preventDefault(); setIsDragOver(false) }
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const files = Array.from(e.dataTransfer.files || [])
+    if (files.length) uploadFiles(files)
+  }
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+  // ── Shared inner content ───────────────────────────────────────────────────
+  const inner = (
+    <div className={inline
+      ? 'flex flex-col gap-3'
+      : 'w-full max-w-lg max-h-[88vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden'
+    }>
+
+      {/* Header row — shown in both modes */}
+      <div className={`flex items-center justify-between shrink-0 ${
+        inline ? '' : 'px-5 py-4 border-b border-slate-100'
+      }`}>
+        {!inline && (
           <div>
             <h3 className="text-sm font-bold text-slate-900">Assets</h3>
             <p className="text-xs text-slate-500 mt-0.5">{task.granularTaskName || task.taskId}</p>
           </div>
-          <div className="flex items-center gap-2">
+        )}
+        <div className={`flex items-center gap-2 ${inline ? 'ml-auto' : ''}`}>
+          <button
+            onClick={downloadAll}
+            disabled={assets.length === 0}
+            title={assets.length === 0 ? 'No assets to download' : `Download all ${assets.length} asset${assets.length !== 1 ? 's' : ''}`}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Icon name="download" className="h-3.5 w-3.5" />
+            Download All
+          </button>
+          {canUpload && !inline && (
             <button
-              onClick={downloadAll}
-              disabled={assets.length === 0}
-              title={assets.length === 0 ? 'No assets to download' : `Download all ${assets.length} asset${assets.length !== 1 ? 's' : ''}`}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={() => fileRef.current?.click()}
+              disabled={isUploading}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 transition disabled:opacity-50"
             >
-              <Icon name="download" className="h-3.5 w-3.5" />
-              Download All
+              <Icon name="upload" className="h-3.5 w-3.5" />
+              {isUploading ? 'Uploading…' : 'Add Files'}
             </button>
-            {canUpload && (
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={isUploading}
-                className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 transition disabled:opacity-50"
-              >
-                <Icon name="upload" className="h-3.5 w-3.5" />
-                {isUploading ? 'Uploading…' : 'Add Files'}
-              </button>
-            )}
+          )}
+          {!inline && (
             <button onClick={onClose} className="rounded-full p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
               <Icon name="x" className="h-4 w-4" />
             </button>
-          </div>
-        </div>
-
-        {/* Hidden multi-file input */}
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          className="sr-only"
-          accept="image/*,video/*,.pdf,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.doc,.docx"
-          onChange={e => {
-            const files = Array.from(e.target.files || [])
-            if (files.length) uploadFiles(files)
-            e.target.value = ''
-          }}
-        />
-
-        {/* Error banner */}
-        {uploadError && (
-          <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700 shrink-0">
-            <svg className="h-4 w-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
-            <span>{uploadError}</span>
-          </div>
-        )}
-
-        {/* In-progress uploads */}
-        {pendingFiles.length > 0 && (
-          <div className="mx-4 mt-3 space-y-1 shrink-0">
-            {pendingFiles.map((f, i) => (
-              <UploadRow
-                key={i}
-                name={f.name}
-                status={f.status}
-                error={f.error}
-                onRetry={f.status === 'error' ? () => retryFile(i) : undefined}
-                onClear={f.status !== 'uploading' ? () => clearPending(i) : undefined}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Asset list */}
-        <div className="overflow-y-auto p-4 space-y-2 flex-1">
-          {loading ? (
-            <p className="text-center text-slate-400 text-sm py-8">Loading…</p>
-          ) : assets.length === 0 ? (
-            <div className="text-center py-10">
-              <Icon name="upload" className="mx-auto h-8 w-8 text-slate-200 mb-2" />
-              <p className="text-sm text-slate-400">No assets yet.{canUpload ? ' Use Add Files above.' : ''}</p>
-            </div>
-          ) : assets.map((a, i) => (
-            <div key={a.assetId ?? i} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
-              {/* Preview */}
-              {(a.thumbnailUrl || isImage(a.url)) ? (
-                <img src={a.thumbnailUrl || a.url} alt="" className="h-14 w-14 rounded-lg object-cover shrink-0 border border-slate-200" />
-              ) : isVideo(a.url) ? (
-                <div className="h-14 w-14 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
-                  <Icon name="play" className="h-5 w-5 text-purple-500" />
-                </div>
-              ) : (
-                <div className="h-14 w-14 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                  <Icon name="fileText" className="h-5 w-5 text-slate-400" />
-                </div>
-              )}
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-slate-800 truncate">{displayName(a)}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">by {a.userName} · {fmtDate(a.createdAt)}</p>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <button
-                    onClick={() => triggerDownload(task.taskId, a.assetId, displayName(a))}
-                    className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-600 hover:text-brand-800 transition"
-                  >
-                    <Icon name="download" className="h-3 w-3" />
-                    Download
-                  </button>
-                  <span className="text-slate-200">|</span>
-                  <a
-                    href={openUrl(a.url, displayName(a))}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 hover:text-slate-700 transition"
-                  >
-                    <Icon name="externalLink" className="h-3 w-3" />
-                    Open
-                  </a>
-                </div>
-              </div>
-
-              {/* Delete — own assets only */}
-              {Number(a.userId) === Number(currentUserId) && (
-                <button
-                  onClick={() => removeAsset(a.assetId)}
-                  title="Remove asset"
-                  className="rounded-lg p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0"
-                >
-                  <Icon name="trash2" className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          ))}
+          )}
         </div>
       </div>
+
+      {/* Hidden multi-file input */}
+      <input
+        ref={fileRef}
+        type="file"
+        multiple
+        className="sr-only"
+        accept="image/*,video/*,.pdf,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.doc,.docx"
+        onChange={e => {
+          const files = Array.from(e.target.files || [])
+          if (files.length) uploadFiles(files)
+          e.target.value = ''
+        }}
+      />
+
+      {/* Drag-and-drop upload zone — inline mode only */}
+      {canUpload && inline && (
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => fileRef.current?.click()}
+          className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed py-6 cursor-pointer transition select-none
+            ${isDragOver
+              ? 'border-brand-400 bg-brand-50'
+              : 'border-slate-200 bg-slate-50 hover:border-brand-300 hover:bg-brand-50/40'}`}
+        >
+          <Icon name="upload" className={`h-7 w-7 transition ${isDragOver ? 'text-brand-500' : 'text-slate-300'}`} />
+          <p className="text-sm font-medium text-slate-600">
+            {isDragOver ? 'Drop files here' : 'Drag & drop files here'}
+          </p>
+          <p className="text-xs text-slate-400">
+            or <span className="text-brand-600 font-medium">browse files</span>
+          </p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Images, videos, PDFs, Excel, PowerPoint, CSV</p>
+        </div>
+      )}
+
+      {/* Error banner */}
+      {uploadError && (
+        <div className={`flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700 shrink-0 ${inline ? '' : 'mx-4 mt-3'}`}>
+          <svg className="h-4 w-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span>{uploadError}</span>
+        </div>
+      )}
+
+      {/* In-progress uploads */}
+      {pendingFiles.length > 0 && (
+        <div className={`space-y-1 shrink-0 ${inline ? '' : 'mx-4 mt-3'}`}>
+          {pendingFiles.map((f, i) => (
+            <UploadRow
+              key={i}
+              name={f.name}
+              status={f.status}
+              error={f.error}
+              onRetry={f.status === 'error' ? () => retryFile(i) : undefined}
+              onClear={f.status !== 'uploading' ? () => clearPending(i) : undefined}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Asset list */}
+      <div className={`space-y-2 ${inline ? '' : 'overflow-y-auto p-4 flex-1'}`}>
+        {loading ? (
+          <p className="text-center text-slate-400 text-sm py-6">Loading…</p>
+        ) : assets.length === 0 ? (
+          <div className={`text-center ${inline ? 'py-4' : 'py-10'}`}>
+            {!inline && <Icon name="upload" className="mx-auto h-8 w-8 text-slate-200 mb-2" />}
+            <p className="text-sm text-slate-400">No assets yet.{canUpload && !inline ? ' Use Add Files above.' : ''}</p>
+          </div>
+        ) : assets.map((a, i) => (
+          <div key={a.assetId ?? i} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+            {/* Preview */}
+            {(a.thumbnailUrl || isImage(a.url)) ? (
+              <img src={a.thumbnailUrl || a.url} alt="" className="h-14 w-14 rounded-lg object-cover shrink-0 border border-slate-200" />
+            ) : isVideo(a.url) ? (
+              <div className="h-14 w-14 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
+                <Icon name="play" className="h-5 w-5 text-purple-500" />
+              </div>
+            ) : (
+              <div className="h-14 w-14 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                <Icon name="fileText" className="h-5 w-5 text-slate-400" />
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-slate-800 truncate">{displayName(a)}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">by {a.userName} · {fmtDate(a.createdAt)}</p>
+              <div className="flex items-center gap-2 mt-1.5">
+                <button
+                  onClick={() => triggerDownload(task.taskId, a.assetId, displayName(a))}
+                  className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-600 hover:text-brand-800 transition"
+                >
+                  <Icon name="download" className="h-3 w-3" />
+                  Download
+                </button>
+                <span className="text-slate-200">|</span>
+                <a
+                  href={openUrl(a.url, displayName(a))}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 hover:text-slate-700 transition"
+                >
+                  <Icon name="externalLink" className="h-3 w-3" />
+                  Open
+                </a>
+              </div>
+            </div>
+
+            {/* Delete — own assets only */}
+            {Number(a.userId) === Number(currentUserId) && (
+              <button
+                onClick={() => removeAsset(a.assetId)}
+                title="Remove asset"
+                className="rounded-lg p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0"
+              >
+                <Icon name="trash2" className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
+  if (inline) return inner
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      {inner}
     </div>
   )
 }

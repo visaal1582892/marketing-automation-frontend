@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
+import AppSelect from '../../components/AppSelect'
 import { useToast } from '../../components/Toast'
 import campaignsApi from '../../api/campaigns'
 import { masterApi, granularTasksApi } from '../../api/masterData'
@@ -94,10 +95,7 @@ function TaskQuestion({ q, answer, onChange }) {
       {q.fieldType === 'TEXTAREA' && <textarea rows={3} value={answer ?? ''} onChange={e => onChange(e.target.value)} className={`${cls} resize-none`} placeholder="Your answer…" />}
       {q.fieldType === 'DATE'     && <input type="date"   value={answer ?? ''} onChange={e => onChange(e.target.value)} className={cls} />}
       {q.fieldType === 'DROPDOWN' && (
-        <select value={answer ?? ''} onChange={e => onChange(e.target.value)} className={cls}>
-          <option value="">Select…</option>
-          {parseOpts(q.options).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-        </select>
+        <AppSelect value={answer ?? ''} onChange={onChange} options={parseOpts(q.options)} placeholder="Select…" />
       )}
       {q.fieldType === 'MULTISELECT' && (
         <div className="flex flex-wrap gap-2 mt-1">
@@ -1480,22 +1478,13 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                     <input value={fCampaign} onChange={e => setFCampaign(e.target.value)} placeholder="Filter…" className={colFilterCls} />
                   </td>
                   <td className="px-2 pb-2 pt-1">
-                    <select value={fReqType} onChange={e => setFReqType(e.target.value)} className={colFilterCls}>
-                      <option value="">All</option>
-                      {reqTypeOptions.map(v => <option key={v} value={v}>{v}</option>)}
-                    </select>
+                    <AppSelect value={fReqType} onChange={setFReqType} options={reqTypeOptions} placeholder="All" size="sm" menuPortal />
                   </td>
                   <td className="px-2 pb-2 pt-1">
-                    <select value={fPriority} onChange={e => setFPriority(e.target.value)} className={colFilterCls}>
-                      <option value="">All</option>
-                      {priorityOptions.map(v => <option key={v} value={v}>{v}</option>)}
-                    </select>
+                    <AppSelect value={fPriority} onChange={setFPriority} options={priorityOptions} placeholder="All" size="sm" menuPortal />
                   </td>
                   <td className="px-2 pb-2 pt-1">
-                    <select value={fStatus} onChange={e => setFStatus(e.target.value)} className={colFilterCls}>
-                      <option value="">All</option>
-                      {statusOptions.map(v => <option key={v} value={v}>{CAMPAIGN_STATUS_LABELS[v] || v}</option>)}
-                    </select>
+                    <AppSelect value={fStatus} onChange={setFStatus} options={statusOptions.map(v => ({ value: v, label: CAMPAIGN_STATUS_LABELS[v] || v }))} placeholder="All" size="sm" menuPortal />
                   </td>
                   <td className="px-2 pb-2 pt-1" />
                   <td className="px-2 pb-2 pt-1" />

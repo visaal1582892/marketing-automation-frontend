@@ -2,6 +2,7 @@
 import managerApi from '../../api/manager'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
+import AppSelect from '../../components/AppSelect'
 
 /**
  * Module 3 — weekly / monthly efficiency report.
@@ -175,17 +176,7 @@ export default function TimeReportPage() {
               </td>
               {/* Role filter */}
               <td className="px-3 py-1.5">
-                <select
-                  value={filterRole}
-                  onChange={e => setFilterRole(e.target.value)}
-                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-slate-700
-                             focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-200"
-                >
-                  <option value="">All roles</option>
-                  {distinctRoles.map(r => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
+                <AppSelect value={filterRole} onChange={setFilterRole} options={distinctRoles} placeholder="All roles" size="sm" menuPortal />
               </td>
               {/* Workload — no filter */}
               <td className="px-3 py-1.5" />

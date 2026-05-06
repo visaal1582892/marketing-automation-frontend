@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import collaborationApi from '../../api/collaboration'
+import AppSelect from '../../components/AppSelect'
 import useTaskChat from '../../hooks/useTaskChat'
 import useUnreadWatcher from '../../hooks/useUnreadWatcher'
 import Icon from '../../components/Icon'
@@ -697,17 +698,15 @@ export default function CollaborationsPage() {
         </div>
 
         {/* Activity filter */}
-        <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5">
-          <Icon name="toggleOn" className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-          <select
+        <div className="w-36">
+          <AppSelect
             value={filterActivity}
-            onChange={e => setFilterActivity(e.target.value)}
-            className="bg-transparent text-xs font-medium text-slate-700 outline-none cursor-pointer pr-1"
-          >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="all">All</option>
-          </select>
+            onChange={setFilterActivity}
+            options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'all', label: 'All' }]}
+            placeholder="Filter…"
+            size="sm"
+            isClearable={false}
+          />
         </div>
 
         {/* Unread toggle */}

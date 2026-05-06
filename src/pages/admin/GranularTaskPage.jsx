@@ -3,6 +3,7 @@ import { granularTasksApi, masterApi } from '../../api/masterData'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
 import { useToast } from '../../components/Toast'
+import AppSelect from '../../components/AppSelect'
 
 export default function GranularTaskPage() {
   const toast = useToast()
@@ -295,17 +296,7 @@ function FilterInput({ value, onChange, placeholder, icon }) {
 }
 
 function FilterSelect({ value, onChange, options }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5
-                 text-xs text-slate-700 shadow-sm
-                 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-    >
-      {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-    </select>
-  )
+  return <AppSelect value={value} onChange={onChange} options={options} size="sm" isClearable={false} menuPortal />
 }
 
 function StatusPill({ active }) {
@@ -445,18 +436,12 @@ function GranularTaskFormModal({ open, initial, taskTypes, onClose, onSave }) {
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Task Type</label>
-          <select
-            value={taskTypeId}
-            onChange={(e) => setTaskTypeId(e.target.value)}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm
-                       text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none
-                       focus:ring-2 focus:ring-brand-100"
-          >
-            <option value="">— Select a task type —</option>
-            {taskTypes.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
+          <AppSelect
+            value={taskTypeId ? String(taskTypeId) : ''}
+            onChange={setTaskTypeId}
+            options={taskTypes.map(t => ({ value: String(t.id), label: t.name }))}
+            placeholder="— Select a task type —"
+          />
           {taskTypes.length === 0 && (
             <p className="mt-1 text-xs text-slate-500">
               No task types available. Add some in the Task Types master table first.
@@ -466,17 +451,12 @@ function GranularTaskFormModal({ open, initial, taskTypes, onClose, onSave }) {
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Category</label>
-          <select
+          <AppSelect
             value={taskCategory}
-            onChange={(e) => setTaskCategory(e.target.value)}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm
-                       text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none
-                       focus:ring-2 focus:ring-brand-100"
-          >
-            <option value="">— Not specified —</option>
-            <option value="DIGITAL">Digital</option>
-            <option value="OFFLINE">Offline</option>
-          </select>
+            onChange={setTaskCategory}
+            options={[{ value: 'DIGITAL', label: 'Digital' }, { value: 'OFFLINE', label: 'Offline' }]}
+            placeholder="— Not specified —"
+          />
           <p className="mt-1 text-xs text-slate-500">
             Indicates whether this task is digital or offline in nature.
           </p>
@@ -484,16 +464,13 @@ function GranularTaskFormModal({ open, initial, taskTypes, onClose, onSave }) {
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
-          <select
+          <AppSelect
             value={isActive ? 'ACTIVE' : 'INACTIVE'}
-            onChange={(e) => setIsActive(e.target.value === 'ACTIVE')}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm
-                       text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none
-                       focus:ring-2 focus:ring-brand-100"
-          >
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-          </select>
+            onChange={v => setIsActive(v === 'ACTIVE')}
+            options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}
+            placeholder="Select status…"
+            isClearable={false}
+          />
           <p className="mt-1 text-xs text-slate-500">
             Inactive tasks are hidden from end-user dropdowns.
           </p>

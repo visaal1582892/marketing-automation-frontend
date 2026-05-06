@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import managerApi from '../../api/manager'
 import campaignsApi from '../../api/campaigns'
@@ -7,6 +7,7 @@ import Icon from '../../components/Icon'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
 import { useAuth } from '../../auth/AuthContext'
+import AppSelect from '../../components/AppSelect'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -46,19 +47,122 @@ const BUDGET_OPTIONS = [
 // ─── Inline column-filter primitives ─────────────────────────────────────────
 
 function SelectFilter({ value, onChange, options, placeholder = 'All' }) {
+  const normOpts = options.map(o => ({ value: o, label: STATUS_LABELS[o] || o }))
   return (
-    <select
+    <AppSelect
       value={value}
-      onChange={e => onChange(e.target.value)}
-      className={`w-full rounded border px-1.5 py-1 text-xs leading-tight
-                  focus:outline-none focus:ring-1 focus:ring-brand-300
-                  ${value
-                    ? 'border-brand-400 bg-brand-50 text-brand-700'
-                    : 'border-slate-200 bg-white text-slate-500'}`}
-    >
-      <option value="">{placeholder}</option>
-      {options.map(o => <option key={o} value={o}>{STATUS_LABELS[o] || o}</option>)}
-    </select>
+      onChange={onChange}
+      options={normOpts}
+      placeholder={placeholder}
+      size="sm"
+      menuPortal
+    />
+  )
+}
+
+/**
+ * Searchable select — shows a text input inside a dropdown to filter the list.
+ * Use for columns with many distinct values (Requestor, Assignee, Task Type).
+ */
+function SearchSelectFilter({ value, onChange, options, placeholder = 'All' }) {
+  const [open,   setOpen]   = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef(null)
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const filtered = options.filter(o =>
+    !search.trim() || o.toLowerCase().includes(search.trim().toLowerCase())
+  )
+
+  const handleSelect = (opt) => {
+    onChange(opt)
+    setOpen(false)
+    setSearch('')
+  }
+
+  const handleClear = (e) => {
+    e.stopPropagation()
+    onChange('')
+    setSearch('')
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} className="relative w-full">
+      {/* Trigger button */}
+      <button
+        type="button"
+        onClick={() => { setOpen(o => !o); setSearch('') }}
+        className={`flex w-full items-center justify-between gap-1 rounded border px-1.5 py-1 text-xs leading-tight text-left
+                    focus:outline-none focus:ring-1 focus:ring-brand-300
+                    ${value
+                      ? 'border-brand-400 bg-brand-50 text-brand-700'
+                      : 'border-slate-200 bg-white text-slate-500'}`}
+      >
+        <span className="truncate">{value || placeholder}</span>
+        {value
+          ? <span onClick={handleClear} className="shrink-0 rounded p-0.5 hover:bg-brand-100 text-brand-500 cursor-pointer">
+              <Icon name="x" className="h-2.5 w-2.5" />
+            </span>
+          : <Icon name="chevron" className="h-2.5 w-2.5 shrink-0 text-slate-400 rotate-90" />
+        }
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-0.5 w-48 min-w-full rounded-lg border border-slate-200 bg-white shadow-lg">
+          {/* Search box */}
+          <div className="p-1.5 border-b border-slate-100">
+            <div className="relative">
+              <Icon name="search" className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 pointer-events-none" />
+              <input
+                autoFocus
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search…"
+                className="w-full rounded border border-slate-200 pl-5 pr-2 py-1 text-xs
+                           focus:outline-none focus:ring-1 focus:ring-brand-300"
+              />
+            </div>
+          </div>
+          {/* Options list */}
+          <ul className="max-h-44 overflow-y-auto py-0.5">
+            <li>
+              <button
+                type="button"
+                onClick={() => handleSelect('')}
+                className={`w-full px-2.5 py-1.5 text-left text-xs hover:bg-brand-50 transition
+                            ${!value ? 'font-semibold text-brand-700' : 'text-slate-500'}`}
+              >
+                {placeholder}
+              </button>
+            </li>
+            {filtered.length === 0 ? (
+              <li className="px-2.5 py-2 text-xs text-slate-400 text-center">No matches</li>
+            ) : filtered.map(o => (
+              <li key={o}>
+                <button
+                  type="button"
+                  onClick={() => handleSelect(o)}
+                  className={`w-full px-2.5 py-1.5 text-left text-xs hover:bg-brand-50 transition truncate
+                              ${value === o ? 'font-semibold text-brand-700 bg-brand-50' : 'text-slate-700'}`}
+                >
+                  {o}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -149,29 +253,25 @@ function EditCampaignModal({ campaignId, task, onClose, onSaved }) {
             )}
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Priority</label>
-              <select
+              <AppSelect
                 value={form.priority}
-                onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
-                disabled={isRestricted}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800
-                           focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-300
-                           disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-              >
-                {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{p.charAt(0) + p.slice(1).toLowerCase()}</option>)}
-              </select>
+                onChange={v => setForm(f => ({ ...f, priority: v }))}
+                options={PRIORITY_OPTIONS.map(p => ({ value: p, label: p.charAt(0) + p.slice(1).toLowerCase() }))}
+                placeholder="Select priority…"
+                isClearable={false}
+                isDisabled={isRestricted}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Budget Tier</label>
-              <select
+              <AppSelect
                 value={form.budgetTier}
-                onChange={e => setForm(f => ({ ...f, budgetTier: e.target.value }))}
-                disabled={isRestricted}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800
-                           focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-300
-                           disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-              >
-                {BUDGET_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
-              </select>
+                onChange={v => setForm(f => ({ ...f, budgetTier: v }))}
+                options={BUDGET_OPTIONS}
+                placeholder="Select budget tier…"
+                isClearable={false}
+                isDisabled={isRestricted}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Key Message</label>
@@ -448,8 +548,8 @@ export default function AllRequestsPage() {
   const filtered = useMemo(() => tasks.filter(t => {
     if (fTaskId   && !String(t.taskId).includes(fTaskId.trim())) return false
     if (fCampaign && !String(t.campaignId).includes(fCampaign.trim())) return false
-    if (fRequestor && t.requestorName !== fRequestor) return false
-    if (fAssignee  && t.assigneeName  !== fAssignee)  return false
+    if (fRequestor && !t.requestorName?.toLowerCase().includes(fRequestor.trim().toLowerCase())) return false
+    if (fAssignee  && !t.assigneeName?.toLowerCase().includes(fAssignee.trim().toLowerCase()))  return false
     if (fTaskType) {
       const name = t.granularTaskName || t.taskTypeName || ''
       if (name !== fTaskType) return false
@@ -621,9 +721,9 @@ export default function AllRequestsPage() {
                 <tr className="bg-white border-b border-slate-200">
                   <td className="px-2 py-1.5"><TextFilter value={fTaskId}    onChange={setFTaskId}    placeholder="e.g. 42" /></td>
                   <td className="px-2 py-1.5"><TextFilter value={fCampaign}  onChange={setFCampaign}  placeholder="ID…" /></td>
-                  <td className="px-2 py-1.5"><SelectFilter value={fRequestor} onChange={setFRequestor} options={requestorOptions} /></td>
-                  <td className="px-2 py-1.5"><SelectFilter value={fAssignee}  onChange={setFAssignee}  options={assigneeOptions} /></td>
-                  <td className="px-2 py-1.5"><SelectFilter value={fTaskType}  onChange={setFTaskType}  options={taskTypeOptions} /></td>
+                  <td className="px-2 py-1.5"><TextFilter value={fRequestor} onChange={setFRequestor} placeholder="Search…" /></td>
+                  <td className="px-2 py-1.5"><TextFilter value={fAssignee}  onChange={setFAssignee}  placeholder="Search…" /></td>
+                  <td className="px-2 py-1.5"><SearchSelectFilter value={fTaskType}  onChange={setFTaskType}  options={taskTypeOptions} /></td>
                   <td className="px-2 py-1.5"><SelectFilter value={fPriority}  onChange={setFPriority}  options={priorityOptions} /></td>
                   <td className="px-2 py-1.5"><SelectFilter value={fStatus}    onChange={setFStatus}    options={statusOptions} /></td>
                   <td className="px-2 py-1.5" />

@@ -6,6 +6,7 @@ import campaignsApi from '../../api/campaigns'
 import { masterApi, granularTasksApi } from '../../api/masterData'
 import { enumsApi } from '../../api/enums'
 import api from '../../api/client'
+import AppSelect from '../../components/AppSelect'
 import tasksApi from '../../api/tasks'
 import Icon from '../../components/Icon'
 
@@ -501,18 +502,12 @@ function DeliverableCard({
                     />
                   )}
                   {q.fieldType === 'DROPDOWN' && (
-                    <select
+                    <AppSelect
                       value={answers[q.questionId] ?? ''}
-                      onChange={(e) => onQuestionnaireChange(q.questionId, e.target.value)}
-                      className={`w-full rounded-lg border px-3 py-1.5 text-sm text-slate-800 shadow-sm
-                        focus:outline-none focus:ring-2 transition
-                        ${qErr ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-slate-300 focus:border-brand-500 focus:ring-brand-200'}`}
-                    >
-                      <option value="">Select…</option>
-                      {parseQuestionOptions(q.options).map((opt) => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
+                      onChange={v => onQuestionnaireChange(q.questionId, v)}
+                      options={parseQuestionOptions(q.options)}
+                      placeholder="Select…"
+                    />
                   )}
                   {q.fieldType === 'MULTISELECT' && (
                     <div className="flex flex-wrap gap-2">

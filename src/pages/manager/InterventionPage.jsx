@@ -5,6 +5,7 @@ import campaignsApi from '../../api/campaigns'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
+import AppSelect from '../../components/AppSelect'
 
 /**
  * Module 2-B — Manager Intervention queue.
@@ -273,18 +274,13 @@ function OverrideModal({ campaign, users, form, setForm, saving, onCancel, onCon
         {deliverables.length > 0 && (
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Deliverable (optional)</label>
-            <select
+            <AppSelect
               value={form.granularTaskId}
-              onChange={(e) => setForm({ ...form, granularTaskId: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500"
-            >
-              <option value="">First un-routed deliverable</option>
-              {deliverables.map(d => (
-                <option key={d.specId} value={d.granularTaskId}>
-                  {d.granularTaskName || d.granularTaskId}
-                </option>
-              ))}
-            </select>
+              onChange={v => setForm({ ...form, granularTaskId: v })}
+              options={[{ value: '', label: 'First un-routed deliverable' }, ...deliverables.map(d => ({ value: d.granularTaskId, label: d.granularTaskName || d.granularTaskId }))]}
+              placeholder="First un-routed deliverable"
+              isClearable={false}
+            />
           </div>
         )}
 
@@ -292,18 +288,12 @@ function OverrideModal({ campaign, users, form, setForm, saving, onCancel, onCon
           <label className="block text-sm font-medium text-slate-700 mb-1">
             Assign to user <span className="text-red-500">*</span>
           </label>
-          <select
-            value={form.userId}
-            onChange={(e) => setForm({ ...form, userId: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500"
-          >
-            <option value="">Select user…</option>
-            {candidates.map(u => (
-              <option key={u.userId} value={u.userId}>
-                {u.fullName} — {u.roleName || '—'} ({u.currentActiveTasks ?? 0} active tasks)
-              </option>
-            ))}
-          </select>
+          <AppSelect
+            value={form.userId ? String(form.userId) : ''}
+            onChange={v => setForm({ ...form, userId: v })}
+            options={candidates.map(u => ({ value: String(u.userId), label: `${u.fullName} — ${u.roleName || '—'} (${u.currentActiveTasks ?? 0} active tasks)` }))}
+            placeholder="Select user…"
+          />
           <p className="mt-1 text-xs text-amber-600">
             This will assign the task even if the user is at max capacity.
           </p>

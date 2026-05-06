@@ -4,6 +4,7 @@ import questionnaireApi from '../../api/questionnaire'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
 import { useToast } from '../../components/Toast'
+import AppSelect from '../../components/AppSelect'
 
 const FIELD_TYPES = [
   { value: 'TEXT',        label: 'Short Text' },
@@ -375,16 +376,13 @@ export default function QuestionMasterPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Field type *</label>
-              <select
+              <AppSelect
                 value={form.fieldType}
-                onChange={(e) => setForm((f) => ({ ...f, fieldType: e.target.value, options: '' }))}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm
-                  focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-              >
-                {FIELD_TYPES.map((ft) => (
-                  <option key={ft.value} value={ft.value}>{ft.label}</option>
-                ))}
-              </select>
+                onChange={v => setForm(f => ({ ...f, fieldType: v, options: '' }))}
+                options={FIELD_TYPES}
+                placeholder="Select field type…"
+                isClearable={false}
+              />
             </div>
             <div className="flex items-end pb-1">
               <label className="flex cursor-pointer items-center gap-2.5 select-none">
@@ -525,18 +523,7 @@ function FilterInput({ value, onChange, placeholder, icon }) {
 }
 
 function FilterSelect({ value, onChange, options }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-2.5 pr-7 text-xs text-slate-700 shadow-sm
-        focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-    >
-      {options.map(([v, label]) => (
-        <option key={v} value={v}>{label}</option>
-      ))}
-    </select>
-  )
+  return <AppSelect value={value} onChange={onChange} options={options} size="sm" isClearable={false} menuPortal />
 }
 
 function RowActions({ onEdit, onDelete }) {

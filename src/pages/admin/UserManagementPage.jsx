@@ -4,6 +4,7 @@ import { masterApi } from '../../api/masterData'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
 import { useToast } from '../../components/Toast'
+import AppSelect from '../../components/AppSelect'
 
 const BASE = '/admin/users'
 const SKILL_LEVELS = ['JUNIOR', 'SENIOR']
@@ -245,39 +246,48 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
           {/* Department */}
           <div>
             <label className={labelCls}>Department</label>
-            <select className={inputCls} value={form.departmentId} onChange={e => set('departmentId', e.target.value)}>
-              <option value="">— Select department —</option>
-              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            <AppSelect
+              value={form.departmentId != null ? String(form.departmentId) : ''}
+              onChange={v => set('departmentId', v)}
+              options={departments.map(d => ({ value: String(d.id), label: d.name }))}
+              placeholder="— Select department —"
+            />
           </div>
 
           {/* Designation */}
           <div>
             <label className={labelCls}>Designation</label>
-            <select className={inputCls} value={form.designationId} onChange={e => set('designationId', e.target.value)}>
-              <option value="">— Select designation —</option>
-              {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            <AppSelect
+              value={form.designationId != null ? String(form.designationId) : ''}
+              onChange={v => set('designationId', v)}
+              options={designations.map(d => ({ value: String(d.id), label: d.name }))}
+              placeholder="— Select designation —"
+            />
           </div>
 
           {/* Skill Level */}
           <div>
             <label className={labelCls}>Skill Level</label>
-            <select className={inputCls} value={form.skillLevel} onChange={e => set('skillLevel', e.target.value)}>
-              {SKILL_LEVELS.map(s => (
-                <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
-              ))}
-            </select>
+            <AppSelect
+              value={form.skillLevel}
+              onChange={v => set('skillLevel', v)}
+              options={SKILL_LEVELS.map(s => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase() }))}
+              placeholder="Select…"
+              isClearable={false}
+            />
           </div>
 
           {/* Status (edit only) */}
           {isEdit && (
             <div>
               <label className={labelCls}>Status</label>
-              <select className={inputCls} value={form.status} onChange={e => set('status', e.target.value)}>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-              </select>
+              <AppSelect
+                value={form.status}
+                onChange={v => set('status', v)}
+                options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}
+                placeholder="Select…"
+                isClearable={false}
+              />
             </div>
           )}
         </div>
@@ -326,19 +336,15 @@ function ColInput({ value, onChange, placeholder }) {
 
 function ColSelect({ value, onChange, options, placeholder }) {
   return (
-    <div className="relative mt-1">
-      <select value={value} onChange={e => onChange(e.target.value)}
-        className="w-full appearance-none rounded border border-slate-200 bg-slate-50
-                   pl-2 pr-6 py-1 text-xs text-slate-700 outline-none
-                   focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-100 transition">
-        <option value="all">{placeholder}</option>
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-      <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400"
-        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-        strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 9l6 6 6-6" />
-      </svg>
+    <div className="mt-1">
+      <AppSelect
+        value={value === 'all' ? '' : value}
+        onChange={v => onChange(v || 'all')}
+        options={options}
+        placeholder={placeholder}
+        size="sm"
+        menuPortal
+      />
     </div>
   )
 }

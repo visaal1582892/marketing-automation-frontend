@@ -3,6 +3,7 @@ import { masterApi, granularTasksApi, roleTaskApi } from '../../api/masterData'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
 import { useToast } from '../../components/Toast'
+import AppSelect from '../../components/AppSelect'
 
 export default function RoleTaskMappingPage() {
   const toast = useToast()
@@ -319,17 +320,7 @@ function FilterInput({ value, onChange, placeholder, icon }) {
 }
 
 function FilterSelect({ value, onChange, options }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5
-                 text-xs text-slate-700 shadow-sm
-                 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-    >
-      {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-    </select>
-  )
+  return <AppSelect value={value} onChange={onChange} options={options} size="sm" isClearable={false} menuPortal />
 }
 
 function RolePill({ name }) {
@@ -410,28 +401,25 @@ function AddMappingModal({ open, roles, granularTasks, onClose, onSave }) {
       <form onSubmit={submit} className="space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Role</label>
-          <select value={roleId} onChange={(e) => setRoleId(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm
-                             text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none
-                             focus:ring-2 focus:ring-brand-100">
-            <option value="">— Select a role —</option>
-            {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-          </select>
+          <AppSelect
+            value={roleId ? String(roleId) : ''}
+            onChange={setRoleId}
+            options={roles.map(r => ({ value: String(r.id), label: r.name }))}
+            placeholder="— Select a role —"
+          />
         </div>
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Granular Task</label>
-          <select value={taskId} onChange={(e) => setTaskId(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm
-                             text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none
-                             focus:ring-2 focus:ring-brand-100">
-            <option value="">— Select a task —</option>
-            {Object.entries(tasksByType).map(([typeName, tasks]) => (
-              <optgroup key={typeName} label={typeName}>
-                {tasks.map((t) => <option key={t.taskId} value={t.taskId}>{t.taskName}</option>)}
-              </optgroup>
-            ))}
-          </select>
+          <AppSelect
+            value={taskId ? String(taskId) : ''}
+            onChange={setTaskId}
+            options={Object.entries(tasksByType).map(([typeName, tasks]) => ({
+              label: typeName,
+              options: tasks.map(t => ({ value: String(t.taskId), label: t.taskName })),
+            }))}
+            placeholder="— Select a task —"
+          />
         </div>
 
         {roleId && taskId && (
@@ -504,13 +492,13 @@ function EditMappingModal({ row, onClose, onSave }) {
         {/* Editable: Status */}
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm
-                             text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none
-                             focus:ring-2 focus:ring-brand-100">
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-          </select>
+          <AppSelect
+            value={status}
+            onChange={setStatus}
+            options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}
+            placeholder="Select status…"
+            isClearable={false}
+          />
           <p className="mt-1 text-xs text-slate-500">
             Inactive mappings are hidden from routing but not deleted.
           </p>
