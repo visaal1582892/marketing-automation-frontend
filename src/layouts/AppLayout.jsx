@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { MASTER_RESOURCES } from '../api/masterData'
@@ -148,7 +148,6 @@ export default function AppLayout() {
   const [managerOpen, setManagerOpen]   = useState(true)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
   const [collabActiveCount, setCollabActiveCount] = useState(0)
-  const collabPollRef = useRef(null)
 
   // Admin alone does NOT get Manager Tools — the Marketing Manager role is required.
   const showManagerTools = isMarketingManager
@@ -161,7 +160,10 @@ export default function AppLayout() {
   // assign the Requestor role as well if an admin needs to submit requests.
   const showRequests = isRequestor || isHead || isRegionalManager
 
-  // Active collaboration count for sidebar badge
+  // Active collaboration count for sidebar badge.
+  // No polling — badge updates via two lightweight triggers:
+  //   1. collab-active-changed event  → fired immediately when a chat is paused/resumed
+  //   2. visibilitychange             → re-fetches once when user returns to the tab
   useEffect(() => {
     if (!showCollaborations) return
     const fetchCount = () => {
@@ -172,13 +174,14 @@ export default function AppLayout() {
         })
         .catch(() => {})
     }
+    const onVisibilityChange = () => { if (document.visibilityState === 'visible') fetchCount() }
+
     fetchCount()
-    collabPollRef.current = setInterval(fetchCount, 30_000)
-    // Instantly re-fetch when a chat is paused or resumed anywhere in the app
     window.addEventListener('collab-active-changed', fetchCount)
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
-      clearInterval(collabPollRef.current)
       window.removeEventListener('collab-active-changed', fetchCount)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [showCollaborations]) // eslint-disable-line react-hooks/exhaustive-deps
 

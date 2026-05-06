@@ -2,7 +2,8 @@ import axios from 'axios'
 
 const TOKEN_KEY = 'ma_token'
 const USER_KEY  = 'ma_user'
-const DEFAULT_BACKEND_URL = 'https://return-atlas-hexagram.ngrok-free.dev/'
+// const DEFAULT_BACKEND_URL = 'https://return-atlas-hexagram.ngrok-free.dev/'
+const DEFAULT_BACKEND_URL = 'http://localhost:8080/'
 
 const configuredBaseUrl = (import.meta.env.VITE_API_BASE_URL || DEFAULT_BACKEND_URL).trim()
 const normalisedBaseUrl = configuredBaseUrl.replace(/\/+$/, '')
