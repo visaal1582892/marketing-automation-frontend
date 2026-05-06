@@ -374,7 +374,7 @@ function BusyTeamModal({ campaign: c, report, holdingTaskId, onHoldTask, onAppro
               <h3 className="text-base font-semibold text-slate-900">No Team Members Available</h3>
             </div>
             <p className="mt-1 text-xs text-slate-500 ml-9">
-              Some roles needed for <span className="font-medium text-slate-700">#{c.campaignId} — {c.requirementTypeName}</span> have no active members.
+              Some roles needed for <span className="font-medium text-slate-700">#{c.campaignId} — {c.taskTypeName}</span> have no active members.
               Please add users to the required roles, then approve.
             </p>
           </div>
@@ -526,8 +526,8 @@ function UserRow({ user, holdingTaskId, onHoldTask }) {
                   </span>
                   <span className="text-xs text-slate-400">#{t.campaignId}</span>
                 </div>
-                {t.requirementTypeName && (
-                  <div className="text-xs text-slate-500 mt-0.5">{t.requirementTypeName}</div>
+                {t.taskTypeName && (
+                  <div className="text-xs text-slate-500 mt-0.5">{t.taskTypeName}</div>
                 )}
               </div>
               <button
@@ -560,7 +560,7 @@ function CampaignCard({ campaign: c, onApprove, onReject, onViewBrief, checkingC
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono text-slate-400">#{c.campaignId}</span>
-            <span className="text-sm font-semibold text-slate-800">{c.requirementTypeName}</span>
+            <span className="text-sm font-semibold text-slate-800">{c.taskTypeName}</span>
             <PriorityEditor
               campaignId={c.campaignId}
               value={c.priority}
@@ -706,10 +706,10 @@ function HeldTaskRow({ task: t, busy, onUnhold, onViewBrief }) {
             </span>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-            {t.requirementTypeName && (
+            {t.taskTypeName && (
               <span className="flex items-center gap-1">
                 <Icon name="fileText" className="h-3.5 w-3.5" />
-                {t.requirementTypeName}
+                {t.taskTypeName}
               </span>
             )}
             {t.assigneeName && (

@@ -224,7 +224,7 @@ function PendingTable({ campaigns, onAction, onViewBrief }) {
           {campaigns.map((c) => (
             <tr key={c.campaignId} className="hover:bg-slate-50/60 transition">
               <td className="px-4 py-3 text-slate-500 font-mono text-xs">#{c.campaignId}</td>
-              <td className="px-4 py-3 font-medium text-slate-800">{c.requirementTypeName || '—'}</td>
+              <td className="px-4 py-3 font-medium text-slate-800">{c.taskTypeName || '—'}</td>
               <td className="px-4 py-3 text-slate-600">{c.requestorName}</td>
               <td className="px-4 py-3 text-slate-600">{c.departmentName || '—'}</td>
               <td className="px-4 py-3 text-slate-500 text-xs">{fmtEnum(c.businessObjective)}</td>
@@ -275,7 +275,7 @@ export function HistoryTable({ campaigns, stage, onViewBrief }) {
               <td className="px-4 py-3 text-slate-500 font-mono text-xs">#{c.campaignId}</td>
               <td className="px-4 py-3 font-medium text-slate-800">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span>{c.requirementTypeName || '—'}</span>
+                  <span>{c.taskTypeName || '—'}</span>
                   <PriorityBadge v={c.priority} />
                 </div>
               </td>

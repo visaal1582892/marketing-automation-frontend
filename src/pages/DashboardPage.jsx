@@ -425,7 +425,7 @@ function RecentTasksFeed({ tasks, title = 'Up Next', linkTo = '/my-tasks' }) {
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[11px] font-mono text-slate-300">#{t.taskId}</span>
               <span className="font-medium text-slate-700 truncate">
-                {t.granularTaskName || t.requirementTypeName || 'Task'}
+                {t.granularTaskName || t.taskTypeName || 'Task'}
               </span>
               <TaskBadge status={t.status} />
               <PriorityBadge v={t.campaignPriority} />

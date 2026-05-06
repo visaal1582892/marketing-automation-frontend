@@ -105,7 +105,7 @@ export default function CompletedTasksPage() {
       {assetTask && (
         <AssetPreviewModal
           taskId={assetTask.taskId}
-          taskName={assetTask.granularTaskName || assetTask.requirementTypeName || `Task ${assetTask.taskId}`}
+          taskName={assetTask.granularTaskName || `Task ${assetTask.taskId}`}
           currentUserId={user?.id}
           onClose={() => setAssetTask(null)}
         />
@@ -141,7 +141,7 @@ function CompletedTaskCard({ task, onRework, onViewAssets }) {
               <span className="font-normal text-slate-400">TASK</span>{task.taskId}
             </span>
             <span className="text-sm font-semibold text-slate-900">
-              {task.granularTaskName || task.requirementTypeName || 'Task'}
+              {task.granularTaskName || task.taskTypeName || 'Task'}
             </span>
             {task.taskTypeName && (
               <span className="text-xs text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">{task.taskTypeName}</span>
@@ -153,7 +153,7 @@ function CompletedTaskCard({ task, onRework, onViewAssets }) {
 
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
             <span className="text-slate-700 font-medium">
-              {task.requirementTypeName || `Campaign #${task.campaignId}`}
+              {task.taskTypeName || `Campaign #${task.campaignId}`}
             </span>
             {task.assigneeName && (
               <span>Completed by <span className="font-medium text-slate-700">{task.assigneeName}</span></span>
@@ -206,7 +206,7 @@ function ReworkModal({ task, message, onMessageChange, saving, onCancel, onConfi
           <div>
             <h3 className="text-base font-bold text-slate-900">Request Rework</h3>
             <p className="mt-0.5 text-xs text-slate-500">
-              Task #{task.taskId} — {task.granularTaskName || task.requirementTypeName || 'Task'}
+              Task #{task.taskId} — {task.granularTaskName || task.taskTypeName || 'Task'}
             </p>
           </div>
           <button

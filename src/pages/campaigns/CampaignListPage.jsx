@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import AppSelect from '../../components/AppSelect'
+import DateRangePicker from '../../components/DateRangePicker'
 import { useToast } from '../../components/Toast'
 import campaignsApi from '../../api/campaigns'
 import { masterApi, granularTasksApi } from '../../api/masterData'
@@ -346,9 +347,9 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   const [activeSection, setActiveSection] = useState('campaign-info')
 
   // Master data
-  const [depts,     setDepts]     = useState([])
-  const [reqTypes,  setReqTypes]  = useState([])
-  const [audiences, setAudiences] = useState([])
+  const [depts,      setDepts]      = useState([])
+  const [taskTypes,  setTaskTypes]  = useState([])
+  const [audiences,  setAudiences]  = useState([])
   const [bizObjs,   setBizObjs]   = useState([])
   const [languages, setLanguages] = useState([])
   const [tones,     setTones]     = useState([])
@@ -414,8 +415,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
     departmentId:           campaign.departmentId || '',
     businessObjective:      '',
     businessObjectiveOther: '',
-    requirementTypeId:      '',
-    requirementTypeOther:   '',
+      taskTypeId:             [],
     audienceTypeIds:        [],
     audienceTypeOther:      '',
     languages:              [],
@@ -453,7 +453,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
     const nb = setter => d => setter([...d.map(i => ({ value: i.id, label: i.name })), OTHER_OPT])
     Promise.all([
       masterApi.list('departments').then(d => setDepts(d.map(i => ({ value: i.id, label: i.name })))),
-      masterApi.list('requirement-types').then(nb(setReqTypes)),
+      masterApi.list('task-types').then(d => setTaskTypes(d.map(i => ({ value: i.id, label: i.name })))),
       masterApi.list('audiences').then(nb(setAudiences)),
       masterApi.list('business-objectives').then(nb(setBizObjs)),
       masterApi.list('languages').then(nb(setLanguages)),
@@ -485,7 +485,6 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
       return { selected: [...knownIds, ...(otherText ? ['Other'] : [])], other: otherText }
     }
     const biz = resolveId(bizObjs,    campaign.businessObjectiveId)
-    const req = resolveId(reqTypes,   campaign.requirementTypeId)
     const off = resolveId(offerTypes, campaign.offerTypeId)
     const sp  = resolveId(spTypes,    campaign.supportingProofId)
     const bgt = resolveId(budgets,    campaign.budgetTierId)
@@ -498,7 +497,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
     setForm(prev => ({
       ...prev,
       businessObjective: biz.selected, businessObjectiveOther: biz.other,
-      requirementTypeId: req.selected, requirementTypeOther:   req.other,
+      taskTypeId:        parseJsonArr(campaign.taskTypeId),
       offerTypeId:       off.selected, offerTypeOther:         off.other,
       supportingProof:   sp.selected,  supportingProofOther:   sp.other,
       budgetTier:        bgt.selected, budgetTierOther:        bgt.other,
@@ -665,10 +664,20 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
           .map(([questionId, answerValue]) => ({ questionId, answerValue }))
         return { granularTaskId: taskId, questionnaireAnswers: answers }
       })
+      // Derive task types from actual deliverables (existing + newly added), not from the filter
+      const derivedTaskTypeIds = [...new Set([
+        ...localDeliverables
+          .map(d => availableTasks.find(t => t.taskId === d.granularTaskId)?.taskTypeId)
+          .filter(Boolean).map(String),
+        ...Object.keys(newTaskSelections)
+          .map(tid => availableTasks.find(t => t.taskId === tid)?.taskTypeId)
+          .filter(Boolean).map(String),
+      ])]
+
       const payload = {
         departmentId:      form.departmentId || null,
         businessObjective: resolve(form.businessObjective, form.businessObjectiveOther),
-        requirementTypeId: resolve(form.requirementTypeId, form.requirementTypeOther),
+        taskTypeId:        derivedTaskTypeIds.length > 0 ? derivedTaskTypeIds : null,
         audienceTypeId:    resolveArr(form.audienceTypeIds, form.audienceTypeOther),
         language:          resolveArr(form.languages, form.languageOther),
         hasOffer:          form.hasOffer,
@@ -808,14 +817,10 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                     )}
                   </div>
                   <div>
-                    <FieldLabel required>Requirement Type</FieldLabel>
-                    <EditSelect value={form.requirementTypeId}
-                      onChange={v => { setField('requirementTypeId', v); if (v !== 'Other') setField('requirementTypeOther', '') }}
-                      options={reqTypes} />
-                    {form.requirementTypeId === 'Other' && (
-                      <input className={`mt-2 ${inputCls}`} value={form.requirementTypeOther}
-                        onChange={e => setField('requirementTypeOther', e.target.value)} placeholder="Specify requirement type…" />
-                    )}
+                    <FieldLabel>Task Type</FieldLabel>
+                    <EditMultiSelect values={form.taskTypeId}
+                      onToggle={v => toggleMulti('taskTypeId', v)}
+                      options={taskTypes} />
                   </div>
                   <div>
                     <FieldLabel>Target Locations</FieldLabel>
@@ -1334,6 +1339,8 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
   const [fReqType,   setFReqType]   = useState('')
   const [fPriority,  setFPriority]  = useState('')
   const [fStatus,    setFStatus]    = useState('')
+  const [fDateFrom,  setFDateFrom]  = useState(null)
+  const [fDateTo,    setFDateTo]    = useState(null)
   const [activeTab,  setActiveTab]  = useState('inProgress')
 
   // Bookmark state — derived from campaign.bookmarked returned by API
@@ -1370,7 +1377,7 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
     navigate(`/campaigns/new?cloneFrom=${campaignId}`)
   }
 
-  const reqTypeOptions  = useMemo(() => [...new Set(campaigns.map(c => c.requirementTypeName).filter(Boolean))].sort(), [campaigns])
+  const reqTypeOptions  = useMemo(() => [...new Set(campaigns.map(c => c.taskTypeName).filter(Boolean))].sort(), [campaigns])
   const priorityOptions = useMemo(() => [...new Set(campaigns.map(c => c.priority).filter(Boolean))].sort(), [campaigns])
   const statusOptions   = useMemo(() => [...new Set(campaigns.map(c => c.status).filter(Boolean))].sort(), [campaigns])
 
@@ -1390,16 +1397,31 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
     return true
   }), [campaigns, activeTab, bookmarkedIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filtered = useMemo(() => tabFiltered.filter(c => {
-    if (fCampaign && !String(c.campaignId).includes(fCampaign.trim())) return false
-    if (fReqType  && c.requirementTypeName !== fReqType)                return false
-    if (fPriority && c.priority !== fPriority)                          return false
-    if (fStatus   && c.status   !== fStatus)                            return false
-    return true
-  }), [tabFiltered, fCampaign, fReqType, fPriority, fStatus])
+  const filtered = useMemo(() => {
+    const dateFrom = fDateFrom ? new Date(fDateFrom + 'T00:00:00').getTime() : null
+    const dateTo   = fDateTo   ? new Date(fDateTo   + 'T23:59:59').getTime() : null
 
-  const hasFilters = fCampaign || fReqType || fPriority || fStatus
-  const clearAll   = () => { setFCampaign(''); setFReqType(''); setFPriority(''); setFStatus('') }
+    return tabFiltered
+      .filter(c => {
+        if (fCampaign && !String(c.campaignId).includes(fCampaign.trim())) return false
+        if (fReqType  && c.taskTypeName !== fReqType) return false
+        if (fPriority && c.priority !== fPriority)                          return false
+        if (fStatus   && c.status   !== fStatus)                            return false
+        if (dateFrom || dateTo) {
+          const ts = c.createdAt ? new Date(c.createdAt).getTime() : 0
+          if (dateFrom && ts < dateFrom) return false
+          if (dateTo   && ts > dateTo)   return false
+        }
+        return true
+      })
+      .sort((a, b) => b.campaignId - a.campaignId)
+  }, [tabFiltered, fCampaign, fReqType, fPriority, fStatus, fDateFrom, fDateTo])
+
+  const hasFilters = fCampaign || fReqType || fPriority || fStatus || fDateFrom || fDateTo
+  const clearAll   = () => {
+    setFCampaign(''); setFReqType(''); setFPriority(''); setFStatus('')
+    setFDateFrom(null); setFDateTo(null)
+  }
 
   const colFilterCls = `w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-600
     placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-300 focus:border-brand-400`
@@ -1434,9 +1456,17 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
         ))}
       </div>
 
-      {/* Row count + clear */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-slate-400">{filtered.length} campaign{filtered.length !== 1 ? 's' : ''}</span>
+      {/* Date range + row count + clear */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker
+            from={fDateFrom}
+            to={fDateTo}
+            onChange={({ from, to }) => { setFDateFrom(from); setFDateTo(to) }}
+            placeholder="All dates"
+          />
+          <span className="text-xs text-slate-400">{filtered.length} campaign{filtered.length !== 1 ? 's' : ''}</span>
+        </div>
         {hasFilters && (
           <button onClick={clearAll}
             className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50 transition">
@@ -1465,7 +1495,7 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign</th>
-                  <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Requirement Type</th>
+                  <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task Type</th>
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Priority</th>
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Status</th>
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Tasks</th>
@@ -1509,7 +1539,7 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                       <td className="px-3 py-3">
                         <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{c.campaignId}</span>
                       </td>
-                      <td className="px-3 py-3 font-medium text-slate-800">{c.requirementTypeName || '—'}</td>
+                      <td className="px-3 py-3 font-medium text-slate-800">{c.taskTypeName || '—'}</td>
                       <td className="px-3 py-3"><PriorityBadge priority={c.priority} /></td>
                       <td className="px-3 py-3">
                         <CampaignStatusBadge status={c.status} />
@@ -1619,7 +1649,7 @@ function CampaignTableView({ campaigns, loading, onRefresh, refreshing }) {
     const q = search.toLowerCase()
     return (
       !q ||
-      c.requirementTypeName?.toLowerCase().includes(q) ||
+      c.taskTypeName?.toLowerCase().includes(q) ||
       c.requestorName?.toLowerCase().includes(q) ||
       c.departmentName?.toLowerCase().includes(q) ||
       c.status?.toLowerCase().includes(q)
@@ -1652,7 +1682,7 @@ function CampaignTableView({ campaigns, loading, onRefresh, refreshing }) {
             <table className="min-w-[760px] divide-y divide-slate-200 text-sm sm:min-w-full">
               <thead className="bg-slate-50">
                 <tr>
-                  {['#', 'Requirement Type', 'Requestor', 'Department', 'Priority', 'Status', ''].map((h) => (
+                  {['#', 'Task Type', 'Requestor', 'Department', 'Priority', 'Status', ''].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                       {h}
                     </th>
@@ -1665,7 +1695,7 @@ function CampaignTableView({ campaigns, loading, onRefresh, refreshing }) {
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{c.campaignId}</span>
                     </td>
-                    <td className="px-4 py-3 font-medium text-slate-800">{c.requirementTypeName || '—'}</td>
+                    <td className="px-4 py-3 font-medium text-slate-800">{c.taskTypeName || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{c.requestorName || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{c.departmentName || '—'}</td>
                     <td className="px-4 py-3"><PriorityBadge priority={c.priority} /></td>

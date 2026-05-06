@@ -232,14 +232,14 @@ export async function generateBriefPdf(campaign) {
   txt(`#${campaign.campaignId}`, PW - MR, 16, { align: 'right' })
   font('normal', 7.5)
   ink([255, 180, 180])
-  txt(safe(campaign.requirementTypeName), PW - MR, 22, { align: 'right' })
+  txt(safe(campaign.taskTypeName), PW - MR, 22, { align: 'right' })
 
   y = 46
 
   // ── Campaign title & meta ─────────────────────────────────────────────────
   font('bold', 14)
   ink(C.ink)
-  const titleLines = doc.splitTextToSize(safe(campaign.requirementTypeName), CW)
+  const titleLines = doc.splitTextToSize(safe(campaign.taskTypeName), CW)
   doc.text(titleLines, ML, y)
   y += titleLines.length * 7 + 2
 
@@ -274,7 +274,7 @@ export async function generateBriefPdf(campaign) {
   section('Campaign Details')
 
   grid([
-    { label: 'Requirement Type',   value: safe(campaign.requirementTypeName) },
+    { label: 'Task Type',   value: safe(campaign.taskTypeName) },
     { label: 'Business Objective', value: safe(campaign.businessObjective) },
     { label: 'Target Location',    value: safeLocation(campaign.targetLocation) },
     { label: 'Audience Type',      value: safeMulti(campaign.audienceName || campaign.audienceTypeId) },
@@ -486,6 +486,6 @@ export async function generateBriefPdf(campaign) {
   txt(`Confidential  •  Generated ${fmtDateTime(new Date())}`, ML, PH - 9)
   txt(`Page ${total} of ${total}`, PW - MR, PH - 9, { align: 'right' })
 
-  const slug = (campaign.requirementTypeName || 'Campaign').replace(/[^a-zA-Z0-9]+/g, '-')
+  const slug = (campaign.taskTypeName || 'Campaign').replace(/[^a-zA-Z0-9]+/g, '-')
   doc.save(`Brief-${campaign.campaignId}-${slug}.pdf`)
 }

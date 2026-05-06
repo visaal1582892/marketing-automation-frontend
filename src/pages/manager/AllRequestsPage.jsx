@@ -8,6 +8,7 @@ import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
 import { useAuth } from '../../auth/AuthContext'
 import AppSelect from '../../components/AppSelect'
+import DateRangePicker from '../../components/DateRangePicker'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -514,6 +515,8 @@ export default function AllRequestsPage() {
   const [fTaskType,  setFTaskType]  = useState('')
   const [fPriority,  setFPriority]  = useState('')
   const [fStatus,    setFStatus]    = useState('')
+  const [fDateFrom,  setFDateFrom]  = useState(null)
+  const [fDateTo,    setFDateTo]    = useState(null)
 
   // Unhold modal state
   const [unholdTarget,   setUnholdTarget]   = useState(null)
@@ -545,26 +548,43 @@ export default function AllRequestsPage() {
   const priorityOptions  = uniq(tasks.map(t => t.campaignPriority))
   const statusOptions    = uniq(tasks.map(t => t.status))
 
-  const filtered = useMemo(() => tasks.filter(t => {
-    if (fTaskId   && !String(t.taskId).includes(fTaskId.trim())) return false
-    if (fCampaign && !String(t.campaignId).includes(fCampaign.trim())) return false
-    if (fRequestor && !t.requestorName?.toLowerCase().includes(fRequestor.trim().toLowerCase())) return false
-    if (fAssignee  && !t.assigneeName?.toLowerCase().includes(fAssignee.trim().toLowerCase()))  return false
-    if (fTaskType) {
-      const name = t.granularTaskName || t.taskTypeName || ''
-      if (name !== fTaskType) return false
-    }
-    if (fPriority && t.campaignPriority  !== fPriority) return false
-    if (fStatus   && t.status            !== fStatus)   return false
-    return true
-  }), [tasks, fTaskId, fCampaign, fRequestor, fAssignee, fTaskType, fPriority, fStatus])
+  const filtered = useMemo(() => {
+    const dateFrom = fDateFrom ? new Date(fDateFrom + 'T00:00:00').getTime() : null
+    const dateTo   = fDateTo   ? new Date(fDateTo   + 'T23:59:59').getTime() : null
 
-  const activeFilters = [fTaskId, fCampaign, fRequestor, fAssignee, fTaskType, fPriority, fStatus]
+    return tasks
+      .filter(t => {
+        if (fTaskId   && !String(t.taskId).includes(fTaskId.trim())) return false
+        if (fCampaign && !String(t.campaignId).includes(fCampaign.trim())) return false
+        if (fRequestor && !t.requestorName?.toLowerCase().includes(fRequestor.trim().toLowerCase())) return false
+        if (fAssignee  && !t.assigneeName?.toLowerCase().includes(fAssignee.trim().toLowerCase()))  return false
+        if (fTaskType) {
+          const name = t.granularTaskName || t.taskTypeName || ''
+          if (name !== fTaskType) return false
+        }
+        if (fPriority && t.campaignPriority !== fPriority) return false
+        if (fStatus   && t.status           !== fStatus)   return false
+        if (dateFrom || dateTo) {
+          const ts = t.assignedAt ? new Date(t.assignedAt).getTime() : 0
+          if (dateFrom && ts < dateFrom) return false
+          if (dateTo   && ts > dateTo)   return false
+        }
+        return true
+      })
+      .sort((a, b) => {
+        const da = a.assignedAt ? new Date(a.assignedAt).getTime() : 0
+        const db = b.assignedAt ? new Date(b.assignedAt).getTime() : 0
+        return db - da
+      })
+  }, [tasks, fTaskId, fCampaign, fRequestor, fAssignee, fTaskType, fPriority, fStatus, fDateFrom, fDateTo])
+
+  const activeFilters = [fTaskId, fCampaign, fRequestor, fAssignee, fTaskType, fPriority, fStatus, fDateFrom, fDateTo]
     .filter(Boolean).length
 
   const clearFilters = () => {
     setFTaskId(''); setFCampaign(''); setFRequestor(''); setFAssignee('')
     setFTaskType(''); setFPriority(''); setFStatus('')
+    setFDateFrom(null); setFDateTo(null)
   }
 
   // ── Hold ─────────────────────────────────────────────────────────────────────
@@ -680,8 +700,14 @@ export default function AllRequestsPage() {
         </button>
       </div>
 
-      {/* ── Stats bar ── */}
+      {/* ── Date range + Stats bar ── */}
       <div className="flex flex-wrap items-center gap-3">
+        <DateRangePicker
+          from={fDateFrom}
+          to={fDateTo}
+          onChange={({ from, to }) => { setFDateFrom(from); setFDateTo(to) }}
+          placeholder="All dates"
+        />
         <StatChip icon="clipboard" label={`${filtered.length} / ${tasks.length} tasks`} color="slate" />
         <StatChip icon="users"     label={`${uniq(tasks.map(t => t.assigneeName)).length} workers`} color="brand" />
         <StatChip icon="pause"     label={`${tasks.filter(t => t.status === 'HELD').length} on hold`} color="amber" />
@@ -703,7 +729,7 @@ export default function AllRequestsPage() {
       ) : (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1160px] text-xs border-collapse">
+            <table className="w-full min-w-[1280px] text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <Th width="w-16">Task</Th>
@@ -716,6 +742,7 @@ export default function AllRequestsPage() {
                   <Th width="w-20" title="Times sent back by QC manager">QC Reworks</Th>
                   <Th width="w-24" title="Times sent back by requestor">Req. Reworks</Th>
                   <Th width="w-28">Assigned On</Th>
+                  <Th width="w-32" title="Who performed the most recent action on this task">Action done by</Th>
                   <Th align="right" width="w-44">Actions</Th>
                 </tr>
                 <tr className="bg-white border-b border-slate-200">
@@ -730,12 +757,13 @@ export default function AllRequestsPage() {
                   <td className="px-2 py-1.5" />
                   <td className="px-2 py-1.5" />
                   <td className="px-2 py-1.5" />
+                  <td className="px-2 py-1.5" />
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-14 text-center">
+                    <td colSpan={12} className="py-14 text-center">
                       <Icon name="inbox" className="mx-auto h-8 w-8 text-slate-300 mb-2" />
                       <p className="text-sm text-slate-500">No tasks match the current filters.</p>
                       <button onClick={clearFilters} className="mt-2 text-xs text-brand-600 hover:underline">
@@ -773,7 +801,7 @@ export default function AllRequestsPage() {
       {assetPreviewTask && (
         <AssetPreviewModal
           taskId={assetPreviewTask.taskId}
-          taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
+          taskName={assetPreviewTask.granularTaskName || `Task ${assetPreviewTask.taskId}`}
           currentUserId={user?.id}
           onClose={() => setAssetPreviewTask(null)}
         />
@@ -858,8 +886,8 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
         <button onClick={onViewBrief} className="font-medium text-brand-700 hover:underline leading-tight">
           #{t.campaignId}
         </button>
-        {t.requirementTypeName && (
-          <div className="text-xs text-slate-400 mt-0.5">{t.requirementTypeName}</div>
+        {t.taskTypeName && (
+          <div className="text-xs text-slate-400 mt-0.5">{t.taskTypeName}</div>
         )}
       </td>
 
@@ -916,6 +944,15 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
 
       <td className="px-3 py-2.5 whitespace-nowrap text-slate-500 text-xs">
         {t.assignedAt ? fmtDate(t.assignedAt) : <span className="text-slate-300">—</span>}
+      </td>
+
+      <td className="px-3 py-2.5 text-slate-600 text-xs whitespace-nowrap">
+        {t.latestActionDoneByName
+          ? <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5
+                             text-xs font-medium text-indigo-700 ring-1 ring-indigo-100">
+              {t.latestActionDoneByName}
+            </span>
+          : <span className="text-slate-300">N/A</span>}
       </td>
 
       <td className="px-3 py-2.5">

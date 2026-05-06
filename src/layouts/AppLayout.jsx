@@ -291,7 +291,7 @@ export default function AppLayout() {
             </SidebarGroup>
           )}
 
-          {(isAdmin || isMarketingManager) && (
+          {isAdmin && (
             <SidebarGroup
               label="Master Data"
               icon="cog"
@@ -299,7 +299,7 @@ export default function AppLayout() {
               open={masterOpen}
               onToggle={() => setMasterOpen((o) => !o)}
             >
-              {(isAdmin || isMarketingManager) && MASTER_RESOURCES.map((r) => (
+              {MASTER_RESOURCES.map((r) => (
                 <SidebarLink
                   key={r.slug}
                   to={`/admin/master/${r.slug}`}
@@ -310,36 +310,30 @@ export default function AppLayout() {
                   onNavigate={() => setMobileOpen(false)}
                 />
               ))}
-              {(isAdmin || isMarketingManager) && (
-                <SidebarLink
-                  to="/admin/granular-tasks"
-                  label="Granular Tasks"
-                  icon="list"
-                  collapsed={collapsed}
-                  nested
-                  onNavigate={() => setMobileOpen(false)}
-                />
-              )}
-              {(isAdmin || isMarketingManager) && (
-                <SidebarLink
-                  to="/admin/role-task-mappings"
-                  label="Role-Task Mappings"
-                  icon="shield"
-                  collapsed={collapsed}
-                  nested
-                  onNavigate={() => setMobileOpen(false)}
-                />
-              )}
-              {(isAdmin || isMarketingManager) && (
-                <SidebarLink
-                  to="/admin/questions"
-                  label="Question Library"
-                  icon="clipboard"
-                  collapsed={collapsed}
-                  nested
-                  onNavigate={() => setMobileOpen(false)}
-                />
-              )}
+              <SidebarLink
+                to="/admin/granular-tasks"
+                label="Granular Tasks"
+                icon="list"
+                collapsed={collapsed}
+                nested
+                onNavigate={() => setMobileOpen(false)}
+              />
+              <SidebarLink
+                to="/admin/role-task-mappings"
+                label="Role-Task Mappings"
+                icon="shield"
+                collapsed={collapsed}
+                nested
+                onNavigate={() => setMobileOpen(false)}
+              />
+              <SidebarLink
+                to="/admin/questions"
+                label="Question Library"
+                icon="clipboard"
+                collapsed={collapsed}
+                nested
+                onNavigate={() => setMobileOpen(false)}
+              />
               <SidebarLink
                 to="/admin/users"
                 label="Users"

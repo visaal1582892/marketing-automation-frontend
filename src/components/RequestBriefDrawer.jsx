@@ -154,7 +154,7 @@ export default function RequestBriefDrawer({
                   <PriorityBadge v={c?.priority} />
                 )}
                 <span className="text-sm font-semibold text-slate-800 truncate hidden sm:block">
-                  {c.requirementTypeName}
+                  {c.taskTypeName}
                 </span>
               </div>
             )}
@@ -214,7 +214,7 @@ export default function RequestBriefDrawer({
                         Campaign Brief
                       </p>
                       <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">
-                        {c.requirementTypeName || 'Request Brief'}
+                        {c.taskTypeName || 'Request Brief'}
                       </h1>
                       <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-white/55">
                         {c.requestorName && <span>{c.requestorName}</span>}
@@ -281,7 +281,7 @@ export default function RequestBriefDrawer({
               {/* ── 3-column info sections ── */}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <BriefCard title="Campaign Overview" icon="fileText" accent="blue">
-                  <DetailRow label="Requirement Type" value={c.requirementTypeName} />
+                  <DetailRow label="Task Type" value={c.taskTypeName} />
                   <DetailRow label="Audience Type"    value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
                   <DetailRow label="Language"         value={fmtMultiValue(c.language)} />
                   <DetailRow label="Tone / Style"     value={fmtMultiValue(c.tone)} />
@@ -421,6 +421,14 @@ export default function RequestBriefDrawer({
                               {t.totalTimeLoggedMinutes != null &&
                                 ` · ${t.totalTimeLoggedMinutes} min logged`}
                             </p>
+                            {t.latestActionDoneByName && (
+                              <p className="text-xs text-slate-400">
+                                Last action by{' '}
+                                <span className="font-medium text-slate-600">
+                                  {t.latestActionDoneByName}
+                                </span>
+                              </p>
+                            )}
                           </div>
                           {t.status === 'COMPLETED' && canRequestRework && (
                             <button
@@ -536,7 +544,7 @@ export function RequestSummaryCard({ campaign }) {
     <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-700 space-y-1.5 ring-1 ring-slate-200">
       <div className="flex items-center gap-2 flex-wrap">
         <IdChip value={campaign.campaignId} />
-        <span className="font-semibold text-slate-800">{campaign.requirementTypeName || '—'}</span>
+        <span className="font-semibold text-slate-800">{campaign.taskTypeName || '—'}</span>
         <PriorityBadge v={campaign.priority} />
         {campaign.flaggedInconsistency && (
           <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5

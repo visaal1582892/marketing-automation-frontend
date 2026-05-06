@@ -212,7 +212,7 @@ export default function CampaignDetailPage() {
                 Campaign Detail
               </p>
               <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">
-                {c.requirementTypeName || 'Marketing Request'}
+                {c.taskTypeName || 'Marketing Request'}
               </h1>
               <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-white/55">
                 {c.requestorName && <span>{c.requestorName}</span>}
@@ -284,7 +284,7 @@ export default function CampaignDetailPage() {
       {/* ── 3-col info sections ── */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <BriefCard title="Campaign Overview" icon="fileText" accent="blue">
-          <DetailRow label="Requirement Type" value={c.requirementTypeName} />
+          <DetailRow label="Task Type" value={c.taskTypeName} />
           <DetailRow label="Audience Type"    value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
           <DetailRow label="Language"         value={fmtMultiValue(c.language)} />
           <DetailRow label="Tone / Style"     value={fmtMultiValue(c.tone)} />
@@ -435,7 +435,7 @@ export default function CampaignDetailPage() {
       {assetPreviewTask && (
         <AssetPreviewModal
           taskId={assetPreviewTask.taskId}
-          taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
+          taskName={assetPreviewTask.granularTaskName || `Task ${assetPreviewTask.taskId}`}
           currentUserId={myUserId}
           onClose={() => setAssetPreviewTask(null)}
         />

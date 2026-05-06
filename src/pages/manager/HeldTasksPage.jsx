@@ -213,10 +213,10 @@ function HeldTaskCard({ task: t, busy, isOther, onUnhold, onAssign, onViewBrief 
           </div>
 
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-            {t.requirementTypeName && (
+            {t.taskTypeName && (
               <span className="flex items-center gap-1">
                 <Icon name="fileText" className="h-3.5 w-3.5" />
-                {t.requirementTypeName}
+                {t.taskTypeName}
               </span>
             )}
             {t.assigneeName && !isOther && (
@@ -343,7 +343,7 @@ function AssignTaskModal({ task, onClose, onSuccess }) {
           <p className="text-xs text-slate-500">
             Campaign #{task.campaignId}
             {task.requestorName && <> · {task.requestorName}</>}
-            {task.requirementTypeName && <> · {task.requirementTypeName}</>}
+            {task.taskTypeName && <> · {task.taskTypeName}</>}
           </p>
         </div>
 

@@ -192,7 +192,7 @@ function InterventionCard({ campaign, busy, onRetry, onOverride, onReject, onVie
         <div className="flex-1 min-w-[240px]">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono text-slate-400">#{campaign.campaignId}</span>
-            <span className="text-sm font-semibold text-slate-800">{campaign.requirementTypeName}</span>
+            <span className="text-sm font-semibold text-slate-800">{campaign.taskTypeName}</span>
             <PriorityBadge v={campaign.priority} />
             {campaign.flaggedInconsistency && (
               <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200">

@@ -110,7 +110,7 @@ export function printBrief(campaign, filterTaskId = null) {
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Brief #${c.campaignId} — ${safe(c.requirementTypeName)}${isSingleTask ? ` — Task #${filterTaskId}` : ''}</title>
+<title>Brief #${c.campaignId} — ${safe(c.taskTypeName)}${isSingleTask ? ` — Task #${filterTaskId}` : ''}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{
@@ -320,7 +320,7 @@ export function printBrief(campaign, filterTaskId = null) {
   <!-- ── COVER ── -->
   <div class="cover">
     <div class="cover-eyebrow">MedPlus Marketing Automation · ${isSingleTask ? 'Task Brief' : 'Campaign Brief'}</div>
-    <div class="cover-title">${safe(c.requirementTypeName)}</div>
+    <div class="cover-title">${safe(c.taskTypeName)}</div>
     <div class="cover-meta">
       <span>${safe(c.requestorName)}</span>
       ${c.departmentName ? `<span>${safe(c.departmentName)}</span>` : ''}
@@ -362,8 +362,8 @@ export function printBrief(campaign, filterTaskId = null) {
       <div class="card">
         <div class="field-grid">
           <div>
-            <div class="field-label">Requirement Type</div>
-            <div class="field-value">${safe(c.requirementTypeName)}</div>
+            <div class="field-label">Task Type</div>
+            <div class="field-value">${safe(c.taskTypeName)}</div>
           </div>
           <div>
             <div class="field-label">Audience Type</div>

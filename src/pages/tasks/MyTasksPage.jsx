@@ -484,7 +484,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
               <span className="font-normal text-slate-400">TASK</span>{task.taskId}
             </span>
             <span className="text-sm font-semibold text-slate-800">
-              {task.granularTaskName || task.requirementTypeName || 'Task'}
+              {task.granularTaskName || task.taskTypeName || 'Task'}
             </span>
             <PriorityBadge v={task.campaignPriority} />
             <StatusBadge status={isCancelled ? 'CANCELLED' : task.status} />
@@ -526,7 +526,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
             )}
           </div>
           <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
-            <span>Campaign {task.campaignId} · {task.requirementTypeName || '—'}</span>
+            <span>Campaign {task.campaignId} · {task.taskTypeName || '—'}</span>
             {task.platformName && <span>• {task.platformName}</span>}
             {task.formatName   && <span>• {task.formatName}</span>}
             {task.quantity     && <span>• {task.quantity}</span>}
@@ -841,8 +841,8 @@ function SubmitModal({
           <div>
             <h3 className="text-base font-semibold text-slate-900">Submit for QC review</h3>
             <p className="mt-0.5 text-xs text-slate-500">
-              {task.granularTaskName || task.requirementTypeName || 'Task'}
-              {campaign && <span className="text-slate-400"> · {campaign.requirementTypeName || `Campaign ${task.campaignId}`}</span>}
+              {task.granularTaskName || task.taskTypeName || 'Task'}
+              {campaign && <span className="text-slate-400"> · {campaign.taskTypeName || `Campaign ${task.campaignId}`}</span>}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -951,7 +951,7 @@ function CommentModal({ task, comment, onCommentChange, onConfirm, onClose, savi
             <h3 className="text-sm font-bold text-slate-900">Add Comment &amp; Hold Task</h3>
             <p className="mt-0.5 text-xs text-slate-500">
               Task <span className="font-medium text-slate-700">#{task.taskId}</span> —{' '}
-              {task.granularTaskName || task.requirementTypeName || 'Task'}
+              {task.granularTaskName || task.taskTypeName || 'Task'}
             </p>
           </div>
           <button onClick={onClose}

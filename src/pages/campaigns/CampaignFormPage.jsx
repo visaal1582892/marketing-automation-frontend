@@ -839,7 +839,7 @@ export default function CampaignFormPage() {
 
   // Master data from DB tables
   const [depts,              setDepts]              = useState([])
-  const [reqTypes,           setReqTypes]           = useState([])
+  const [taskTypes,          setTaskTypes]          = useState([])
   const [audiences,          setAudiences]          = useState([])
   const [businessObjectives, setBusinessObjectives] = useState([])
   const [languages,          setLanguages]          = useState([])
@@ -850,7 +850,7 @@ export default function CampaignFormPage() {
   const [vendorTypes,        setVendorTypes]        = useState([])
   const [kpiTypeOpts,        setKpiTypeOpts]        = useState([])
   const [expectedOutputOpts, setExpectedOutputOpts] = useState([])
-  const [availableTasks,     setAvailableTasks]     = useState([])
+  const [allAvailableTasks,  setAllAvailableTasks]  = useState([])
   const [loadingTasks,       setLoadingTasks]       = useState(true)
 
   // Enum options — only priorities remain as Java enum (not admin-configurable)
@@ -860,8 +860,7 @@ export default function CampaignFormPage() {
     departmentId:            user?.departmentId || '',
     businessObjective:       '',
     businessObjectiveOther:  '',
-    requirementTypeId:       '',
-    requirementTypeOther:    '',
+    taskTypeId:              [],
     audienceTypeIds:         [],
     audienceTypeOther:       '',
     languages:               [],
@@ -907,7 +906,7 @@ export default function CampaignFormPage() {
     const nbM = (setter) => (d) => setter([...d.map(normaliseById), OTHER_OPTION]) // multi-select same
 
     masterApi.list('departments').then((d) => setDepts(d.map(normaliseById))).catch(() => {})
-    masterApi.list('requirement-types').then(nb(setReqTypes)).catch(() => {})
+    masterApi.list('task-types').then((d) => setTaskTypes(d.map(normaliseById))).catch(() => {})
     masterApi.list('audiences').then(nbM(setAudiences)).catch(() => {})
     masterApi.list('business-objectives').then(nb(setBusinessObjectives)).catch(() => {})
     masterApi.list('languages').then(nbM(setLanguages)).catch(() => {})
@@ -919,11 +918,16 @@ export default function CampaignFormPage() {
     masterApi.list('kpi-types').then(nb(setKpiTypeOpts)).catch(() => {})
     masterApi.list('expected-outputs').then(nb(setExpectedOutputOpts)).catch(() => {})
 
-    masterApi.list('granular-tasks').then((d) => setAvailableTasks(d))
+    masterApi.list('granular-tasks').then((d) => setAllAvailableTasks(d))
       .catch(() => {}).finally(() => setLoadingTasks(false))
 
     enumsApi.getCampaignFormOptions().then((data) => setEnumOpts(data)).catch(() => {})
   }, [])
+
+  // Filter granular tasks by ALL selected task types (union); show all when nothing is selected
+  const availableTasks = form.taskTypeId.length > 0
+    ? allAvailableTasks.filter(t => form.taskTypeId.includes(String(t.taskTypeId)))
+    : allAvailableTasks
 
   // Pre-populate form when cloning a campaign (query param ?cloneFrom=<id>)
   const [cloneLoading, setCloneLoading] = useState(!!cloneSourceId)
@@ -939,7 +943,7 @@ export default function CampaignFormPage() {
           ...prev,
           departmentId:           c.departmentId           || prev.departmentId,
           businessObjective:      c.businessObjectiveId    || c.businessObjective || '',
-          requirementTypeId:      c.requirementTypeId      || '',
+          taskTypeId:             parseArr(c.taskTypeId),
           audienceTypeIds:        parseArr(c.audienceTypeId),
           languages:              parseArr(c.languageIds),
           hasOffer:               c.hasOffer               || 'NO',
@@ -1023,7 +1027,6 @@ export default function CampaignFormPage() {
       }
       // Clear "other" text when a different option is selected
       if (name === 'businessObjective' && value !== 'Other')  next.businessObjectiveOther = ''
-      if (name === 'requirementTypeId' && value !== 'Other')  next.requirementTypeOther   = ''
       if (name === 'offerTypeId'       && value !== 'Other')  next.offerTypeOther         = ''
       if (name === 'supportingProof'   && value !== 'Other')  next.supportingProofOther   = ''
       if (name === 'budgetTier'        && value !== 'Other')  next.budgetTierOther        = ''
@@ -1037,6 +1040,24 @@ export default function CampaignFormPage() {
       return next
     })
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }))
+    // When task types change, remove any deliverables that no longer belong to a selected type
+    if (name === 'taskTypeId') {
+      const newTypeIds = value // already an array from GenericMultiSelect
+      if (newTypeIds.length === 0) {
+        setDeliverables({})
+      } else {
+        setDeliverables(prev => {
+          const next = {}
+          Object.entries(prev).forEach(([taskId, spec]) => {
+            const task = allAvailableTasks.find(t => t.taskId === taskId)
+            if (task && newTypeIds.includes(String(task.taskTypeId))) {
+              next[taskId] = spec
+            }
+          })
+          return next
+        })
+      }
+    }
   }
 
   const toggleTask = (task) => {
@@ -1092,9 +1113,7 @@ export default function CampaignFormPage() {
       e.businessObjectiveOther = 'Please specify your custom business objective'
 
     // Section 2
-    if (!form.requirementTypeId) e.requirementTypeId = 'Required'
-    else if (form.requirementTypeId === 'Other' && !form.requirementTypeOther?.trim())
-      e.requirementTypeOther = 'Please specify your requirement type'
+    if (form.taskTypeId.length === 0) e.taskTypeId = 'Select at least one task type'
 
     // Section 3
     if (form.audienceTypeIds.length === 0) e.audienceTypeIds = 'Select at least one audience type'
@@ -1110,8 +1129,7 @@ export default function CampaignFormPage() {
       else if (form.offerTypeId === 'Other' && !form.offerTypeOther?.trim())
         e.offerTypeOther = 'Please specify the offer type'
       if (!form.keyMessage?.trim()) e.keyMessage = 'Required'
-      if (!form.supportingProof)    e.supportingProof = 'Required'
-      else if (form.supportingProof === 'Other' && !form.supportingProofOther?.trim())
+      if (form.supportingProof === 'Other' && !form.supportingProofOther?.trim())
         e.supportingProofOther = 'Please specify the supporting proof'
     }
     if (form.tones.length === 0) e.tones = 'Select at least one tone / style'
@@ -1200,10 +1218,18 @@ export default function CampaignFormPage() {
         return result.length > 0 ? result : null
       }
 
+      // Derive task types from the actually-selected deliverables (not from the filter dropdown)
+      const derivedTaskTypeIds = [...new Set(
+        Object.keys(deliverables)
+          .map(tid => allAvailableTasks.find(t => t.taskId === tid)?.taskTypeId)
+          .filter(Boolean)
+          .map(String)
+      )]
+
       const payload = {
         departmentId:      form.departmentId || null,
         businessObjective: resolve(form.businessObjective, form.businessObjectiveOther),
-        requirementTypeId: resolve(form.requirementTypeId, form.requirementTypeOther),
+        taskTypeId:        derivedTaskTypeIds.length > 0 ? derivedTaskTypeIds : null,
         // multi-select fields — sent as JSON arrays to the backend List<String> fields
         audienceTypeId:    resolveMultiArr(form.audienceTypeIds, form.audienceTypeOther),
         language:          resolveMultiArr(form.languages,       form.languageOther),
@@ -1326,16 +1352,16 @@ export default function CampaignFormPage() {
               )}
             </FormGroup>
 
-            <FormGroup label="Requirement Type" required error={errors.requirementTypeId || errors.requirementTypeOther}>
-              <div data-has-error={!!(errors.requirementTypeId || errors.requirementTypeOther) || undefined}>
-                <Select name="requirementTypeId" value={form.requirementTypeId} onChange={handleChange}
-                  options={reqTypes} placeholder="Select…" hasError={!!errors.requirementTypeId} />
-              </div>
-              {form.requirementTypeId === 'Other' && (
-                <input className={`mt-1.5 ${errors.requirementTypeOther ? errorInputCls : inputCls}`}
-                  name="requirementTypeOther" value={form.requirementTypeOther} onChange={handleChange}
-                  placeholder="Specify the requirement type…" />
-              )}
+            <FormGroup label="Task Type" required error={errors.taskTypeId}
+              hint="Select one or more task types — only matching tasks will appear below">
+              <GenericMultiSelect
+                name="taskTypeId"
+                values={form.taskTypeId}
+                onChange={handleChange}
+                options={taskTypes}
+                placeholder="Select task type(s)…"
+                hasError={!!errors.taskTypeId}
+              />
             </FormGroup>
           </div>
 
@@ -1427,17 +1453,6 @@ export default function CampaignFormPage() {
                       placeholder="Specify the offer type…" />
                   )}
                 </FormGroup>
-                <FormGroup label="Supporting Proof" required error={errors.supportingProof || errors.supportingProofOther}>
-                  <div data-has-error={!!(errors.supportingProof || errors.supportingProofOther) || undefined}>
-                    <Select name="supportingProof" value={form.supportingProof} onChange={handleChange}
-                      options={supportingProofs} placeholder="Select…" hasError={!!errors.supportingProof} />
-                  </div>
-                  {form.supportingProof === 'Other' && (
-                    <input className={`mt-1.5 ${errors.supportingProofOther ? errorInputCls : inputCls}`}
-                      name="supportingProofOther" value={form.supportingProofOther} onChange={handleChange}
-                      placeholder="Specify the supporting proof…" />
-                  )}
-                </FormGroup>
                 <FormGroup label="Key Message" required error={errors.keyMessage}>
                   <textarea
                     name="keyMessage"
@@ -1453,6 +1468,17 @@ export default function CampaignFormPage() {
                         ? 'border-red-400 focus:border-red-500 focus:ring-red-100'
                         : 'border-slate-300 focus:border-brand-500 focus:ring-brand-200'}`}
                   />
+                </FormGroup>
+                <FormGroup label="Supporting Proof" error={errors.supportingProofOther}>
+                  <div data-has-error={!!errors.supportingProofOther || undefined}>
+                    <Select name="supportingProof" value={form.supportingProof} onChange={handleChange}
+                      options={supportingProofs} placeholder="Select…" />
+                  </div>
+                  {form.supportingProof === 'Other' && (
+                    <input className={`mt-1.5 ${errors.supportingProofOther ? errorInputCls : inputCls}`}
+                      name="supportingProofOther" value={form.supportingProofOther} onChange={handleChange}
+                      placeholder="Specify the supporting proof…" />
+                  )}
                 </FormGroup>
               </div>
             )}
@@ -1478,7 +1504,7 @@ export default function CampaignFormPage() {
           {selectedTaskIds.length > 0 && (
             <div className="mt-3 space-y-2">
               {selectedTaskIds.map((taskId) => {
-                const task = availableTasks.find((t) => t.taskId === taskId)
+                const task = allAvailableTasks.find((t) => t.taskId === taskId)
                 if (!task) return null
                 return (
                   <DeliverableCard
@@ -1593,14 +1619,13 @@ export default function CampaignFormPage() {
               <ul className="mt-1 space-y-0.5 text-xs text-red-600 list-disc list-inside">
                 {errors.departmentId     && <li>Department is required</li>}
                 {errors.businessObjective && <li>Business Objective is required</li>}
-                {errors.requirementTypeId && <li>Requirement Type is required</li>}
+                {errors.taskTypeId        && <li>{errors.taskTypeId}</li>}
                 {errors.targetLocations  && <li>{errors.targetLocations}</li>}
                 {errors.audienceTypeIds  && <li>{errors.audienceTypeIds}</li>}
                 {errors.languages        && <li>{errors.languages}</li>}
                 {errors.tones            && <li>{errors.tones}</li>}
                 {errors.offerTypeId      && <li>Offer Type is required</li>}
                 {errors.keyMessage       && <li>Key Message is required</li>}
-                {errors.supportingProof  && <li>Supporting Proof is required</li>}
                 {errors.deliverables     && <li>{errors.deliverables}</li>}
                 {errors.taskQa && <li>Answer all required task-specific questions under Deliverables</li>}
                 {errors.priority         && <li>Priority is required</li>}

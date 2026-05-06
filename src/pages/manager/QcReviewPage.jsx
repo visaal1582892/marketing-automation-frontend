@@ -179,7 +179,7 @@ export default function QcReviewPage() {
       {assetPreviewTask && (
         <AssetPreviewModal
           taskId={assetPreviewTask.taskId}
-          taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
+          taskName={assetPreviewTask.granularTaskName || `Task ${assetPreviewTask.taskId}`}
           currentUserId={user?.id}
           onClose={() => setAssetPreviewTask(null)}
         />
@@ -277,7 +277,7 @@ function TaskRow({ task, index, onApprove, onRework, onReject, onViewAssets }) {
               Deliverable {index}
             </span>
             <span className="text-sm font-bold text-slate-900 truncate">
-              {task.granularTaskName || task.requirementTypeName || 'Task'}
+              {task.granularTaskName || task.taskTypeName || 'Task'}
             </span>
             {task.reworkCount > 0 && (
               <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700 ring-1 ring-orange-200">
@@ -385,7 +385,7 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 space-y-0.5">
                 <div>
                   <span className="font-medium">Reviewing deliverable:</span>{' '}
-                  Task {task.taskId} — {task.granularTaskName || task.requirementTypeName}
+                  Task {task.taskId} — {task.granularTaskName || task.taskTypeName}
                 </div>
                 <div>
                   <span className="font-medium">Creator:</span>{' '}
@@ -396,7 +396,7 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
             </>
           ) : (
             <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
-              <div><span className="font-medium">Task:</span> {task.granularTaskName || task.requirementTypeName}</div>
+              <div><span className="font-medium">Task:</span> {task.granularTaskName || task.taskTypeName}</div>
               <div><span className="font-medium">Campaign:</span> {task.campaignId}</div>
               <div><span className="font-medium">Creator:</span> {task.assigneeName || `User ${task.assignedTo}`}</div>
             </div>

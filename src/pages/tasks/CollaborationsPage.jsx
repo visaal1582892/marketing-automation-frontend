@@ -448,7 +448,7 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh, unreadCount = 
           {/* Row 1: title + all badges on the same line */}
           <div className="flex items-center gap-2">
             <p className="flex-1 text-sm font-bold text-slate-900 leading-tight truncate min-w-0">
-              {task.granularTaskName || task.requirementTypeName || 'Task'}
+              {task.granularTaskName || task.taskTypeName || 'Task'}
             </p>
             {unreadCount > 0 && (
               <span className="animate-pulse inline-flex items-center rounded-full bg-brand-600 px-1.5 py-0.5 text-[9px] font-bold text-white shrink-0">
@@ -612,7 +612,7 @@ export default function CollaborationsPage() {
       if (filterUnread && !(unreadCounts[t.taskId] > 0)) return false
       if (q) {
         const hay = [
-          t.taskId, t.granularTaskName, t.requirementTypeName,
+          t.taskId, t.granularTaskName, t.taskTypeName,
           t.campaignId, t.assigneeName, t.requestorName,
         ].join(' ').toLowerCase()
         if (!hay.includes(q)) return false
