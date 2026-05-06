@@ -44,7 +44,7 @@ export default function useTaskChat(taskId, active, currentUserId) {
     const token = tokenStorage.get()
     if (!token) return
 
-    const apiBase = (import.meta.env.VITE_API_BASE_URL || 'https://parking-polio-robbing.ngrok-free.dev')
+    const apiBase = (import.meta.env.VITE_API_BASE_URL || 'https://return-atlas-hexagram.ngrok-free.dev/')
       .trim()
       .replace(/\/+$/, '')
       .replace(/\/api$/, '')
