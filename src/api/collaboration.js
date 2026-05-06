@@ -25,6 +25,12 @@ const collaborationApi = {
   /** All tasks where the caller is a collaborator (newest first). */
   getMyCollaborations: () => api.get(`${BASE}/my`),
 
+  /**
+   * Lightweight active-collaboration count for the sidebar badge.
+   * Runs a single SQL COUNT on the backend — far cheaper than getMyCollaborations().
+   */
+  getActiveCount: () => api.get(`${BASE}/active-count`),
+
   /** All active users — used to populate the collaborator picker. */
   getAllUsers: () => api.get(`${BASE}/users`),
 

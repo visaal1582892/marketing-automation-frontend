@@ -7,7 +7,6 @@ import Logo from '../components/Logo'
 import Modal from '../components/Modal'
 import { useToast } from '../components/Toast'
 import api from '../api/client'
-import collaborationApi from '../api/collaboration'
 
 // ─── Change Password Modal ────────────────────────────────────────────────────
 function ChangePasswordModal({ open, onClose }) {
@@ -147,8 +146,6 @@ export default function AppLayout() {
   const [masterOpen, setMasterOpen]     = useState(true)
   const [managerOpen, setManagerOpen]   = useState(true)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
-  const [collabActiveCount, setCollabActiveCount] = useState(0)
-
   // Admin alone does NOT get Manager Tools — the Marketing Manager role is required.
   const showManagerTools = isMarketingManager
   // "My Tasks" is only for marketing-team workers who actually execute tasks.
@@ -159,31 +156,6 @@ export default function AppLayout() {
   // "Requests" is for anyone who submits briefs. Admin alone does not qualify —
   // assign the Requestor role as well if an admin needs to submit requests.
   const showRequests = isRequestor || isHead || isRegionalManager
-
-  // Active collaboration count for sidebar badge.
-  // No polling — badge updates via two lightweight triggers:
-  //   1. collab-active-changed event  → fired immediately when a chat is paused/resumed
-  //   2. visibilitychange             → re-fetches once when user returns to the tab
-  useEffect(() => {
-    if (!showCollaborations) return
-    const fetchCount = () => {
-      collaborationApi.getMyCollaborations()
-        .then(res => {
-          const active = (res.data || []).filter(t => t.collaborationActive).length
-          setCollabActiveCount(active)
-        })
-        .catch(() => {})
-    }
-    const onVisibilityChange = () => { if (document.visibilityState === 'visible') fetchCount() }
-
-    fetchCount()
-    window.addEventListener('collab-active-changed', fetchCount)
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    return () => {
-      window.removeEventListener('collab-active-changed', fetchCount)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-    }
-  }, [showCollaborations]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-expand groups based on current URL
   useEffect(() => {
@@ -260,7 +232,7 @@ export default function AppLayout() {
               icon={item.icon}
               collapsed={collapsed}
               onNavigate={() => setMobileOpen(false)}
-              badge={item.to === '/collaborations' && collabActiveCount > 0 ? collabActiveCount : 0}
+              badge={0}
             />
           ))}
 
