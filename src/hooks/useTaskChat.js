@@ -2,6 +2,30 @@ import { useEffect, useRef, useState } from 'react'
 import { Client } from '@stomp/stompjs'
 import { tokenStorage } from '../api/client'
 
+const MAX_RETRIES  = 4
+const BASE_DELAY   = 3_000   // 3 s → 6 s → 12 s → 24 s
+const MAX_DELAY    = 30_000  // cap at 30 s
+
+/**
+ * Derives the backend WebSocket URL from VITE_API_BASE_URL.
+ *
+ * Returns null when the env var is a relative URL (e.g. "/api" used for a
+ * Vercel rewrite proxy) because relative URLs cannot be upgraded to an
+ * absolute WebSocket URL — attempting it would silently connect to the
+ * frontend host instead of the backend.
+ */
+function buildWsUrl() {
+  const raw = (import.meta.env.VITE_API_BASE_URL || 'https://return-atlas-hexagram.ngrok-free.dev/')
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/api$/, '')
+
+  // Relative URLs (start with "/") cannot be turned into a valid ws(s):// URL.
+  if (!raw.startsWith('http://') && !raw.startsWith('https://')) return null
+
+  return raw.replace(/^http/, 'ws') + '/ws'
+}
+
 /**
  * Real-time chat hook using STOMP over native WebSocket.
  *
@@ -10,14 +34,15 @@ import { tokenStorage } from '../api/client'
  * @param {number|null} currentUserId - The logged-in user's ID (to filter own typing events).
  */
 export default function useTaskChat(taskId, active, currentUserId) {
-  const [messages,     setMessages]     = useState([])
-  const [isConnected,  setIsConnected]  = useState(false)
-  const [typingUsers,  setTypingUsers]  = useState([]) // [{ userId, userName }]
+  const [messages,    setMessages]    = useState([])
+  const [isConnected, setIsConnected] = useState(false)
+  const [typingUsers, setTypingUsers] = useState([])
 
   const clientRef      = useRef(null)
-  const typingTimers   = useRef({})    // { [userId]: timeoutId }
-
-  const appendMessages = (msgs) => setMessages(msgs)
+  const typingTimers   = useRef({})
+  const retryCount     = useRef(0)
+  const retryTimer     = useRef(null)
+  const destroyed      = useRef(false)  // set on cleanup to abort pending retries
 
   // ── Clear a user from the typing list ──────────────────────────────────────
   const clearTyping = (userId) => {
@@ -38,17 +63,37 @@ export default function useTaskChat(taskId, active, currentUserId) {
     }
   }
 
+  const appendMessages = (msgs) => setMessages(msgs)
+
   useEffect(() => {
     if (!taskId || !active) return
 
     const token = tokenStorage.get()
     if (!token) return
 
-    const apiBase = (import.meta.env.VITE_API_BASE_URL || 'https://return-atlas-hexagram.ngrok-free.dev/')
-      .trim()
-      .replace(/\/+$/, '')
-      .replace(/\/api$/, '')
-    const wsUrl = apiBase.replace(/^http/, 'ws') + '/ws'
+    const wsUrl = buildWsUrl()
+    if (!wsUrl) {
+      // Relative VITE_API_BASE_URL (e.g. Vercel proxy) — skip WebSocket
+      console.warn('[Chat] VITE_API_BASE_URL is relative; real-time chat disabled. Set a full backend URL to enable it.')
+      return
+    }
+
+    destroyed.current  = false
+    retryCount.current = 0
+
+    // ── Schedule a reconnect with exponential backoff ───────────────────────
+    const scheduleReconnect = () => {
+      if (destroyed.current) return
+      if (retryCount.current >= MAX_RETRIES) {
+        console.warn(`[Chat] WebSocket failed after ${MAX_RETRIES} attempts — giving up. Check that the backend is reachable.`)
+        return
+      }
+      const delay = Math.min(BASE_DELAY * 2 ** retryCount.current, MAX_DELAY)
+      retryCount.current += 1
+      retryTimer.current = setTimeout(() => {
+        if (!destroyed.current) clientRef.current?.activate()
+      }, delay)
+    }
 
     const client = new Client({
       brokerURL: wsUrl,
@@ -56,8 +101,12 @@ export default function useTaskChat(taskId, active, currentUserId) {
         Authorization: `Bearer ${token}`,
         'ngrok-skip-browser-warning': 'true',
       },
-      reconnectDelay: 5000,
+      // Disable STOMP's built-in reconnect — we handle it ourselves so we
+      // can apply exponential backoff and a retry cap.
+      reconnectDelay: 0,
+
       onConnect: () => {
+        retryCount.current = 0
         setIsConnected(true)
 
         // Chat messages
@@ -65,16 +114,14 @@ export default function useTaskChat(taskId, active, currentUserId) {
           try {
             const msg = JSON.parse(frame.body)
             setMessages((prev) => [...prev, msg])
-          } catch { /* ignore */ }
+          } catch { /* ignore malformed frames */ }
         })
 
-        // Typing events
+        // Typing indicators
         client.subscribe(`/topic/typing/${taskId}`, (frame) => {
           try {
             const event = JSON.parse(frame.body)
             const uid = event.userId
-
-            // Never show our own typing indicator
             if (currentUserId && Number(uid) === Number(currentUserId)) return
 
             if (event.isTyping) {
@@ -82,7 +129,6 @@ export default function useTaskChat(taskId, active, currentUserId) {
                 const without = prev.filter((u) => u.userId !== uid)
                 return [...without, { userId: uid, userName: event.userName }]
               })
-              // Auto-clear after 3 s if no follow-up event arrives
               if (typingTimers.current[uid]) clearTimeout(typingTimers.current[uid])
               typingTimers.current[uid] = setTimeout(() => {
                 setTypingUsers((prev) => prev.filter((u) => u.userId !== uid))
@@ -91,18 +137,35 @@ export default function useTaskChat(taskId, active, currentUserId) {
             } else {
               clearTyping(uid)
             }
-          } catch { /* ignore */ }
+          } catch { /* ignore malformed frames */ }
         })
       },
-      onDisconnect: () => { setIsConnected(false); setTypingUsers([]) },
-      onStompError:  () => { setIsConnected(false); setTypingUsers([]) },
+
+      onDisconnect: () => {
+        setIsConnected(false)
+        setTypingUsers([])
+        scheduleReconnect()
+      },
+
+      onStompError: () => {
+        setIsConnected(false)
+        setTypingUsers([])
+        scheduleReconnect()
+      },
+
+      // Suppress the WebSocket-level error from propagating further;
+      // the browser already logs one line for it — no need to add more.
+      onWebSocketError: () => {
+        setIsConnected(false)
+      },
     })
 
     client.activate()
     clientRef.current = client
 
     return () => {
-      // Clear all pending timers
+      destroyed.current = true
+      if (retryTimer.current) clearTimeout(retryTimer.current)
       Object.values(typingTimers.current).forEach(clearTimeout)
       typingTimers.current = {}
       client.deactivate()
