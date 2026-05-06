@@ -27,39 +27,11 @@ const CAMPAIGN_STATUS_LABELS = {
   CANCELLED:                  'Cancelled',
 }
 
-const TASK_STATUS_STYLES = {
-  ASSIGNED:    'bg-blue-50 text-blue-700 ring-blue-200',
-  IN_PROGRESS: 'bg-indigo-50 text-indigo-700 ring-indigo-200',
-  REWORK:      'bg-orange-50 text-orange-700 ring-orange-200',
-  QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
-  COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
-  CANCELLED:   'bg-slate-100 text-slate-500 ring-slate-200',
-  HELD:        'bg-amber-50 text-amber-700 ring-amber-200',
-}
-const TASK_STATUS_LABELS = {
-  ASSIGNED:    'Assigned',
-  IN_PROGRESS: 'In Progress',
-  REWORK:      'Rework',
-  QC_REVIEW:   'QC Review',
-  COMPLETED:   'Completed',
-  CANCELLED:   'Cancelled',
-  HELD:        'Held',
-}
-
 function CampaignStatusBadge({ status }) {
   const cls = CAMPAIGN_STATUS_STYLES[status] || 'bg-slate-100 text-slate-600'
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${cls}`}>
       {CAMPAIGN_STATUS_LABELS[status] || status}
-    </span>
-  )
-}
-
-function TaskStatusBadge({ status }) {
-  const cls = TASK_STATUS_STYLES[status] || 'bg-slate-100 text-slate-600'
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${cls}`}>
-      {TASK_STATUS_LABELS[status] || status}
     </span>
   )
 }
@@ -75,30 +47,6 @@ function PriorityBadge({ priority }) {
       {priority || '—'}
     </span>
   )
-}
-
-// ─── Derived status helpers (requestor view) ──────────────────────────────────
-
-/**
- * For active campaigns returns the most "advanced" individual task status so
- * the requestor can see "QC Review" or "Rework" instead of always "In Progress".
- * ASSIGNED / ACCEPTED are intentionally excluded — they just mean a task is
- * waiting to start, which is already covered by the campaign-level IN_PROGRESS.
- * Priority: REWORK > QC_REVIEW > IN_PROGRESS > HELD
- * Terminal campaigns always show their campaign-level status.
- */
-const DERIVED_STATUS_ORDER = ['REWORK', 'QC_REVIEW', 'IN_PROGRESS', 'HELD']
-
-function derivedStatus(campaign) {
-  const TERMINAL = ['COMPLETED', 'REJECTED', 'CANCELLED']
-  if (TERMINAL.includes(campaign.status)) return { status: campaign.status, isTask: false }
-  const tasks = campaign.workTasks || []
-  if (tasks.length === 0) return { status: campaign.status, isTask: false }
-  const statuses = tasks.map(t => t.status).filter(Boolean)
-  for (const s of DERIVED_STATUS_ORDER) {
-    if (statuses.includes(s)) return { status: s, isTask: true }
-  }
-  return { status: campaign.status, isTask: false }
 }
 
 // ─── File display helpers ─────────────────────────────────────────────────────
@@ -437,7 +385,11 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
 
   // Files – existing (with optional remove) + new uploads
   const [existingFiles, setExistingFiles] = useState(
-    () => (campaign.fileUrls || []).map((url, i) => ({ url, name: friendlyFileName(url, i), removed: false }))
+    () => (campaign.fileUrls || []).map((url, i) => ({
+      url,
+      name: campaign.fileOriginalNames?.[i] || friendlyFileName(url, i),
+      removed: false,
+    }))
   )
   const [newFiles,       setNewFiles]       = useState([])
   const [uploadingFiles, setUploadingFiles] = useState(false)
@@ -659,7 +611,8 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
         const n = [...prev]; let ui = 0
         for (let i = 0; i < n.length; i++) {
           if (n[i].uploading && n[i].error === null) {
-            n[i] = { ...n[i], url: urls[ui++] || null, uploading: false }
+            n[i] = { ...n[i], url: urls[ui] || null, uploading: false }
+            ui++
             if (ui >= urls.length) break
           }
         }
@@ -733,8 +686,9 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
         expectedOutput:    resolve(form.expectedOutput, form.expectedOutputOther),
         targetLocation:    JSON.stringify(targetLocations),
         newTaskSpecs:      newTaskSpecs.length > 0 ? newTaskSpecs : undefined,
-        newFileUrls:       newFiles.filter(f => f.url).map(f => f.url),
-        removedFileUrls:   existingFiles.filter(f => f.removed).map(f => f.url),
+        newFileUrls:          newFiles.filter(f => f.url).map(f => f.url),
+        newFileOriginalNames: newFiles.filter(f => f.url).map(f => f.name || f.url.split('/').pop()),
+        removedFileUrls:      existingFiles.filter(f => f.removed).map(f => f.url),
       }
       await campaignsApi.requestorEdit(campaign.campaignId, payload)
 
@@ -1555,9 +1509,8 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                   const doneCount    = (c.workTasks || []).filter(t => t.status === 'COMPLETED').length
                   const canEdit      = !TERMINAL.includes(c.status)
                   const fmtDate      = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
-                  const commentTasks = (c.workTasks || []).filter(t => t.status === 'HELD' && t.workerComment)
+                  const commentTasks = (c.workTasks || []).filter(t => t.status === 'HELD' && t.activeComments?.length > 0)
                   const hasComment   = commentTasks.length > 0
-                  const { status: ds, isTask } = derivedStatus(c)
                   const isBookmarked = bookmarkedIds.has(c.campaignId)
                   return (
                     <tr key={c.campaignId}
@@ -1570,9 +1523,7 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                       <td className="px-3 py-3 font-medium text-slate-800">{c.requirementTypeName || '—'}</td>
                       <td className="px-3 py-3"><PriorityBadge priority={c.priority} /></td>
                       <td className="px-3 py-3">
-                        {isTask
-                          ? <TaskStatusBadge status={ds} />
-                          : <CampaignStatusBadge status={ds} />}
+                        <CampaignStatusBadge status={c.status} />
                       </td>
                       <td className="px-3 py-3 text-slate-600">
                         <div className="flex items-center gap-2 flex-wrap">

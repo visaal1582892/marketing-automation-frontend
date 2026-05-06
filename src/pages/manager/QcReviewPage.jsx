@@ -6,6 +6,8 @@ import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
+import AssetPanel from '../../components/AssetPanel'
+import { useAuth } from '../../auth/AuthContext'
 
 /**
  * Module 4 — QC Review queue.
@@ -23,6 +25,7 @@ export default function QcReviewPage() {
   const location = useLocation()
   const toast    = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
+  const { user } = useAuth()
 
   const [tasks, setTasks]   = useState([])
   const [loading, setLoading] = useState(true)
@@ -177,6 +180,7 @@ export default function QcReviewPage() {
         <AssetPreviewModal
           taskId={assetPreviewTask.taskId}
           taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
+          currentUserId={user?.id}
           onClose={() => setAssetPreviewTask(null)}
         />
       )}
@@ -362,21 +366,7 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
   ).length
   const wouldCloseSibs = isReject && openSiblings > 0
 
-  const [taskAssets, setTaskAssets]   = useState([])
-  const [assetsLoaded, setAssetsLoaded] = useState(false)
-
-  useEffect(() => {
-    import('../../api/collaboration').then(m => {
-      m.default.getAssets(task.taskId)
-        .then(res => setTaskAssets(res.data || []))
-        .catch(() => {})
-        .finally(() => setAssetsLoaded(true))
-    })
-  }, [task.taskId])
-
-  const assetUrls = taskAssets.map(a => a.url)
-  const hasAssets = assetUrls.length > 0
-  const [expandedAsset, setExpandedAsset] = useState(null)
+  const [showAssets, setShowAssets] = useState(false)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
@@ -412,83 +402,22 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={onViewBrief}
-            className="text-xs text-brand-600 hover:underline flex items-center gap-1"
-          >
-            <Icon name="eye" className="h-3 w-3" /> View full request brief
-          </button>
-
-          {/* ── Submitted assets strip ── */}
-          <div className="rounded-lg border border-slate-200 overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Submitted Assets
-              </span>
-              <span className={[
-                'rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                hasAssets ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-400',
-              ].join(' ')}>
-                {!assetsLoaded ? '…' : `${assetUrls.length} file${assetUrls.length !== 1 ? 's' : ''}`}
-              </span>
-            </div>
-            {hasAssets ? (
-              <div className="p-3 space-y-2">
-                {assetUrls.map((url, i) => {
-                  const isImg = /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(url)
-                  const isExpanded = expandedAsset === i
-                  return (
-                    <div key={i} className="rounded-lg border border-slate-200 overflow-hidden">
-                      <div className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 border-b border-slate-100">
-                        <span className="text-[11px] font-medium text-slate-600 truncate max-w-[160px]">
-                          {isImg ? 'Image' : 'File'} {assetUrls.length > 1 ? ` ${i + 1}` : ''}
-                        </span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-200 transition"
-                          >
-                            Open
-                          </a>
-                          <a
-                            href={url}
-                            download
-                            className="rounded px-1.5 py-0.5 text-[10px] font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 transition"
-                          >
-                            Download
-                          </a>
-                        </div>
-                      </div>
-                      {isImg && (
-                        <div className="bg-slate-100 text-center">
-                          <img
-                            src={url}
-                            alt={`Asset ${i + 1}`}
-                            loading="lazy"
-                            className={[
-                              'mx-auto block object-contain cursor-zoom-in transition-all duration-200',
-                              isExpanded ? 'max-h-64 w-full' : 'max-h-28 max-w-full',
-                            ].join(' ')}
-                            onClick={() => setExpandedAsset(isExpanded ? null : i)}
-                            title={isExpanded ? 'Click to shrink' : 'Click to expand'}
-                          />
-                          <p className="text-[9px] text-slate-400 py-0.5 select-none">
-                            {isExpanded ? 'Click to shrink' : 'Click to expand'}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="px-3 py-4 text-center text-xs text-slate-400">
-                No assets were uploaded for this task.
-              </div>
-            )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onViewBrief}
+              className="text-xs text-brand-600 hover:underline flex items-center gap-1"
+            >
+              <Icon name="eye" className="h-3 w-3" /> View full request brief
+            </button>
+            <span className="text-slate-300">|</span>
+            <button
+              type="button"
+              onClick={() => setShowAssets(true)}
+              className="text-xs text-brand-600 hover:underline flex items-center gap-1"
+            >
+              <Icon name="paperclip" className="h-3 w-3" /> Assets
+            </button>
           </div>
 
           {task.submissionNotes && (
@@ -545,6 +474,13 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
           </div>
         </div>
       </div>
+
+      {showAssets && (
+        <AssetPanel
+          task={task}
+          onClose={() => setShowAssets(false)}
+        />
+      )}
     </div>
   )
 }

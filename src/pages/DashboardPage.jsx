@@ -283,7 +283,7 @@ export default function DashboardPage() {
       {showWorkerWidgets && (
         <Section title="My Tasks" subtitle="Work assigned to you, ordered by priority.">
           <KpiCard
-            to="/my-tasks"
+            to="/my-tasks?tab=OPEN"
             tone="brand"
             icon="play"
             label="Open / In Progress"
@@ -291,7 +291,7 @@ export default function DashboardPage() {
             cta="Open queue →"
           />
           <KpiCard
-            to="/my-tasks"
+            to="/my-tasks?tab=QC"
             tone="violet"
             icon="send"
             label="In QC Review"
@@ -299,7 +299,7 @@ export default function DashboardPage() {
             cta="View →"
           />
           <KpiCard
-            to="/my-tasks"
+            to="/my-tasks?tab=DONE"
             tone="emerald"
             icon="check"
             label="Completed"

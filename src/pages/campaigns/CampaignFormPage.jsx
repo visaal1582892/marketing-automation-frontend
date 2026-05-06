@@ -1226,6 +1226,7 @@ export default function CampaignFormPage() {
         expectedOutput:    resolve(form.expectedOutput, form.expectedOutputOther),
         targetLocation:    JSON.stringify(targetLocations),
         fileUrls:          campaignFiles.filter(f => f.url).map(f => f.url),
+        fileOriginalNames: campaignFiles.filter(f => f.url).map(f => f.name || f.url.split('/').pop()),
         taskSpecs:  Object.values(deliverables).map((d) => {
           const qn = d.questionnaire || {}
           const questionnaireAnswers = Object.entries(qn)

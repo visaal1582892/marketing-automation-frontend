@@ -38,7 +38,7 @@ export default function CampaignDetailPage() {
   const location   = useLocation()
   const toast      = useToast()
   const showToast  = (m, t = 'info') => toast[t]?.(m)
-  const { user, isAdmin, isRequestor } = useAuth()
+  const { user, isAdmin, isRequestor, isMarketingManager } = useAuth()
 
   const [c, setC] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -84,10 +84,12 @@ export default function CampaignDetailPage() {
     }
   }
 
-  // Can request rework? Admin always can; others only if they are the campaign owner.
+  // Can request rework? Only the campaign's requestor (or an admin who is not acting as
+  // Marketing Manager). Marketing Managers approve/reject via QC — they should never
+  // request rework on an already-completed task.
   const myUserId = user?.userId ?? user?.id
-  const canRequestRework = isAdmin ||
-    (user && c && myUserId != null && Number(c.requestorId) === Number(myUserId))
+  const isOwnerOfCampaign = user && c && myUserId != null && Number(c.requestorId) === Number(myUserId)
+  const canRequestRework = !isMarketingManager && (isAdmin || isOwnerOfCampaign)
 
   // Bookmark
   const [bookmarked, setBookmarked]   = useState(false)
@@ -434,6 +436,7 @@ export default function CampaignDetailPage() {
         <AssetPreviewModal
           taskId={assetPreviewTask.taskId}
           taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
+          currentUserId={myUserId}
           onClose={() => setAssetPreviewTask(null)}
         />
       )}

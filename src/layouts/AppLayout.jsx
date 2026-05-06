@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { MASTER_RESOURCES } from '../api/masterData'
@@ -7,6 +7,7 @@ import Logo from '../components/Logo'
 import Modal from '../components/Modal'
 import { useToast } from '../components/Toast'
 import api from '../api/client'
+import collaborationApi from '../api/collaboration'
 
 // ─── Change Password Modal ────────────────────────────────────────────────────
 function ChangePasswordModal({ open, onClose }) {
@@ -146,6 +147,8 @@ export default function AppLayout() {
   const [masterOpen, setMasterOpen]     = useState(true)
   const [managerOpen, setManagerOpen]   = useState(true)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
+  const [collabActiveCount, setCollabActiveCount] = useState(0)
+  const collabPollRef = useRef(null)
 
   // Admin alone does NOT get Manager Tools — the Marketing Manager role is required.
   const showManagerTools = isMarketingManager
@@ -157,6 +160,27 @@ export default function AppLayout() {
   // "Requests" is for anyone who submits briefs. Admin alone does not qualify —
   // assign the Requestor role as well if an admin needs to submit requests.
   const showRequests = isRequestor || isHead || isRegionalManager
+
+  // Active collaboration count for sidebar badge
+  useEffect(() => {
+    if (!showCollaborations) return
+    const fetchCount = () => {
+      collaborationApi.getMyCollaborations()
+        .then(res => {
+          const active = (res.data || []).filter(t => t.collaborationActive).length
+          setCollabActiveCount(active)
+        })
+        .catch(() => {})
+    }
+    fetchCount()
+    collabPollRef.current = setInterval(fetchCount, 30_000)
+    // Instantly re-fetch when a chat is paused or resumed anywhere in the app
+    window.addEventListener('collab-active-changed', fetchCount)
+    return () => {
+      clearInterval(collabPollRef.current)
+      window.removeEventListener('collab-active-changed', fetchCount)
+    }
+  }, [showCollaborations]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-expand groups based on current URL
   useEffect(() => {
@@ -233,6 +257,7 @@ export default function AppLayout() {
               icon={item.icon}
               collapsed={collapsed}
               onNavigate={() => setMobileOpen(false)}
+              badge={item.to === '/collaborations' && collabActiveCount > 0 ? collabActiveCount : 0}
             />
           ))}
 
@@ -488,7 +513,7 @@ export default function AppLayout() {
 /* Sidebar primitives                                                */
 /* ----------------------------------------------------------------- */
 
-function SidebarLink({ to, label, icon, collapsed, nested = false, onNavigate }) {
+function SidebarLink({ to, label, icon, collapsed, nested = false, onNavigate, badge = 0 }) {
   const iconClass = collapsed
     ? 'h-[18px] w-[18px] shrink-0'
     : nested
@@ -517,8 +542,23 @@ function SidebarLink({ to, label, icon, collapsed, nested = false, onNavigate })
           {isActive && !collapsed && (
             <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r-full bg-brand-600" />
           )}
-          <Icon name={icon} className={iconClass} strokeWidth={isActive && !collapsed ? 2 : 1.7} />
-          {!collapsed && <span className="truncate">{label}</span>}
+          {/* Badge dot on icon when collapsed */}
+          <span className="relative shrink-0">
+            <Icon name={icon} className={iconClass} strokeWidth={isActive && !collapsed ? 2 : 1.7} />
+            {badge > 0 && collapsed && (
+              <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center
+                               rounded-full bg-brand-600 text-[8px] font-bold text-white ring-1 ring-white">
+                {badge > 99 ? '99+' : badge}
+              </span>
+            )}
+          </span>
+          {!collapsed && <span className="truncate flex-1">{label}</span>}
+          {!collapsed && badge > 0 && (
+            <span className="ml-auto shrink-0 rounded-full bg-brand-600 px-1.5 py-0.5
+                             text-[10px] font-bold leading-none text-white">
+              {badge > 99 ? '99+' : badge}
+            </span>
+          )}
         </>
       )}
     </NavLink>

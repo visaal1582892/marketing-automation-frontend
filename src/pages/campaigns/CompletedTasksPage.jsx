@@ -4,6 +4,7 @@ import campaignsApi from '../../api/campaigns'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
+import { useAuth } from '../../auth/AuthContext'
 
 /**
  * Requestor view — tasks that have been approved by the Marketing Head.
@@ -13,6 +14,7 @@ export default function CompletedTasksPage() {
   const location = useLocation()
   const toast    = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
+  const { user } = useAuth()
 
   const [tasks, setTasks]       = useState([])
   const [loading, setLoading]   = useState(true)
@@ -104,6 +106,7 @@ export default function CompletedTasksPage() {
         <AssetPreviewModal
           taskId={assetTask.taskId}
           taskName={assetTask.granularTaskName || assetTask.requirementTypeName || `Task ${assetTask.taskId}`}
+          currentUserId={user?.id}
           onClose={() => setAssetTask(null)}
         />
       )}

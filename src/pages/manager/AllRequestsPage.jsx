@@ -5,6 +5,8 @@ import campaignsApi from '../../api/campaigns'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
+import AssetPreviewModal from '../../components/AssetPreviewModal'
+import { useAuth } from '../../auth/AuthContext'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -87,6 +89,8 @@ function EditCampaignModal({ campaignId, task, onClose, onSaved }) {
   const [fetching, setFetching] = useState(true)
   const [saving,   setSaving]   = useState(false)
 
+  const isRestricted = ['COMPLETED', 'QC_REVIEW'].includes(task?.status)
+
   useEffect(() => {
     campaignsApi.getById(campaignId)
       .then(res => {
@@ -133,19 +137,39 @@ function EditCampaignModal({ campaignId, task, onClose, onSaved }) {
           </div>
         ) : (
           <div className="space-y-4 px-5 py-4">
+            {isRestricted && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                <Icon name="alertCircle" className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+                <span>
+                  Priority and budget tier cannot be changed for tasks in{' '}
+                  <strong>{task?.status === 'QC_REVIEW' ? 'QC Review' : 'Completed'}</strong> status.
+                  You can still update the key message.
+                </span>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Priority</label>
-              <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
+              <select
+                value={form.priority}
+                onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
+                disabled={isRestricted}
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800
-                           focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-300">
+                           focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-300
+                           disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+              >
                 {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{p.charAt(0) + p.slice(1).toLowerCase()}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Budget Tier</label>
-              <select value={form.budgetTier} onChange={e => setForm(f => ({ ...f, budgetTier: e.target.value }))}
+              <select
+                value={form.budgetTier}
+                onChange={e => setForm(f => ({ ...f, budgetTier: e.target.value }))}
+                disabled={isRestricted}
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800
-                           focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-300">
+                           focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-300
+                           disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+              >
                 {BUDGET_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
               </select>
             </div>
@@ -377,8 +401,10 @@ export default function AllRequestsPage() {
 
   const [tasks,     setTasks]     = useState([])
   const [loading,   setLoading]   = useState(true)
-  const [editTarget, setEditTarget] = useState(null)
-  const [briefId,    setBriefId]   = useState(null)
+  const { user } = useAuth()
+  const [editTarget,      setEditTarget]      = useState(null)
+  const [briefId,         setBriefId]         = useState(null)
+  const [assetPreviewTask, setAssetPreviewTask] = useState(null)
 
   // Per-column filter state
   const [fTaskId,    setFTaskId]    = useState('')
@@ -628,6 +654,7 @@ export default function AllRequestsPage() {
                     onCancel={() => setCancelTarget(t)}
                     onEdit={() => setEditTarget({ campaignId: t.campaignId, task: t })}
                     onViewBrief={() => setBriefId(t.campaignId)}
+                    onViewAssets={() => setAssetPreviewTask(t)}
                   />
                 ))}
               </tbody>
@@ -640,6 +667,16 @@ export default function AllRequestsPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Assets modal — completed tasks */}
+      {assetPreviewTask && (
+        <AssetPreviewModal
+          taskId={assetPreviewTask.taskId}
+          taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
+          currentUserId={user?.id}
+          onClose={() => setAssetPreviewTask(null)}
+        />
       )}
 
       {/* Edit modal */}
@@ -699,7 +736,7 @@ function Th({ children, align = 'left', width = '' }) {
 
 // ─── Data row ─────────────────────────────────────────────────────────────────
 
-function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, onViewBrief }) {
+function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, onViewBrief, onViewAssets }) {
   // Hold: only ASSIGNED (not started yet)
   const canHold   = t.status === 'ASSIGNED'
   // Unhold: only HELD
@@ -789,6 +826,15 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
                        hover:bg-slate-50 hover:text-slate-700 transition">
             <Icon name="eye" className="h-3.5 w-3.5" />
           </button>
+
+          {/* Assets — completed tasks only */}
+          {t.status === 'COMPLETED' && (
+            <button onClick={onViewAssets} title="View assets"
+              className="rounded border border-green-200 bg-green-50 p-1.5 text-green-600
+                         hover:bg-green-100 hover:text-green-800 transition">
+              <Icon name="fileText" className="h-3.5 w-3.5" />
+            </button>
+          )}
 
           {/* Edit */}
           <button onClick={onEdit} title="Edit campaign"

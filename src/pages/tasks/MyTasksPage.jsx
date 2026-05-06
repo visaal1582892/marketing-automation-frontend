@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import tasksApi from '../../api/tasks'
 import collaborationApi from '../../api/collaboration'
@@ -6,7 +6,7 @@ import Icon from '../../components/Icon'
 import { useToast } from '../../components/Toast'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
 import campaignsApi from '../../api/campaigns'
-import AssetPreviewModal from '../../components/AssetPreviewModal'
+import AssetPanel from '../../components/AssetPanel'
 
 /**
  * Module 3 — Employee Dashboard.
@@ -21,9 +21,15 @@ export default function MyTasksPage() {
   const toast    = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
 
+  const VALID_TABS = ['OPEN', 'QC', 'DONE', 'HELD', 'ALL']
+  const initialTab = () => {
+    const param = new URLSearchParams(location.search).get('tab')?.toUpperCase()
+    return VALID_TABS.includes(param) ? param : 'OPEN'
+  }
+
   const [tasks, setTasks]       = useState([])
   const [loading, setLoading]   = useState(true)
-  const [filter, setFilter]     = useState('OPEN')
+  const [filter, setFilter]     = useState(initialTab)
   const [submitting, setSubmitting] = useState(null)
   const [submitForm, setSubmitForm] = useState({ submissionNotes: '' })
   // fileItems: [{ id, file, status: 'uploading'|'done'|'error', url, errorMsg }]
@@ -34,9 +40,6 @@ export default function MyTasksPage() {
   const [commentTask,    setCommentTask]    = useState(null)
   const [commentText,    setCommentText]    = useState('')
   const [commentSaving,  setCommentSaving]  = useState(false)
-
-  // Asset preview modal
-  const [assetPreviewTask, setAssetPreviewTask] = useState(null)
 
   // Collaborate — no modal, just start + navigate
   const [collaboratingId, setCollaboratingId] = useState(null)
@@ -386,7 +389,6 @@ export default function MyTasksPage() {
               onView={() => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}
               onComment={() => openCommentModal(t)}
               onWorkerUnhold={() => workerUnhold(t)}
-              onViewAssets={() => setAssetPreviewTask(t)}
               onCollaborate={() => handleCollaborate(t)}
               collaborating={collaboratingId === t.taskId}
             />
@@ -423,13 +425,6 @@ export default function MyTasksPage() {
         />
       )}
 
-      {assetPreviewTask && (
-        <AssetPreviewModal
-          taskId={assetPreviewTask.taskId}
-          taskName={assetPreviewTask.granularTaskName || assetPreviewTask.requirementTypeName || `Task ${assetPreviewTask.taskId}`}
-          onClose={() => setAssetPreviewTask(null)}
-        />
-      )}
 
       {briefCampaignId && (
         <RequestBriefDrawer
@@ -459,7 +454,8 @@ export default function MyTasksPage() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onViewAssets, onCollaborate, collaborating }) {
+function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onCollaborate, collaborating }) {
+  const [showAssets, setShowAssets] = useState(false)
   const elapsed      = formatElapsed(task, now)
   const isAssigned   = (task.status === 'ASSIGNED' || task.status === 'REWORK') && !closed
   const isInProgress = task.status === 'IN_PROGRESS' && !closed
@@ -609,7 +605,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
             <Icon name="eye" className="h-3.5 w-3.5" />
             View Brief
           </button>
-          {!isCancelled && task.status !== 'COMPLETED' && (
+          {!['CANCELLED', 'COMPLETED', 'HELD', 'QC_REVIEW'].includes(task.status) && (
             <button
               onClick={onCollaborate}
               disabled={collaborating}
@@ -633,7 +629,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
         />
       )}
 
-      {task.status === 'REWORK' && task.latestManagerReworkComment && (
+      {task.status === 'REWORK' && task.latestManagerReworkComment && !task.latestRequestorReworkComment && (
         <div className="border-t border-orange-100 bg-orange-50/60 px-4 py-2.5 flex items-start gap-2">
           <Icon name="alertCircle" className="h-3.5 w-3.5 text-orange-500 shrink-0 mt-0.5" />
           <div>
@@ -655,17 +651,18 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
       {task.totalTimeLoggedMinutes != null && (
         <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5 flex flex-wrap items-center gap-4 text-xs text-slate-600">
           <span><span className="text-slate-400">Time logged:</span> {task.totalTimeLoggedMinutes} min</span>
-          {(task.status === 'QC_REVIEW' || task.status === 'COMPLETED') && (
-            <button
-              onClick={onViewAssets}
-              className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-200 transition"
-              title="View submitted assets"
-            >
-              <Icon name="fileText" className="h-3.5 w-3.5" />
-              View Assets
-            </button>
-          )}
+          <button
+            onClick={() => setShowAssets(true)}
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-200 transition"
+          >
+            <Icon name="paperclip" className="h-3.5 w-3.5" />
+            Assets
+          </button>
         </div>
+      )}
+
+      {showAssets && (
+        <AssetPanel task={task} onClose={() => setShowAssets(false)} />
       )}
     </div>
   )
@@ -832,104 +829,12 @@ function ActiveCommentsList({ taskId, comments, onAnswered }) {
 
 // ─── Submit-for-QC modal ──────────────────────────────────────────────────────
 // ── Helpers shared with SubmitModal ─────────────────────────────────────────
-const _isImage = (url) => url && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url)
-const _isVideo = (url) => url && /\.(mp4|mov|webm|avi)(\?|$)/i.test(url)
-const _displayName = (a) => a.originalFilename || (
-  (() => { try { return decodeURIComponent(a.url.split('/').pop().split('?')[0]) } catch { return 'File' } })()
-)
-const _triggerDownload = (taskId, assetId, filename) => {
-  const el = document.createElement('a')
-  el.href     = `/api/collaborations/${taskId}/assets/${assetId}/download`
-  el.download = filename
-  document.body.appendChild(el); el.click(); document.body.removeChild(el)
-}
-
-function QcUploadRow({ name, status, error }) {
-  return (
-    <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-      {status === 'uploading' ? (
-        <svg className="h-3.5 w-3.5 animate-spin text-brand-500 shrink-0" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-        </svg>
-      ) : status === 'done' ? (
-        <Icon name="check" className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-      ) : (
-        <Icon name="alertCircle" className="h-3.5 w-3.5 text-rose-500 shrink-0" />
-      )}
-      <span className="flex-1 text-xs text-slate-700 truncate">{name}</span>
-      {status === 'uploading' && <span className="text-[10px] text-slate-400 shrink-0">Uploading…</span>}
-      {error && <span className="text-[10px] text-rose-500 truncate max-w-[120px]" title={error}>{error}</span>}
-    </div>
-  )
-}
 
 function SubmitModal({
   task, campaign, form, setForm,
   onCancel, onConfirm, onViewBrief, saving,
 }) {
-  const [assets,       setAssets]       = useState([])
-  const [assetsLoaded, setAssetsLoaded] = useState(false)
-  const [pendingFiles, setPendingFiles] = useState([])
-  const [uploadError,  setUploadError]  = useState('')
-  const fileRef = useRef(null)
-
-  const isUploading = pendingFiles.some(f => f.status === 'uploading')
-
-  // Load existing collaboration assets when modal opens
-  useEffect(() => {
-    collaborationApi.getAssets(task.taskId)
-      .then(res => setAssets(res.data || []))
-      .catch(() => {})
-      .finally(() => setAssetsLoaded(true))
-  }, [task.taskId])
-
-  const refreshAssets = () =>
-    collaborationApi.getAssets(task.taskId).then(res => setAssets(res.data || [])).catch(() => {})
-
-  const showError = (msg) => {
-    setUploadError(msg); setTimeout(() => setUploadError(''), 6000)
-  }
-
-  const uploadFiles = async (files) => {
-    setUploadError('')
-    const allowed = []
-    for (const file of files) {
-      if (/\.(docx?)$/i.test(file.name)) {
-        showError(`"${file.name}" — DOC/DOCX not allowed. Convert to PDF or an image.`); continue
-      }
-      allowed.push(file)
-    }
-    if (!allowed.length) return
-
-    const offset = pendingFiles.length
-    setPendingFiles(prev => [...prev, ...allowed.map(f => ({ name: f.name, status: 'uploading', error: null }))])
-
-    const fd = new FormData()
-    allowed.forEach(f => fd.append('files', f))
-    try {
-      const res = await tasksApi.uploadAssets(fd)
-      const urls      = res.data?.urls              || []
-      const thumbUrls = res.data?.thumbnailUrls     || []
-      const origNames = res.data?.originalFilenames || []
-      await Promise.all(allowed.map((_, i) => {
-        const url = urls[i]; if (!url) return Promise.resolve()
-        return collaborationApi.addAsset(task.taskId, url, thumbUrls[i] || null, origNames[i] || allowed[i].name)
-      }))
-      setPendingFiles(prev => prev.map((f, idx) =>
-        idx >= offset && idx < offset + allowed.length ? { ...f, status: 'done' } : f
-      ))
-      await refreshAssets()
-    } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Upload failed.'
-      showError(msg.toLowerCase().includes('unsupported') || msg.toLowerCase().includes('format')
-        ? 'File format not supported — use images, PDFs, or videos.'
-        : msg)
-      setPendingFiles(prev => prev.map((f, idx) =>
-        idx >= offset && idx < offset + allowed.length ? { ...f, status: 'error', error: 'Failed' } : f
-      ))
-    }
-  }
+  const [showAssets, setShowAssets] = useState(false)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
@@ -944,6 +849,10 @@ function SubmitModal({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setShowAssets(true)}
+              className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1">
+              <Icon name="paperclip" className="h-3 w-3" /> Assets
+            </button>
             <button type="button" onClick={onViewBrief}
               className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1">
               <Icon name="eye" className="h-3 w-3" /> Brief
@@ -969,96 +878,6 @@ function SubmitModal({
             />
           </div>
 
-          {/* ── Collaboration assets ── */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-medium text-slate-700">
-                Assets
-                {assetsLoaded && assets.length > 0 && (
-                  <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">{assets.length}</span>
-                )}
-              </h4>
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={isUploading}
-                className="flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100 transition disabled:opacity-50"
-              >
-                <Icon name="upload" className="h-3 w-3" />
-                {isUploading ? 'Uploading…' : 'Upload Files'}
-              </button>
-            </div>
-
-            {/* Hidden multi-file input */}
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              className="sr-only"
-              accept="image/*,video/*,.pdf,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.doc,.docx"
-              onChange={e => {
-                const files = Array.from(e.target.files || [])
-                if (files.length) uploadFiles(files)
-                e.target.value = ''
-              }}
-            />
-
-            {/* Error */}
-            {uploadError && (
-              <div className="mb-2 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
-                <Icon name="alertCircle" className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                <span>{uploadError}</span>
-              </div>
-            )}
-
-            {/* In-progress rows */}
-            {pendingFiles.length > 0 && (
-              <div className="mb-2 space-y-1">
-                {pendingFiles.map((f, i) => (
-                  <QcUploadRow key={i} name={f.name} status={f.status} error={f.error} />
-                ))}
-              </div>
-            )}
-
-            {/* Existing assets */}
-            {!assetsLoaded ? (
-              <p className="text-xs text-slate-400 py-3 text-center">Loading assets…</p>
-            ) : assets.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-200 py-6 text-center">
-                <Icon name="upload" className="mx-auto h-6 w-6 text-slate-200 mb-1" />
-                <p className="text-xs text-slate-400">No assets uploaded yet. Add files above.</p>
-              </div>
-            ) : (
-              <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
-                {assets.map((a, i) => (
-                  <div key={a.assetId ?? i} className="flex items-center gap-2.5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                    {/* Tiny thumbnail or icon */}
-                    {(a.thumbnailUrl || _isImage(a.url)) ? (
-                      <img src={a.thumbnailUrl || a.url} alt="" className="h-8 w-8 rounded object-cover shrink-0 border border-slate-200" />
-                    ) : _isVideo(a.url) ? (
-                      <div className="h-8 w-8 rounded bg-purple-100 flex items-center justify-center shrink-0">
-                        <Icon name="play" className="h-3.5 w-3.5 text-purple-500" />
-                      </div>
-                    ) : (
-                      <div className="h-8 w-8 rounded bg-slate-100 flex items-center justify-center shrink-0">
-                        <Icon name="fileText" className="h-3.5 w-3.5 text-slate-400" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-slate-800 truncate">{_displayName(a)}</p>
-                      <p className="text-[10px] text-slate-400">by {a.userName}</p>
-                    </div>
-                    <button
-                      onClick={() => _triggerDownload(task.taskId, a.assetId, _displayName(a))}
-                      title="Download"
-                      className="rounded p-1 text-brand-500 hover:text-brand-700 hover:bg-brand-50 transition shrink-0"
-                    >
-                      <Icon name="download" className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Footer */}
@@ -1069,14 +888,22 @@ function SubmitModal({
           </button>
           <button
             onClick={onConfirm}
-            disabled={saving || isUploading}
+            disabled={saving}
             className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition disabled:opacity-60 flex items-center gap-2"
           >
             <Icon name="send" className="h-3.5 w-3.5" />
-            {saving ? 'Submitting…' : isUploading ? 'Wait — uploading…' : 'Submit for QC'}
+            {saving ? 'Submitting…' : 'Submit for QC'}
           </button>
         </div>
       </div>
+
+      {showAssets && (
+        <AssetPanel
+          task={task}
+          allowUpload
+          onClose={() => setShowAssets(false)}
+        />
+      )}
     </div>
   )
 }

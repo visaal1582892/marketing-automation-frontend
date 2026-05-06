@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import campaignsApi from '../api/campaigns'
+import api from '../api/client'
 import Icon from './Icon'
 import PriorityEditor from './PriorityEditor'
 import { useAuth } from '../auth/AuthContext'
@@ -52,8 +53,10 @@ export default function RequestBriefDrawer({
   // ──────────────────────────────────────────────────────────────────────────
 
   const myUserId = user?.userId ?? user?.id
+  // Marketing Managers approve/reject via QC — they must not request rework after delivery.
   const canRequestRework =
     campaign != null &&
+    !isMarketingManager &&
     (isAdmin || (isRequestor && myUserId != null &&
       Number(campaign.requestorId) === Number(myUserId)))
 
@@ -309,19 +312,36 @@ export default function RequestBriefDrawer({
               {/* ── Files ── */}
               {c.fileUrls?.length > 0 && (
                 <BriefCard title={`Campaign Files (${c.fileUrls.length})`} icon="paperclip" accent="slate">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                     {c.fileUrls.map((url, i) => {
-                      const { label, icon } = fileDisplayInfo(url, i)
+                      const origName = c.fileOriginalNames?.[i]
+                      const { label, icon } = fileDisplayInfo(url, i, origName)
                       return (
-                        <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                          className="group flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50
-                                     px-3 py-2.5 text-xs font-medium text-slate-700
-                                     hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 transition">
-                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${icon.cls}`}>
-                            {icon.tag}
-                          </span>
-                          <span className="truncate">{label}</span>
-                        </a>
+                        <div key={i}
+                          className="flex flex-col rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                          <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50">
+                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${icon.cls}`}>
+                              {icon.tag}
+                            </span>
+                            <span className="truncate text-xs font-medium text-slate-700" title={label}>{label}</span>
+                          </div>
+                          <div className="flex border-t border-slate-200">
+                            <a href={url} target="_blank" rel="noopener noreferrer"
+                              className="flex flex-1 items-center justify-center gap-1.5 py-2 text-[11px] font-medium
+                                         text-brand-600 hover:bg-brand-50 transition">
+                              <Icon name="externalLink" className="h-3 w-3" />
+                              Open
+                            </a>
+                            <span className="w-px bg-slate-200 shrink-0" />
+                            <button
+                              onClick={() => downloadCampaignFile(url, origName)}
+                              className="flex flex-1 items-center justify-center gap-1.5 py-2 text-[11px] font-medium
+                                         text-slate-600 hover:bg-slate-50 transition">
+                              <Icon name="download" className="h-3 w-3" />
+                              Download
+                            </button>
+                          </div>
+                        </div>
                       )
                     })}
                   </div>
@@ -388,7 +408,7 @@ export default function RequestBriefDrawer({
                                   Requestor {t.requestorReworkCount}×
                                 </span>
                               )}
-                              {t.workerComment && (
+                              {t.status === 'HELD' && t.activeComments?.length > 0 && (
                                 <span className="inline-flex items-center gap-1 rounded-full
                                                  bg-amber-50 px-2 py-0.5 text-xs font-medium
                                                  text-amber-700 ring-1 ring-amber-200">
@@ -427,17 +447,29 @@ export default function RequestBriefDrawer({
                             </div>
                           )}
 
-                          {t.workerComment && (
-                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                              <div className="flex items-center gap-2 mb-1.5">
+                          {t.status === 'HELD' && t.activeComments?.length > 0 && (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+                              <div className="flex items-center gap-2">
                                 <Icon name="messageSquare" className="h-3.5 w-3.5 text-amber-600" />
                                 <span className="text-xs font-bold text-amber-800">
-                                  Worker comment — task on hold
+                                  Worker comment{t.activeComments.length > 1 ? 's' : ''} — task on hold
                                 </span>
                               </div>
-                              <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">
-                                {t.workerComment}
-                              </p>
+                              {t.activeComments.map((wc) => (
+                                <div key={wc.commentId} className="border-t border-amber-200 pt-2 first:border-0 first:pt-0">
+                                  <p className="text-[10px] font-semibold text-amber-700 mb-0.5">
+                                    {wc.userName}
+                                    {wc.createdAt && (
+                                      <span className="font-normal text-amber-500 ml-1">
+                                        · {new Date(wc.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">
+                                    {wc.comment}
+                                  </p>
+                                </div>
+                              ))}
                             </div>
                           )}
 
@@ -835,7 +867,28 @@ function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClo
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function fileDisplayInfo(url, index) {
+async function downloadCampaignFile(url, originalName) {
+  try {
+    const res = await api.get('/upload/proxy-download', {
+      params: { url },
+      responseType: 'blob',
+    })
+    // Use the stored original filename; fall back to extracting from the URL
+    const safeName = originalName || url.split('/').pop().split('?')[0] || 'file'
+    const blobUrl  = window.URL.createObjectURL(new Blob([res.data]))
+    const a        = document.createElement('a')
+    a.href         = blobUrl
+    a.download     = safeName
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(blobUrl)
+  } catch {
+    window.open(url, '_blank')
+  }
+}
+
+function fileDisplayInfo(url, index, originalName) {
   const clean = (url || '').split('?')[0].toLowerCase()
   const ext   = clean.split('.').pop()
   const MAP = {
@@ -860,9 +913,11 @@ function fileDisplayInfo(url, index) {
   }
   const entry = MAP[ext]
   const num   = index + 1
+  // Display the original filename when available; fall back to "Type N"
+  const label = originalName || (entry ? `${entry.name} ${num}` : `Attachment ${num}`)
   return {
-    label: entry ? `${entry.name} ${num}` : `Attachment ${num}`,
-    icon:  entry
+    label,
+    icon: entry
       ? { tag: entry.name.slice(0, 3).toUpperCase(), cls: entry.cls }
       : { tag: 'FILE', cls: 'bg-slate-100 text-slate-500' },
   }
