@@ -86,9 +86,7 @@ export default function App() {
               <Route
                 path="/my-tasks"
                 element={
-                  <ProtectedRoute
-                    excludeRole={['Requestor', 'Admin', 'Marketing Manager', 'Head', 'Regional Manager']}
-                  >
+                  <ProtectedRoute requireWorkerRole>
                     <MyTasksPage />
                   </ProtectedRoute>
                 }

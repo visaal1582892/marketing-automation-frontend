@@ -5,14 +5,17 @@ import { useAuth } from './AuthContext'
  * Wrap any route that should only render for authenticated users.
  *
  * Props:
- *   requireRole  – single role string OR array of allowed roles
- *   excludeRole  – single role string OR array of roles that CANNOT access
+ *   requireRole      – single role string OR array of allowed roles
+ *   excludeRole      – single role string OR array of roles that CANNOT access
+ *   requireWorkerRole – when true, only users who hold at least one execution
+ *                       (worker) role are allowed, even if they also hold a
+ *                       manager/admin role (multi-role aware)
  *
  * Multi-role aware: a user passes the requireRole check if they hold ANY of
  * their roles that matches any entry in the allowed list.
  */
-export default function ProtectedRoute({ children, requireRole, excludeRole }) {
-  const { isAuthenticated, user, loading } = useAuth()
+export default function ProtectedRoute({ children, requireRole, excludeRole, requireWorkerRole }) {
+  const { isAuthenticated, user, loading, isWorker } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -48,6 +51,10 @@ export default function ProtectedRoute({ children, requireRole, excludeRole }) {
     if (excluded.some(r => userRoles.includes(r))) {
       return <Navigate to="/dashboard" replace />
     }
+  }
+
+  if (requireWorkerRole && !isWorker) {
+    return <Navigate to="/dashboard" replace />
   }
 
   return children

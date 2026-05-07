@@ -135,7 +135,7 @@ const TOP_NAV = [
 ]
 
 export default function AppLayout() {
-  const { user, logout, isAdmin, isHead, isRegionalManager, isMarketingManager, isRequestor } = useAuth()
+  const { user, logout, isAdmin, isHead, isRegionalManager, isMarketingManager, isRequestor, isWorker } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -148,11 +148,11 @@ export default function AppLayout() {
   const [changePwdOpen, setChangePwdOpen] = useState(false)
   // Admin alone does NOT get Manager Tools — the Marketing Manager role is required.
   const showManagerTools = isMarketingManager
-  // "My Tasks" is only for marketing-team workers who actually execute tasks.
-  const showMyTasks =
-    !isRequestor && !isAdmin && !isMarketingManager && !isHead && !isRegionalManager
+  // "My Tasks" is for anyone who holds at least one worker (execution) role,
+  // even if they also hold a manager/admin role.
+  const showMyTasks = isWorker
   // "Collaborations" is visible to workers, requestors, marketing managers, and admins.
-  const showCollaborations = showMyTasks || isRequestor || isMarketingManager || isAdmin
+  const showCollaborations = isWorker || isRequestor || isMarketingManager || isAdmin
   // "Requests" is for anyone who submits briefs. Admin alone does not qualify —
   // assign the Requestor role as well if an admin needs to submit requests.
   const showRequests = isRequestor || isHead || isRegionalManager
