@@ -259,7 +259,7 @@ export default function AssetPreviewModal({ taskId, taskName, currentUserId, can
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Upload failed.'
       showError(msg.toLowerCase().includes('unsupported') || msg.toLowerCase().includes('format')
-        ? 'File format not supported — use images, PDFs, or videos.'
+        ? 'File format not supported by the server. Try a different file.'
         : msg)
       setPendingFiles(prev => prev.map((f, idx) =>
         idx >= offset && idx < offset + allowed.length ? { ...f, status: 'error', error: 'Failed' } : f

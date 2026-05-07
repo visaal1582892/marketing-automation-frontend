@@ -710,22 +710,6 @@ function fmtDateTime(d) {
   })
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Accepted file types for the asset upload picker
-const ACCEPTED_FILE_TYPES = [
-  'image/*',
-  'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm',
-  'video/x-ms-wmv', 'video/mpeg',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/zip',
-  'application/x-zip-compressed',
-  '.zip',
-].join(',')
-
 // ─── Question field renderer ──────────────────────────────────────────────────
 function QuestionField({ question, value, onChange }) {
   const { questionText, fieldType, options, isRequired } = question
