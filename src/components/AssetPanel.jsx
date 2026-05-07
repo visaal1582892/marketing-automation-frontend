@@ -339,7 +339,7 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
         type="file"
         multiple
         className="sr-only"
-        accept="image/*,video/*,.pdf,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.doc,.docx"
+        accept="image/*,video/*,.pdf,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.doc,.docx,.zip"
         onChange={e => {
           const files = Array.from(e.target.files || [])
           if (files.length) uploadFiles(files)

@@ -629,13 +629,13 @@ function CampaignFilesSection({ files, onFilesChange, uploading, setUploading })
           <Icon name="upload" className="h-3.5 w-3.5" />
           {uploading ? 'Uploading…' : 'Upload Files'}
         </button>
-        <span className="text-xs text-slate-400">Multiple files allowed (images, PDFs, excels…)</span>
+        <span className="text-xs text-slate-400">Multiple files allowed (images, PDFs, excels, ZIPs…)</span>
         <input
           ref={fileInputRef}
           type="file"
           multiple
           className="hidden"
-          accept="image/*,video/*,.pdf,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.doc,.docx"
+          accept="image/*,video/*,.pdf,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.doc,.docx,.zip"
           onChange={handleFileSelect}
         />
       </div>
