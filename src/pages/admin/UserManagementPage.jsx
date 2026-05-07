@@ -343,6 +343,7 @@ function ColSelect({ value, onChange, options, placeholder }) {
         options={options}
         placeholder={placeholder}
         size="sm"
+        isSearchable
         menuPortal
       />
     </div>
@@ -368,6 +369,7 @@ export default function UserManagementPage() {
   // Column filters
   const [fName,        setFName]        = useState('')
   const [fEmail,       setFEmail]       = useState('')
+  const [fRole,        setFRole]        = useState('all')
   const [fDept,        setFDept]        = useState('all')
   const [fDesignation, setFDesignation] = useState('all')
   const [fSkill,       setFSkill]       = useState('all')
@@ -422,6 +424,10 @@ export default function UserManagementPage() {
     finally { setResetLoading(false) }
   }
 
+  const roleOptions = useMemo(() =>
+    roles.map(r => ({ value: r.name, label: r.name })),
+  [roles])
+
   const deptOptions = useMemo(() =>
     [...new Map(users.map(u => [u.departmentId, u.departmentName])).entries()]
       .filter(([id]) => id).map(([id, name]) => ({ value: id, label: name })),
@@ -436,19 +442,20 @@ export default function UserManagementPage() {
   const statusOptions = [{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]
 
   const filtered = useMemo(() => users.filter(u => {
-    if (fStatus      !== 'all' && u.status          !== fStatus)      return false
-    if (fDept        !== 'all' && u.departmentId    !== fDept)        return false
-    if (fDesignation !== 'all' && u.designationId   !== fDesignation) return false
-    if (fSkill       !== 'all' && u.skillLevel      !== fSkill)       return false
-    if (fName  && !u.fullName?.toLowerCase().includes(fName.toLowerCase()))  return false
-    if (fEmail && !u.email?.toLowerCase().includes(fEmail.toLowerCase()))    return false
+    if (fStatus      !== 'all' && u.status          !== fStatus)                         return false
+    if (fDept        !== 'all' && u.departmentId    !== fDept)                           return false
+    if (fDesignation !== 'all' && u.designationId   !== fDesignation)                    return false
+    if (fSkill       !== 'all' && u.skillLevel      !== fSkill)                          return false
+    if (fRole        !== 'all' && !(u.roleNames ?? []).includes(fRole))                  return false
+    if (fName  && !u.fullName?.toLowerCase().includes(fName.toLowerCase()))              return false
+    if (fEmail && !u.email?.toLowerCase().includes(fEmail.toLowerCase()))                return false
     return true
-  }), [users, fStatus, fDept, fDesignation, fSkill, fName, fEmail])
+  }), [users, fStatus, fDept, fDesignation, fSkill, fRole, fName, fEmail])
 
-  const hasFilter = fName || fEmail || fDept !== 'all' || fDesignation !== 'all' || fSkill !== 'all' || fStatus !== 'all'
+  const hasFilter = fName || fEmail || fDept !== 'all' || fDesignation !== 'all' || fSkill !== 'all' || fStatus !== 'all' || fRole !== 'all'
   const clearFilters = () => {
     setFName(''); setFEmail('')
-    setFDept('all'); setFDesignation('all'); setFSkill('all'); setFStatus('all')
+    setFRole('all'); setFDept('all'); setFDesignation('all'); setFSkill('all'); setFStatus('all')
   }
 
   const th = 'px-3 pt-3 pb-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 align-top'
@@ -500,7 +507,7 @@ export default function UserManagementPage() {
                   <td className="px-3 pb-2" />
                   <td className="px-3 pb-2"><ColInput value={fName}  onChange={setFName}  placeholder="Filter name…" /></td>
                   <td className="px-3 pb-2"><ColInput value={fEmail} onChange={setFEmail} placeholder="Filter email…" /></td>
-                  <td className="px-3 pb-2" />
+                  <td className="px-3 pb-2"><ColSelect value={fRole}        onChange={setFRole}        options={roleOptions}        placeholder="All roles" /></td>
                   <td className="px-3 pb-2"><ColSelect value={fDesignation} onChange={setFDesignation} options={designationOptions} placeholder="All designations" /></td>
                   <td className="px-3 pb-2"><ColSelect value={fDept}        onChange={setFDept}        options={deptOptions}        placeholder="All depts" /></td>
                   <td className="px-3 pb-2"><ColSelect value={fSkill}       onChange={setFSkill}       options={skillOptions}       placeholder="All skills" /></td>

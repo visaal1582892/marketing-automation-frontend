@@ -320,7 +320,7 @@ function FilterInput({ value, onChange, placeholder, icon }) {
 }
 
 function FilterSelect({ value, onChange, options }) {
-  return <AppSelect value={value} onChange={onChange} options={options} size="sm" isClearable={false} menuPortal />
+  return <AppSelect value={value} onChange={onChange} options={options} size="sm" isClearable={false} isSearchable menuPortal />
 }
 
 function RolePill({ name }) {

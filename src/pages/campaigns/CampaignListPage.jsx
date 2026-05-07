@@ -1508,13 +1508,13 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                     <input value={fCampaign} onChange={e => setFCampaign(e.target.value)} placeholder="Filter…" className={colFilterCls} />
                   </td>
                   <td className="px-2 pb-2 pt-1">
-                    <AppSelect value={fReqType} onChange={setFReqType} options={reqTypeOptions} placeholder="All" size="sm" menuPortal />
+                    <AppSelect value={fReqType} onChange={setFReqType} options={reqTypeOptions} placeholder="All" size="sm" isSearchable menuPortal />
                   </td>
                   <td className="px-2 pb-2 pt-1">
-                    <AppSelect value={fPriority} onChange={setFPriority} options={priorityOptions} placeholder="All" size="sm" menuPortal />
+                    <AppSelect value={fPriority} onChange={setFPriority} options={priorityOptions} placeholder="All" size="sm" isSearchable menuPortal />
                   </td>
                   <td className="px-2 pb-2 pt-1">
-                    <AppSelect value={fStatus} onChange={setFStatus} options={statusOptions.map(v => ({ value: v, label: CAMPAIGN_STATUS_LABELS[v] || v }))} placeholder="All" size="sm" menuPortal />
+                    <AppSelect value={fStatus} onChange={setFStatus} options={statusOptions.map(v => ({ value: v, label: CAMPAIGN_STATUS_LABELS[v] || v }))} placeholder="All" size="sm" isSearchable menuPortal />
                   </td>
                   <td className="px-2 pb-2 pt-1" />
                   <td className="px-2 pb-2 pt-1" />

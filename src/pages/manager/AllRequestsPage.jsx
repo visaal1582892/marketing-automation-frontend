@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import managerApi from '../../api/manager'
 import campaignsApi from '../../api/campaigns'
@@ -56,114 +56,24 @@ function SelectFilter({ value, onChange, options, placeholder = 'All' }) {
       options={normOpts}
       placeholder={placeholder}
       size="sm"
+      isSearchable
       menuPortal
     />
   )
 }
 
-/**
- * Searchable select — shows a text input inside a dropdown to filter the list.
- * Use for columns with many distinct values (Requestor, Assignee, Task Type).
- */
 function SearchSelectFilter({ value, onChange, options, placeholder = 'All' }) {
-  const [open,   setOpen]   = useState(false)
-  const [search, setSearch] = useState('')
-  const ref = useRef(null)
-
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  const filtered = options.filter(o =>
-    !search.trim() || o.toLowerCase().includes(search.trim().toLowerCase())
-  )
-
-  const handleSelect = (opt) => {
-    onChange(opt)
-    setOpen(false)
-    setSearch('')
-  }
-
-  const handleClear = (e) => {
-    e.stopPropagation()
-    onChange('')
-    setSearch('')
-    setOpen(false)
-  }
-
+  const normOpts = options.map(o => ({ value: o, label: o }))
   return (
-    <div ref={ref} className="relative w-full">
-      {/* Trigger button */}
-      <button
-        type="button"
-        onClick={() => { setOpen(o => !o); setSearch('') }}
-        className={`flex w-full items-center justify-between gap-1 rounded border px-1.5 py-1 text-xs leading-tight text-left
-                    focus:outline-none focus:ring-1 focus:ring-brand-300
-                    ${value
-                      ? 'border-brand-400 bg-brand-50 text-brand-700'
-                      : 'border-slate-200 bg-white text-slate-500'}`}
-      >
-        <span className="truncate">{value || placeholder}</span>
-        {value
-          ? <span onClick={handleClear} className="shrink-0 rounded p-0.5 hover:bg-brand-100 text-brand-500 cursor-pointer">
-              <Icon name="x" className="h-2.5 w-2.5" />
-            </span>
-          : <Icon name="chevron" className="h-2.5 w-2.5 shrink-0 text-slate-400 rotate-90" />
-        }
-      </button>
-
-      {/* Dropdown */}
-      {open && (
-        <div className="absolute left-0 top-full z-30 mt-0.5 w-48 min-w-full rounded-lg border border-slate-200 bg-white shadow-lg">
-          {/* Search box */}
-          <div className="p-1.5 border-b border-slate-100">
-            <div className="relative">
-              <Icon name="search" className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 pointer-events-none" />
-              <input
-                autoFocus
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search…"
-                className="w-full rounded border border-slate-200 pl-5 pr-2 py-1 text-xs
-                           focus:outline-none focus:ring-1 focus:ring-brand-300"
-              />
-            </div>
-          </div>
-          {/* Options list */}
-          <ul className="max-h-44 overflow-y-auto py-0.5">
-            <li>
-              <button
-                type="button"
-                onClick={() => handleSelect('')}
-                className={`w-full px-2.5 py-1.5 text-left text-xs hover:bg-brand-50 transition
-                            ${!value ? 'font-semibold text-brand-700' : 'text-slate-500'}`}
-              >
-                {placeholder}
-              </button>
-            </li>
-            {filtered.length === 0 ? (
-              <li className="px-2.5 py-2 text-xs text-slate-400 text-center">No matches</li>
-            ) : filtered.map(o => (
-              <li key={o}>
-                <button
-                  type="button"
-                  onClick={() => handleSelect(o)}
-                  className={`w-full px-2.5 py-1.5 text-left text-xs hover:bg-brand-50 transition truncate
-                              ${value === o ? 'font-semibold text-brand-700 bg-brand-50' : 'text-slate-700'}`}
-                >
-                  {o}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
+    <AppSelect
+      value={value}
+      onChange={v => onChange(v ?? '')}
+      options={normOpts}
+      placeholder={placeholder}
+      size="sm"
+      isSearchable
+      menuPortal
+    />
   )
 }
 
@@ -736,7 +646,7 @@ export default function AllRequestsPage() {
                   <Th width="w-28">Campaign</Th>
                   <Th>Requestor</Th>
                   <Th>Assignee</Th>
-                  <Th>Task Type</Th>
+                  <Th>Task</Th>
                   <Th width="w-24">Priority</Th>
                   <Th width="w-28">Status</Th>
                   <Th width="w-20" title="Times sent back by QC manager">QC Reworks</Th>

@@ -140,6 +140,7 @@ export default function AppSelect({
   size = 'md',
   isClearable = true,
   isDisabled = false,
+  isSearchable = false,
   menuPortal = false,
 }) {
   const normOpts = normalise(options)
@@ -159,6 +160,7 @@ export default function AppSelect({
       placeholder={placeholder}
       isClearable={isClearable}
       isDisabled={isDisabled}
+      isSearchable={isSearchable}
       styles={styles}
       menuPortalTarget={menuPortal ? document.body : undefined}
       menuPosition={menuPortal ? 'fixed' : undefined}

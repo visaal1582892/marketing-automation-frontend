@@ -176,7 +176,7 @@ export default function TimeReportPage() {
               </td>
               {/* Role filter */}
               <td className="px-3 py-1.5">
-                <AppSelect value={filterRole} onChange={setFilterRole} options={distinctRoles} placeholder="All roles" size="sm" menuPortal />
+                <AppSelect value={filterRole} onChange={setFilterRole} options={distinctRoles} placeholder="All roles" size="sm" isSearchable menuPortal />
               </td>
               {/* Workload — no filter */}
               <td className="px-3 py-1.5" />

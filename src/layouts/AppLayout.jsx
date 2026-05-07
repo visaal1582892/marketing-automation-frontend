@@ -140,7 +140,7 @@ export default function AppLayout() {
   const location = useLocation()
 
   const toast = useToast()
-  const [collapsed, setCollapsed]       = useState(false)
+  const [hovered, setHovered]           = useState(false)
   const [mobileOpen, setMobileOpen]     = useState(false)
   const [menuOpen, setMenuOpen]         = useState(false)
   const [masterOpen, setMasterOpen]     = useState(true)
@@ -168,8 +168,11 @@ export default function AppLayout() {
     navigate('/login', { replace: true })
   }
 
-  const sidebarWidth = collapsed ? 'w-[72px]' : 'w-64'
-  const padded       = collapsed ? 'lg:pl-[72px]' : 'lg:pl-64'
+  // Sidebar is always collapsed by default; it expands while the cursor is inside it.
+  // Main content keeps the collapsed offset permanently to avoid layout shifts on hover.
+  const collapsed    = !hovered
+  const sidebarWidth = hovered ? 'w-64' : 'w-[72px]'
+  const padded       = 'lg:pl-[72px]'
 
   const navHeader = useMemo(() => {
     if (location.pathname.startsWith('/admin/master'))             return 'Master Data'
@@ -194,9 +197,12 @@ export default function AppLayout() {
     <div className="min-h-screen bg-slate-100 text-slate-800">
       {/* ============ SIDEBAR ============ */}
       <aside
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         className={`fixed inset-y-0 left-0 z-40 ${sidebarWidth} flex flex-col
                     border-r border-slate-100 bg-white
                     transition-all duration-200
+                    ${hovered ? 'shadow-xl shadow-slate-200/60' : ''}
                     ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
       >
         {/* Brand row — when collapsed, only the logo shows (centered, fixed 36px) */}
@@ -346,22 +352,8 @@ export default function AppLayout() {
           )}
         </nav>
 
-        {/* Footer: collapse toggle + sign out */}
-        <div className="shrink-0 border-t border-slate-100 p-2 space-y-0.5">
-          <button
-            onClick={() => setCollapsed((c) => !c)}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className={`hidden w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm
-                        font-medium text-slate-400 transition hover:bg-slate-50 hover:text-slate-600
-                        lg:flex ${collapsed ? 'justify-center' : ''}`}
-          >
-            <Icon
-              name="chevron"
-              className={`h-4 w-4 shrink-0 transition-transform ${collapsed ? '' : 'rotate-180'}`}
-            />
-            {!collapsed && <span>Collapse</span>}
-          </button>
-
+        {/* Footer: sign out */}
+        <div className="shrink-0 border-t border-slate-100 p-2">
           <button
             onClick={handleLogout}
             title={collapsed ? 'Sign out' : undefined}
