@@ -445,7 +445,9 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   })
   const [locInput, setLocInput] = useState('')
 
-  const existingIds    = useMemo(() => new Set(localDeliverables.map(d => d.granularTaskId)), [localDeliverables])
+  // Normalize to strings — granularTaskId from the API may be a number; t.taskId below is also
+  // a number, so comparing them directly works, but being explicit avoids future surprises.
+  const existingIds    = useMemo(() => new Set(localDeliverables.map(d => String(d.granularTaskId))), [localDeliverables])
   const masterLoadedRef = useRef(false)
 
   // Load master data
@@ -643,7 +645,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
           ? (() => { try { return JSON.parse(v || '[]').length === 0 } catch { return true } })()
           : (v == null || String(v).trim() === '')
         if (empty) {
-          const task = availableTasks.find(t => t.taskId === taskId)
+          const task = availableTasks.find(t => String(t.taskId) === taskId)
           showToast(`"${q.questionText}" is required for task "${task?.taskName || taskId}".`, 'error')
           return
         }
@@ -664,13 +666,14 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
           .map(([questionId, answerValue]) => ({ questionId, answerValue }))
         return { granularTaskId: taskId, questionnaireAnswers: answers }
       })
-      // Derive task types from actual deliverables (existing + newly added), not from the filter
+      // Derive task types from actual deliverables (existing + newly added), not from the filter.
+      // Normalize taskId comparisons to strings — object keys are always strings, t.taskId may be a number.
       const derivedTaskTypeIds = [...new Set([
         ...localDeliverables
-          .map(d => availableTasks.find(t => t.taskId === d.granularTaskId)?.taskTypeId)
+          .map(d => availableTasks.find(t => String(t.taskId) === String(d.granularTaskId))?.taskTypeId)
           .filter(Boolean).map(String),
         ...Object.keys(newTaskSelections)
-          .map(tid => availableTasks.find(t => t.taskId === tid)?.taskTypeId)
+          .map(tid => availableTasks.find(t => String(t.taskId) === tid)?.taskTypeId)
           .filter(Boolean).map(String),
       ])]
 
@@ -744,7 +747,14 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
     }
   }
 
-  const newTasks   = availableTasks.filter(t => !existingIds.has(t.taskId))
+  // Filter tasks available to add:
+  // 1. exclude tasks already in this campaign
+  // 2. when task types are selected, only show tasks matching those types (normalize both sides
+  //    to strings — form values may be numbers or strings depending on how they were loaded)
+  const selectedTypeStrs = form.taskTypeId.map(String)
+  const newTasks = availableTasks
+    .filter(t => !existingIds.has(String(t.taskId)))
+    .filter(t => selectedTypeStrs.length === 0 || selectedTypeStrs.includes(String(t.taskTypeId)))
   const inputCls   = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500 transition'
   const removedCount = existingFiles.filter(f => f.removed).length
 
@@ -1341,7 +1351,7 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
   const [fStatus,    setFStatus]    = useState('')
   const [fDateFrom,  setFDateFrom]  = useState(null)
   const [fDateTo,    setFDateTo]    = useState(null)
-  const [activeTab,  setActiveTab]  = useState('inProgress')
+  const [activeTab,  setActiveTab]  = useState('all')
 
   // Bookmark state — derived from campaign.bookmarked returned by API
   const [bookmarkedIds, setBookmarkedIds] = useState(() =>
@@ -1385,16 +1395,13 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
 
   // Tab counts
   const tabCounts = useMemo(() => ({
-    inProgress: campaigns.filter(c => !TERMINAL.includes(c.status)).length,
-    completed:  campaigns.filter(c => TERMINAL.includes(c.status)).length,
+    all:        campaigns.length,
     bookmarked: campaigns.filter(c => bookmarkedIds.has(c.campaignId)).length,
   }), [campaigns, bookmarkedIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabFiltered = useMemo(() => campaigns.filter(c => {
-    if (activeTab === 'inProgress') return !TERMINAL.includes(c.status)
-    if (activeTab === 'completed')  return TERMINAL.includes(c.status)
     if (activeTab === 'bookmarked') return bookmarkedIds.has(c.campaignId)
-    return true
+    return true // 'all' tab — no status filter
   }), [campaigns, activeTab, bookmarkedIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
@@ -1427,9 +1434,8 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
     placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-300 focus:border-brand-400`
 
   const tabs = [
-    { id: 'inProgress', label: 'In Progress', count: tabCounts.inProgress },
-    { id: 'completed',  label: 'Completed',   count: tabCounts.completed  },
-    { id: 'bookmarked', label: '★ Bookmarked', count: tabCounts.bookmarked },
+    { id: 'all',        label: 'All Requests', count: tabCounts.all        },
+    { id: 'bookmarked', label: '★ Bookmarked',  count: tabCounts.bookmarked },
   ]
 
   return (
