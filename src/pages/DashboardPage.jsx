@@ -18,7 +18,7 @@ import Icon from '../components/Icon'
  */
 export default function DashboardPage() {
   const {
-    user, isAdmin, isRequestor, isMarketingManager, isHead, isRegionalManager,
+    user, isAdmin, isRequestor, isMarketingManager, isHead, isRegionalManager, isWorker,
   } = useAuth()
 
   // Operational pipeline view — Marketing Manager only.
@@ -29,9 +29,9 @@ export default function DashboardPage() {
   // Admin-only extras (quick-access links to admin pages)
   const showAdminExtras = isAdmin
 
-  // Worker widgets: executors only — not brief-submitters, not ops, not admin
-  const showWorkerWidgets =
-    !isRequestor && !isHead && !isRegionalManager && !isAdmin && !isMarketingManager
+  // Worker widgets: anyone who holds at least one execution role, even if they
+  // also hold a manager/admin role (multi-role aware via isWorker).
+  const showWorkerWidgets = isWorker
 
   // Request widgets: anyone who submits briefs (mirrors sidebar showRequests)
   const showRequestWidgets = isRequestor || isHead || isRegionalManager
@@ -348,9 +348,6 @@ export default function DashboardPage() {
       )}
 
       {/* Recent activity feeds */}
-      {showWorkerWidgets && tasks.length > 0 && (
-        <RecentTasksFeed tasks={tasks} />
-      )}
       {showOpsWidgets && opsQcTasks.length > 0 && (
         <RecentTasksFeed
           tasks={opsQcTasks.slice(0, 5)}
