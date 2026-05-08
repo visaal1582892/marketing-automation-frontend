@@ -385,13 +385,8 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Files – existing (with optional remove) + new uploads
-  const [existingFiles, setExistingFiles] = useState(
-    () => (campaign.fileUrls || []).map((url, i) => ({
-      url,
-      name: campaign.fileOriginalNames?.[i] || friendlyFileName(url, i),
-      removed: false,
-    }))
-  )
+  // existingFiles is populated from the detail API on mount (list-view campaign has no fileUrls)
+  const [existingFiles, setExistingFiles] = useState([])
   const [newFiles,       setNewFiles]       = useState([])
   const [uploadingFiles, setUploadingFiles] = useState(false)
   const [dragOver,       setDragOver]       = useState(false)
@@ -452,7 +447,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   const existingIds    = useMemo(() => new Set(localDeliverables.map(d => String(d.granularTaskId))), [localDeliverables])
   const masterLoadedRef = useRef(false)
 
-  // Load master data
+  // Load master data + existing campaign files
   useEffect(() => {
     const nb = setter => d => setter([...d.map(i => ({ value: i.id, label: i.name })), OTHER_OPT])
     Promise.all([
@@ -469,6 +464,16 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
       masterApi.list('kpi-types').then(nb(setKpis)),
       masterApi.list('expected-outputs').then(nb(setOutputs)),
       masterApi.list('granular-tasks').then(d => setAvailableTasks(d)),
+      campaignsApi.getById(campaign.campaignId).then(res => {
+        const c = res.data
+        setExistingFiles(
+          (c.fileUrls || []).map((url, i) => ({
+            url,
+            name: c.fileOriginalNames?.[i] || friendlyFileName(url, i),
+            removed: false,
+          }))
+        )
+      }).catch(() => {}),
     ]).catch(() => {}).finally(() => setLoadingMaster(false))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
