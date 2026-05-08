@@ -18,7 +18,7 @@ import MyTasksPage from './pages/tasks/MyTasksPage'
 import CollaborationsPage from './pages/tasks/CollaborationsPage'
 import QcReviewPage from './pages/manager/QcReviewPage'
 import TimeReportPage from './pages/manager/TimeReportPage'
-import AllRequestsPage from './pages/manager/AllRequestsPage'
+import TaskManagementPage from './pages/manager/TaskManagementPage'
 import AnalyticsPage from './pages/manager/AnalyticsPage'
 import { MASTER_RESOURCES } from './api/masterData'
 
@@ -102,12 +102,12 @@ export default function App() {
                 }
               />
 
-              {/* ── Manager: All Requests / QC review / Reports ── */}
+              {/* ── Manager: Task Management / QC review / Reports ── */}
               <Route
-                path="/manager/all-requests"
+                path="/manager/task-management"
                 element={
                   <ProtectedRoute requireRole={['Marketing Manager']}>
-                    <AllRequestsPage />
+                    <TaskManagementPage />
                   </ProtectedRoute>
                 }
               />

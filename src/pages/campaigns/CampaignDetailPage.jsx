@@ -267,7 +267,7 @@ export default function CampaignDetailPage() {
           <Icon name="alertCircle" className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-bold text-rose-800">Inconsistency Detected</p>
-            <p className="text-xs text-rose-700 mt-0.5">{c.inconsistencyReason}</p>
+            <p className="text-xs text-rose-700 mt-0.5 whitespace-pre-wrap">{c.inconsistencyReason}</p>
           </div>
         </div>
       )}
@@ -276,7 +276,7 @@ export default function CampaignDetailPage() {
           <Icon name="alertCircle" className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-bold text-amber-800">Routing Note</p>
-            <p className="text-xs text-amber-700 mt-0.5">{c.routingNotes}</p>
+            <p className="text-xs text-amber-700 mt-0.5 whitespace-pre-wrap">{c.routingNotes}</p>
           </div>
         </div>
       )}
@@ -409,7 +409,7 @@ export default function CampaignDetailPage() {
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
                         Submission notes
                       </p>
-                      <p className="text-sm text-slate-700">{t.submissionNotes}</p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{t.submissionNotes}</p>
                     </div>
                   )}
                   <TaskQuestionnaireBrief items={t.questionnaire} />

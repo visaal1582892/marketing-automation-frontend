@@ -8,37 +8,33 @@ import RequestBriefDrawer, { RequestSummaryCard } from '../../components/Request
 import AssetPreviewModal from '../../components/AssetPreviewModal'
 import AssetPanel from '../../components/AssetPanel'
 import { useAuth } from '../../auth/AuthContext'
+import DateRangePicker from '../../components/DateRangePicker'
+import Pagination from '../../components/Pagination'
 
-/**
- * Module 4 — QC Review queue.
- *
- * Tasks are grouped by their parent campaign so the QC reviewer sees the
- * whole brief in one place, but every task row keeps its OWN
- * Approve / Rework / Reject buttons — multi-deliverable campaigns can have
- * one asset approved while another is sent back for rework, mirroring the
- * backend's per-task review semantics.
- *
- * Within a campaign group we sort tasks by submission time (oldest first)
- * so the reviewer naturally picks up where the worker left off.
- */
+const PAGE_SIZE = 12
+
 export default function QcReviewPage() {
-  const location = useLocation()
-  const toast    = useToast()
+  const location  = useLocation()
+  const toast     = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
-  const { user } = useAuth()
+  const { user }  = useAuth()
 
-  const [tasks, setTasks]   = useState([])
+  const [tasks,   setTasks]   = useState([])
   const [loading, setLoading] = useState(true)
+  const [page,    setPage]    = useState(0)
 
-  // Single shared review modal — opened with one task at a time.
-  const [reviewing, setReviewing] = useState(null)
+  const [reviewing,         setReviewing]         = useState(null)
   const [reviewingCampaign, setReviewingCampaign] = useState(null)
-  const [action, setAction] = useState('APPROVED')
+  const [action,   setAction]   = useState('APPROVED')
   const [comments, setComments] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [saving,   setSaving]   = useState(false)
 
-  const [briefCampaignId, setBriefCampaignId] = useState(null)
+  const [briefCampaignId,  setBriefCampaignId]  = useState(null)
   const [assetPreviewTask, setAssetPreviewTask] = useState(null)
+
+  const [search,    setSearch]    = useState('')
+  const [fDateFrom, setFDateFrom] = useState(null)
+  const [fDateTo,   setFDateTo]   = useState(null)
 
   const load = () => {
     setLoading(true)
@@ -55,29 +51,41 @@ export default function QcReviewPage() {
 
   useEffect(load, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  /**
-   * Groups by campaignId, preserving the backend's overall ordering — the
-   * first occurrence of a campaign defines its position in the page. Inside
-   * each group, we re-sort by submittedAt ASC so the oldest submission is
-   * at the top (FIFO inside a brief).
-   */
-  const groups = useMemo(() => {
-    const byId = new Map()
-    for (const t of tasks) {
-      if (!byId.has(t.campaignId)) byId.set(t.campaignId, [])
-      byId.get(t.campaignId).push(t)
-    }
-    const out = []
-    for (const [campaignId, items] of byId) {
-      items.sort((a, b) => {
+  // Reset to page 0 when filters change
+  useEffect(() => { setPage(0) }, [search, fDateFrom, fDateTo])
+
+  // Flat list sorted latest-first by submittedAt
+  const filteredTasks = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return [...tasks]
+      .sort((a, b) => {
         const ta = a.submittedAt ? new Date(a.submittedAt).getTime() : 0
         const tb = b.submittedAt ? new Date(b.submittedAt).getTime() : 0
-        return ta - tb
+        return tb - ta
       })
-      out.push({ campaignId, items })
-    }
-    return out
-  }, [tasks])
+      .filter(t => {
+        if (fDateFrom) {
+          const d = t.submittedAt ? t.submittedAt.slice(0, 10) : null
+          if (!d || d < fDateFrom) return false
+        }
+        if (fDateTo) {
+          const d = t.submittedAt ? t.submittedAt.slice(0, 10) : null
+          if (!d || d > fDateTo) return false
+        }
+        if (!q) return true
+        return [
+          String(t.taskId),
+          String(t.campaignId),
+          t.granularTaskName || '',
+          t.taskTypeName     || '',
+          t.assigneeName     || '',
+          t.requestorName    || '',
+        ].join(' ').toLowerCase().includes(q)
+      })
+  }, [tasks, search, fDateFrom, fDateTo])
+
+  const totalPages = Math.ceil(filteredTasks.length / PAGE_SIZE)
+  const paged      = filteredTasks.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   const open = (task, act = 'APPROVED') => {
     setReviewing(task)
@@ -120,44 +128,107 @@ export default function QcReviewPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">QC Review Queue</h2>
-        <p className="mt-0.5 text-sm text-slate-500">
-          Tasks submitted by creators awaiting your quality-control review,
-          grouped by campaign. Approve, send back for rework, or reject each
-          deliverable individually.
-        </p>
+      {/* ── Header ── */}
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">QC Review Queue</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Tasks submitted for quality-control review. Approve, send back for rework, or reject each deliverable.
+          </p>
+        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="flex items-center gap-1.5 self-start rounded-md border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition disabled:opacity-60"
+        >
+          <Icon name="refresh" className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="rounded-lg border border-purple-200 bg-purple-50 px-4 py-2.5 flex items-center gap-2">
-          <Icon name="inbox" className="h-4 w-4 text-purple-600" />
-          <span className="text-sm font-semibold text-purple-700">
-            {tasks.length} task{tasks.length === 1 ? '' : 's'} across {groups.length} campaign{groups.length === 1 ? '' : 's'}
+      {/* ── Filters ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <DateRangePicker
+          from={fDateFrom}
+          to={fDateTo}
+          onChange={({ from, to }) => { setFDateFrom(from); setFDateTo(to) }}
+          placeholder="All submitted dates"
+          maxDate={new Date().toISOString().slice(0, 10)}
+        />
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <Icon name="search" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search task, campaign, assignee…"
+            className="w-full rounded-lg border border-slate-200 pl-8 pr-8 py-1.5 text-sm text-slate-700
+              placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400"
+          />
+          {search && (
+            <button onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition">
+              <Icon name="x" className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 flex items-center gap-1.5">
+          <Icon name="inbox" className="h-3.5 w-3.5 text-purple-600" />
+          <span className="text-xs font-semibold text-purple-700">
+            {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}
+            {filteredTasks.length !== tasks.length && (
+              <span className="ml-1 font-normal text-purple-500">of {tasks.length}</span>
+            )}
           </span>
         </div>
+        {(fDateFrom || fDateTo || search) && (
+          <button
+            onClick={() => { setFDateFrom(null); setFDateTo(null); setSearch('') }}
+            className="flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs text-brand-700 hover:bg-brand-100 transition"
+          >
+            <Icon name="x" className="h-3 w-3" /> Clear filters
+          </button>
+        )}
       </div>
 
+      {/* ── Content ── */}
       {loading ? (
         <p className="text-center text-slate-400 py-12 text-sm">Loading…</p>
-      ) : groups.length === 0 ? (
+      ) : filteredTasks.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white py-14 text-center">
           <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
-          <p className="text-sm text-slate-500">No tasks pending QC.</p>
+          <p className="text-sm text-slate-500">
+            {search || fDateFrom || fDateTo ? 'No tasks match your filters.' : 'No tasks pending QC.'}
+          </p>
+          {(search || fDateFrom || fDateTo) && (
+            <button onClick={() => { setFDateFrom(null); setFDateTo(null); setSearch('') }}
+              className="mt-2 text-xs text-brand-600 hover:underline">
+              Clear filters
+            </button>
+          )}
         </div>
       ) : (
-        <div className="space-y-4">
-          {groups.map(g => (
-            <CampaignGroup
-              key={g.campaignId}
-              group={g}
-              onApprove={(t) => open(t, 'APPROVED')}
-              onRework={(t)  => open(t, 'NEEDS_REWORK')}
-              onReject={(t)  => open(t, 'REJECTED')}
-              onView={()     => setBriefCampaignId(g.campaignId)}
-              onViewAssets={(t) => setAssetPreviewTask(t)}
+        <div className="space-y-3">
+          {paged.map(t => (
+            <FlatTaskCard
+              key={t.taskId}
+              task={t}
+              onApprove={() => open(t, 'APPROVED')}
+              onRework={()   => open(t, 'NEEDS_REWORK')}
+              onReject={()   => open(t, 'REJECTED')}
+              onView={()     => setBriefCampaignId(t.campaignId)}
+              onViewAssets={() => setAssetPreviewTask(t)}
             />
           ))}
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-1 shadow-sm">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalElements={filteredTasks.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              loading={loading}
+            />
+          </div>
         </div>
       )}
 
@@ -198,6 +269,106 @@ export default function QcReviewPage() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Flat task card (one card per task, sorted latest-first) ─────────────────
+
+function FlatTaskCard({ task, onApprove, onRework, onReject, onView, onViewAssets }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      {/* ── Header: IDs + priority + meta ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 border-b border-slate-200 px-4 py-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700 border border-brand-100">
+            CMP&nbsp;{task.campaignId}
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+            Task&nbsp;{task.taskId}
+          </span>
+          <PriorityBadge v={task.campaignPriority} />
+          {task.reworkCount > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700 ring-1 ring-orange-200">
+              <Icon name="refresh" className="h-3 w-3" />
+              {task.reworkCount}× rework
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {task.submittedAt && (
+            <span className="text-xs text-slate-400">
+              Submitted {new Date(task.submittedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <button
+            onClick={onView}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+          >
+            <Icon name="eye" className="h-3 w-3" /> Brief
+          </button>
+        </div>
+      </div>
+
+      {/* ── Body ── */}
+      <div className="px-4 py-3 space-y-3">
+        {/* Task name + assignee */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1 flex-1 min-w-0">
+            <p className="text-sm font-bold text-slate-900 leading-snug">
+              {task.granularTaskName || task.taskTypeName || 'Task'}
+            </p>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              {task.platformName && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{task.platformName}</span>
+              )}
+              {task.formatName && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{task.formatName}</span>
+              )}
+              {task.quantity && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">Qty: {task.quantity}</span>
+              )}
+              <span>
+                by <span className="font-semibold text-slate-700">{task.assigneeName || `User ${task.assignedTo}`}</span>
+                {task.totalTimeLoggedMinutes != null && ` · ${task.totalTimeLoggedMinutes} min`}
+              </span>
+              {task.requestorName && (
+                <span>· Req: <span className="font-semibold text-slate-700">{task.requestorName}</span></span>
+              )}
+            </div>
+          </div>
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <button onClick={onViewAssets}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition">
+              <Icon name="fileText" className="h-3.5 w-3.5" /> Assets
+            </button>
+            <button onClick={onRework}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition">
+              <Icon name="refresh" className="h-3.5 w-3.5" /> Rework
+            </button>
+            <button onClick={onReject}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition">
+              <Icon name="x" className="h-3.5 w-3.5" /> Reject
+            </button>
+            <button onClick={onApprove}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition">
+              <Icon name="check" className="h-3.5 w-3.5" /> Approve
+            </button>
+          </div>
+        </div>
+
+        {/* Timeline */}
+        <TaskTimeline task={task} />
+
+        {/* Submission notes */}
+        {task.submissionNotes && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Notes</span>
+            <p className="mt-0.5 text-slate-700 whitespace-pre-wrap">{task.submissionNotes}</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -246,11 +417,10 @@ function CampaignGroup({ group, onApprove, onRework, onReject, onView, onViewAss
 
       {/* Task rows */}
       <div className="divide-y divide-slate-100">
-        {items.map((t, idx) => (
+        {items.map(t => (
           <TaskRow
             key={t.taskId}
             task={t}
-            index={idx + 1}
             onApprove={() => onApprove(t)}
             onRework={()  => onRework(t)}
             onReject={()  => onReject(t)}
@@ -262,7 +432,7 @@ function CampaignGroup({ group, onApprove, onRework, onReject, onView, onViewAss
   )
 }
 
-function TaskRow({ task, index, onApprove, onRework, onReject, onViewAssets }) {
+function TaskRow({ task, onApprove, onRework, onReject, onViewAssets }) {
   const assetCount = 0 // assets are loaded on demand in the modal / preview
   const hasAssets  = true // always show the button — let the modal handle empty state
 
@@ -273,8 +443,8 @@ function TaskRow({ task, index, onApprove, onRework, onReject, onViewAssets }) {
         {/* Left: name + meta tags */}
         <div className="space-y-1 flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Deliverable {index}
+            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold tabular-nums text-slate-500">
+              <span className="font-normal text-slate-400">TASK</span>{task.taskId}
             </span>
             <span className="text-sm font-bold text-slate-900 truncate">
               {task.granularTaskName || task.taskTypeName || 'Task'}
@@ -340,9 +510,9 @@ function TaskRow({ task, index, onApprove, onRework, onReject, onViewAssets }) {
 
       {/* ── Row 3: submission notes (only when present) ── */}
       {task.submissionNotes && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1.5">Notes</span>
-          {task.submissionNotes}
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Notes</span>
+          <p className="mt-0.5 text-slate-700 whitespace-pre-wrap">{task.submissionNotes}</p>
         </div>
       )}
     </div>
@@ -421,9 +591,9 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
           </div>
 
           {task.submissionNotes && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1.5">Submission Notes</span>
-              {task.submissionNotes}
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Submission Notes</span>
+              <p className="mt-0.5 text-slate-700 whitespace-pre-wrap">{task.submissionNotes}</p>
             </div>
           )}
 

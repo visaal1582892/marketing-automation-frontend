@@ -3,6 +3,7 @@ import { Navigate, useParams } from 'react-router-dom'
 import { findResource, masterApi, MASTER_RESOURCES } from '../../api/masterData'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
+import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
 
@@ -22,21 +23,27 @@ export default function MasterTablePage() {
   const resource = findResource(slug)
   const toast = useToast()
 
+  const PAGE_SIZE = 20
+
   const [items, setItems]                 = useState([])
   const [loading, setLoading]             = useState(true)
   const [editing, setEditing]             = useState(null)        // null | row | {}
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [page, setPage]                   = useState(0)
 
   // Column filters
   const [fId, setFId]         = useState('')
   const [fName, setFName]     = useState('')
   const [fStatus, setFStatus] = useState('all')                   // all | active | inactive
 
-  // Reset filters when switching resource
+  // Reset filters and page when switching resource
   useEffect(() => {
     setFId(''); setFName('')
-    setFStatus('all')
+    setFStatus('all'); setPage(0)
   }, [slug])
+
+  // Reset page when filters change
+  useEffect(() => { setPage(0) }, [fId, fName, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch ACTIVE rows only by default
   useEffect(() => {
@@ -115,6 +122,12 @@ export default function MasterTablePage() {
     inactive: items.filter((i) => !isActive(i)).length,
   }), [items])
 
+  const paged = useMemo(
+    () => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [filtered, page]
+  )
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+
   // ---------------------------------------------------------------- render
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -181,7 +194,7 @@ export default function MasterTablePage() {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan="4" className="px-4 py-12 text-center text-slate-500">No matching records.</td></tr>
               ) : (
-                filtered.map((row) => (
+                paged.map((row) => (
                   <tr key={row.id} className="transition hover:bg-slate-50/60">
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{row.id}</td>
                     <td className="px-4 py-2.5 font-medium text-slate-800">{row.name}</td>
@@ -197,6 +210,10 @@ export default function MasterTablePage() {
               )}
             </tbody>
           </table>
+          <div className="border-t border-slate-100 px-4 py-1">
+            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+              pageSize={PAGE_SIZE} onPageChange={setPage} />
+          </div>
         </div>
 
         {/* Mobile */}
@@ -214,7 +231,7 @@ export default function MasterTablePage() {
           ) : filtered.length === 0 ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">No matching records.</div>
           ) : (
-            filtered.map((row) => (
+            paged.map((row) => (
               <div key={row.id} className="flex items-start justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -232,6 +249,10 @@ export default function MasterTablePage() {
               </div>
             ))
           )}
+          <div className="px-4 py-1">
+            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+              pageSize={PAGE_SIZE} onPageChange={setPage} />
+          </div>
         </div>
       </section>
 

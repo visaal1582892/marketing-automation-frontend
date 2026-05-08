@@ -3,8 +3,8 @@ import api from './client'
 const BASE = '/manager'
 
 const managerApi = {
-  // ── All tasks — Marketing Head overview ───────────────────────────────────
-  allTasks: () => api.get(`${BASE}/tasks/all`),
+  // ── All tasks — Marketing Head overview (server-side paged + filtered) ──────
+  allTasks: (params = {}) => api.get(`${BASE}/tasks/all`, { params }),
 
   // ── QC review queue ────────────────────────────────────────────────────────
   pendingTasks: ()        => api.get(`${BASE}/tasks/review`),

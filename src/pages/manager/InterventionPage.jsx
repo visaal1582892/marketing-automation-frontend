@@ -206,7 +206,7 @@ function InterventionCard({ campaign, busy, onRetry, onOverride, onReject, onVie
           {campaign.routingNotes && (
             <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 p-2 text-xs text-amber-800">
               <Icon name="alertCircle" className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{campaign.routingNotes}</span>
+              <span className="whitespace-pre-wrap">{campaign.routingNotes}</span>
             </div>
           )}
         </div>
@@ -267,7 +267,7 @@ function OverrideModal({ campaign, users, form, setForm, saving, onCancel, onCon
         {campaign.routingNotes && (
           <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800 ring-1 ring-amber-200">
             <Icon name="alertCircle" className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            <span>{campaign.routingNotes}</span>
+            <span className="whitespace-pre-wrap">{campaign.routingNotes}</span>
           </div>
         )}
 

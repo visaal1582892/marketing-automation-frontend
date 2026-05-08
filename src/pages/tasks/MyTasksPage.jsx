@@ -107,8 +107,8 @@ export default function MyTasksPage() {
   // already returns tasks ordered by priority (HIGH first, then MEDIUM, LOW)
   // and within each priority by status precedence + creation time.
   //
-  //  - While fewer than 3 tasks are IN_PROGRESS → the first ASSIGNED/REWORK
-  //    task gets a "Start" button.
+  //  - While fewer than 3 tasks are IN_PROGRESS → the top (3 − inFlight)
+  //    ASSIGNED/REWORK tasks each get a "Start" button (up to 3 total).
   //  - Once 3 tasks are IN_PROGRESS → no more Start buttons appear.
   const MAX_IN_FLIGHT = 3
   const inFlightCount = useMemo(
@@ -116,12 +116,19 @@ export default function MyTasksPage() {
     [tasks] // eslint-disable-line react-hooks/exhaustive-deps
   )
   const canStartMore = inFlightCount < MAX_IN_FLIGHT
-  const nextStartableTaskId = useMemo(() => {
-    if (!canStartMore) return null
-    return tasks.find(t =>
-      (t.status === 'ASSIGNED' || t.status === 'REWORK') && !isTaskClosed(t)
-    )?.taskId ?? null
-  }, [tasks, canStartMore]) // eslint-disable-line react-hooks/exhaustive-deps
+  // IDs of the next (up to MAX_IN_FLIGHT − inFlightCount) startable tasks.
+  const startableTaskIds = useMemo(() => {
+    if (!canStartMore) return new Set()
+    const slots = MAX_IN_FLIGHT - inFlightCount
+    const ids = new Set()
+    for (const t of tasks) {
+      if (ids.size >= slots) break
+      if ((t.status === 'ASSIGNED' || t.status === 'REWORK') && !isTaskClosed(t)) {
+        ids.add(t.taskId)
+      }
+    }
+    return ids
+  }, [tasks, canStartMore, inFlightCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     if (filter === 'ALL') return tasks
@@ -383,7 +390,7 @@ export default function MyTasksPage() {
               now={now}
               busy={savingId === t.taskId}
               closed={isTaskClosed(t)}
-              isNextUp={t.taskId === nextStartableTaskId}
+              isNextUp={startableTaskIds.has(t.taskId)}
               hasInFlight={!canStartMore}
               onAccept={() => accept(t)}
               onSubmit={() => openSubmit(t)}
@@ -463,8 +470,8 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
   const isHeld       = task.status === 'HELD'
   // Self-held tasks (the worker put themselves on hold) have active comments.
   const isSelfHeld   = isHeld && task.activeComments?.length > 0
-  // Queue rule: only the top-of-queue task can be started, and only when no
-  // other task is in flight. Everything else in ASSIGNED/REWORK gets locked.
+  // Queue rule: up to 3 tasks can be started simultaneously. The first
+  // (3 − inFlight) ASSIGNED/REWORK tasks get a Start button; the rest are locked.
   const canStart     = isAssigned && isNextUp && !hasInFlight
   const isLocked     = isAssigned && !canStart
   // A task is "deactivated" when its parent campaign was rejected/completed
@@ -560,12 +567,12 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
               className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-500 ring-1 ring-slate-200"
               title={
                 hasInFlight
-                  ? 'Finish the task currently in progress before starting another.'
-                  : 'You can only start the top task in your queue.'
+                  ? 'You already have 3 tasks active. Complete one before starting another.'
+                  : 'Start one of the top 3 tasks in your queue first.'
               }
             >
               <Icon name="lock" className="h-3.5 w-3.5" />
-              {hasInFlight ? 'Locked — finish current task' : 'Locked — start the top task first'}
+              {hasInFlight ? 'Locked — 3 tasks active' : 'Locked — start a top task first'}
             </span>
           )}
           {isInProgress && (

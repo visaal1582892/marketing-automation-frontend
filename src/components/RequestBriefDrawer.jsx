@@ -261,7 +261,7 @@ export default function RequestBriefDrawer({
                   <Icon name="alertCircle" className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-bold text-rose-800">Inconsistency Detected</p>
-                    <p className="text-xs text-rose-700 mt-0.5">{c.inconsistencyReason}</p>
+                    <p className="text-xs text-rose-700 mt-0.5 whitespace-pre-wrap">{c.inconsistencyReason}</p>
                   </div>
                 </div>
               )}
@@ -270,7 +270,7 @@ export default function RequestBriefDrawer({
                   <Icon name="alertCircle" className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-bold text-amber-800">Routing Note</p>
-                    <p className="text-xs text-amber-700 mt-0.5">{c.routingNotes}</p>
+                    <p className="text-xs text-amber-700 mt-0.5 whitespace-pre-wrap">{c.routingNotes}</p>
                   </div>
                 </div>
               )}
@@ -451,7 +451,7 @@ export default function RequestBriefDrawer({
                               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
                                 Submission notes
                               </p>
-                              <p className="text-sm text-slate-700">{t.submissionNotes}</p>
+                              <p className="text-sm text-slate-700 whitespace-pre-wrap">{t.submissionNotes}</p>
                             </div>
                           )}
 
@@ -657,7 +657,8 @@ function ApprovalTrail({ c }) {
           c.interventionDecision === 'REJECTED'
         ) && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-800">
-            <span className="font-bold">Rejection reason:</span> {c.rejectionReason}
+            <p className="font-bold mb-0.5">Rejection reason</p>
+            <p className="whitespace-pre-wrap">{c.rejectionReason}</p>
           </div>
         )}
       </div>

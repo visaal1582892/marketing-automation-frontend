@@ -186,7 +186,7 @@ export default function AppLayout() {
     if (location.pathname.startsWith('/campaigns'))                return 'Marketing Requests'
     if (location.pathname.startsWith('/my-tasks'))                 return 'My Tasks'
     if (location.pathname.startsWith('/collaborations'))           return 'Collaborations'
-    if (location.pathname.startsWith('/manager/all-requests'))     return 'All Requests'
+    if (location.pathname.startsWith('/manager/task-management'))  return 'Task Management'
     if (location.pathname.startsWith('/manager/qc-review'))        return 'QC Review Queue'
     if (location.pathname.startsWith('/manager/reports'))          return 'Time & Efficiency Reports'
     if (location.pathname === '/dashboard')                        return 'Dashboard'
@@ -263,8 +263,8 @@ export default function AppLayout() {
               onToggle={() => setManagerOpen((o) => !o)}
             >
               <SidebarLink
-                to="/manager/all-requests"
-                label="All Requests"
+                to="/manager/task-management"
+                label="Task Management"
                 icon="fileText"
                 collapsed={collapsed}
                 nested

@@ -3,6 +3,7 @@ import { granularTasksApi } from '../../api/masterData'
 import questionnaireApi from '../../api/questionnaire'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
+import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
 
@@ -19,6 +20,7 @@ const FIELD_TYPE_LABELS = Object.fromEntries(FIELD_TYPES.map(f => [f.value, f.la
 
 export default function QuestionMasterPage() {
   const toast = useToast()
+  const PAGE_SIZE = 20
 
   const [questions,     setQuestions]     = useState([])
   const [granularTasks, setGranularTasks] = useState([])
@@ -27,12 +29,16 @@ export default function QuestionMasterPage() {
   const [editing,       setEditing]       = useState(null)
   const [deleting,      setDeleting]      = useState(null)
   const [saving,        setSaving]        = useState(false)
+  const [page,          setPage]          = useState(0)
 
   const [fId,        setFId]        = useState('')
   const [fText,      setFText]      = useState('')
   const [fType,      setFType]      = useState('ALL')
   const [fRequired,  setFRequired]  = useState('ALL')
   const [fTask,      setFTask]      = useState('')
+
+  // Reset page on filter change
+  useEffect(() => { setPage(0) }, [fId, fText, fType, fRequired, fTask]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const BLANK_FORM = {
     questionText:    '',
@@ -80,6 +86,12 @@ export default function QuestionMasterPage() {
     total: questions.length,
     shown: filtered.length,
   }), [questions.length, filtered.length])
+
+  const paged = useMemo(
+    () => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [filtered, page]
+  )
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
 
   const openCreate = () => {
     setEditing(null)
@@ -242,7 +254,7 @@ export default function QuestionMasterPage() {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">No matching questions.</td></tr>
               ) : (
-                filtered.map((q) => (
+                paged.map((q) => (
                   <tr key={q.questionId} className="transition hover:bg-slate-50/60">
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{q.questionId}</td>
                     <td className="px-4 py-2.5 font-medium text-slate-800 max-w-md">
@@ -298,6 +310,10 @@ export default function QuestionMasterPage() {
               )}
             </tbody>
           </table>
+          <div className="border-t border-slate-100 px-4 py-1">
+            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+              pageSize={PAGE_SIZE} onPageChange={setPage} />
+          </div>
         </div>
 
         <div className="block divide-y divide-slate-100 sm:hidden">
@@ -309,7 +325,7 @@ export default function QuestionMasterPage() {
           ) : filtered.length === 0 ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">No matching questions.</div>
           ) : (
-            filtered.map((q) => (
+            paged.map((q) => (
               <div key={q.questionId} className="flex items-start justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <div className="font-mono text-xs text-slate-500">{q.questionId}</div>
@@ -327,6 +343,10 @@ export default function QuestionMasterPage() {
               </div>
             ))
           )}
+          <div className="px-4 py-1">
+            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+              pageSize={PAGE_SIZE} onPageChange={setPage} />
+          </div>
         </div>
       </section>
 

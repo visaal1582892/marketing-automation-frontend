@@ -44,8 +44,10 @@ function inRange(iso, from, to) {
   return iso > lo && iso < hi
 }
 
-export default function DateRangePicker({ from, to, onChange, placeholder = 'All dates' }) {
+export default function DateRangePicker({ from, to, onChange, placeholder = 'All dates', maxDate }) {
   const today = new Date()
+  // maxDate as ISO string for comparison; default: today (no future dates)
+  const maxISO = maxDate !== undefined ? maxDate : toISO(today)
   const [open,      setOpen]      = useState(false)
   const [stage,     setStage]     = useState('start')
   const [viewYear,  setViewYear]  = useState(today.getFullYear())
@@ -90,6 +92,7 @@ export default function DateRangePicker({ from, to, onChange, placeholder = 'All
   const handleDay = (day) => {
     if (!day) return
     const iso = toISO(day)
+    if (maxISO && iso > maxISO) return   // block future dates
     if (stage === 'start') {
       onChange({ from: iso, to: null })
       setStage('end')
@@ -108,6 +111,7 @@ export default function DateRangePicker({ from, to, onChange, placeholder = 'All
   const dayStyle = (day) => {
     if (!day) return ''
     const iso = toISO(day)
+    if (maxISO && iso > maxISO) return 'text-slate-300 cursor-not-allowed'
     const hovIso = hovered ? toISO(hovered) : null
     const effectiveTo = stage === 'end' && hovIso && from
       ? (hovIso >= from ? hovIso : from)
@@ -209,7 +213,7 @@ export default function DateRangePicker({ from, to, onChange, placeholder = 'All
                   key={i}
                   type="button"
                   onClick={() => handleDay(day)}
-                  onMouseEnter={() => stage === 'end' && setHovered(day)}
+                  onMouseEnter={() => stage === 'end' && (!maxISO || toISO(day) <= maxISO) && setHovered(day)}
                   onMouseLeave={() => setHovered(null)}
                   className={`flex aspect-square w-full items-center justify-center text-xs transition ${dayStyle(day)}`}
                 >

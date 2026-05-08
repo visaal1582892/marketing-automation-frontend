@@ -1,7 +1,10 @@
-﻿import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+﻿import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import managerApi from '../../api/manager'
 import campaignsApi from '../../api/campaigns'
+import { masterApi, granularTasksApi } from '../../api/masterData'
+import { useDebounce } from '../../hooks/useDebounce'
+import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
@@ -406,95 +409,129 @@ function CancelConfirmModal({ task: t, onConfirm, onClose, acting }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function AllRequestsPage() {
+export default function TaskManagementPage() {
   const location  = useLocation()
+  const navigate  = useNavigate()
   const toast     = useToast()
 
-  const [tasks,     setTasks]     = useState([])
-  const [loading,   setLoading]   = useState(true)
+  const PAGE_SIZE = 20
+
+  const [tasks,         setTasks]         = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages,    setTotalPages]    = useState(0)
+  const [page,          setPage]          = useState(0)
+  const [loading,       setLoading]       = useState(true)
+  const [refreshSeed,   setRefreshSeed]   = useState(0)
   const { user } = useAuth()
-  const [editTarget,      setEditTarget]      = useState(null)
-  const [briefId,         setBriefId]         = useState(null)
+  const [editTarget,       setEditTarget]       = useState(null)
+  const [briefId,          setBriefId]          = useState(null)
   const [assetPreviewTask, setAssetPreviewTask] = useState(null)
 
-  // Per-column filter state
-  const [fTaskId,    setFTaskId]    = useState('')
-  const [fCampaign,  setFCampaign]  = useState('')
-  const [fRequestor, setFRequestor] = useState('')
-  const [fAssignee,  setFAssignee]  = useState('')
-  const [fTaskType,  setFTaskType]  = useState('')
-  const [fPriority,  setFPriority]  = useState('')
-  const [fStatus,    setFStatus]    = useState('')
-  const [fDateFrom,  setFDateFrom]  = useState(null)
-  const [fDateTo,    setFDateTo]    = useState(null)
+  // ── Per-column filter state (raw — bound directly to inputs) ──────────────
+  // Pre-populate status from URL query param (e.g. ?status=REWORK from dashboard)
+  const [fTaskId,         setFTaskId]         = useState('')
+  const [fCampaign,       setFCampaign]       = useState('')
+  const [fRequestor,      setFRequestor]      = useState('')
+  const [fAssignee,       setFAssignee]       = useState('')
+  const [fTaskType,       setFTaskType]       = useState('')
+  const [fPriority,       setFPriority]       = useState('')
+  const [fStatus,         setFStatus]         = useState(() => new URLSearchParams(location.search).get('status') || '')
+  const [fActionDoneBy,   setFActionDoneBy]   = useState('')
+  const [fDateFrom,       setFDateFrom]       = useState(null)
+  const [fDateTo,         setFDateTo]         = useState(null)
 
-  // Unhold modal state
+  // ── Debounced text filters (delay API call while typing) ──────────────────
+  const dTaskId       = useDebounce(fTaskId)
+  const dCampaign     = useDebounce(fCampaign)
+  const dRequestor    = useDebounce(fRequestor)
+  const dAssignee     = useDebounce(fAssignee)
+  const dActionDoneBy = useDebounce(fActionDoneBy)
+
+  // ── Unhold modal state ────────────────────────────────────────────────────
   const [unholdTarget,   setUnholdTarget]   = useState(null)
-  const [unholdMode,     setUnholdMode]     = useState(null)    // 'auto' | 'manual'
+  const [unholdMode,     setUnholdMode]     = useState(null)
   const [eligibleUsers,  setEligibleUsers]  = useState([])
   const [loadingUsers,   setLoadingUsers]   = useState(false)
   const [selectedUserId, setSelectedUserId] = useState(null)
   const [actingUnhold,   setActingUnhold]   = useState(false)
 
-  // Cancel modal state
+  // ── Cancel modal state ────────────────────────────────────────────────────
   const [cancelTarget, setCancelTarget] = useState(null)
   const [actingCancel, setActingCancel] = useState(false)
 
-  const load = (silent = false) => {
-    if (!silent) setLoading(true)
-    managerApi.allTasks()
-      .then(r => setTasks(r.data || []))
-      .catch(() => toast.error('Failed to load requests'))
-      .finally(() => setLoading(false))
-  }
+  // ── Reset to page 0 whenever any filter changes ───────────────────────────
+  useEffect(() => { setPage(0) },
+    [dTaskId, dCampaign, dRequestor, dAssignee, dActionDoneBy, fTaskType, fPriority, fStatus, fDateFrom, fDateTo]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { load() }, [location.key])  // eslint-disable-line react-hooks/exhaustive-deps
-
-  const uniq = arr => [...new Set(arr.filter(Boolean))].sort()
-
-  const requestorOptions = uniq(tasks.map(t => t.requestorName))
-  const assigneeOptions  = uniq(tasks.map(t => t.assigneeName))
-  const taskTypeOptions  = uniq(tasks.map(t => t.granularTaskName || t.taskTypeName))
-  const priorityOptions  = uniq(tasks.map(t => t.campaignPriority))
-  const statusOptions    = uniq(tasks.map(t => t.status))
-
-  const filtered = useMemo(() => {
-    const dateFrom = fDateFrom ? new Date(fDateFrom + 'T00:00:00').getTime() : null
-    const dateTo   = fDateTo   ? new Date(fDateTo   + 'T23:59:59').getTime() : null
-
-    return tasks
-      .filter(t => {
-        if (fTaskId   && !String(t.taskId).includes(fTaskId.trim())) return false
-        if (fCampaign && !String(t.campaignId).includes(fCampaign.trim())) return false
-        if (fRequestor && !t.requestorName?.toLowerCase().includes(fRequestor.trim().toLowerCase())) return false
-        if (fAssignee  && !t.assigneeName?.toLowerCase().includes(fAssignee.trim().toLowerCase()))  return false
-        if (fTaskType) {
-          const name = t.granularTaskName || t.taskTypeName || ''
-          if (name !== fTaskType) return false
+  // ── Fetch data from backend (debounced filters + page) ────────────────────
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    const params = {
+      page, size: PAGE_SIZE,
+      ...(dTaskId       && { taskId:          dTaskId       }),
+      ...(dCampaign     && { campaignId:      dCampaign     }),
+      ...(dRequestor    && { requestorName:   dRequestor    }),
+      ...(dAssignee     && { assigneeName:    dAssignee     }),
+      ...(dActionDoneBy && { actionDoneBy:    dActionDoneBy }),
+      ...(fTaskType     && { taskType:        fTaskType     }),
+      ...(fPriority     && { priority:        fPriority     }),
+      ...(fStatus       && { status:          fStatus       }),
+      ...(fDateFrom     && { dateFrom:        fDateFrom     }),
+      ...(fDateTo       && { dateTo:          fDateTo       }),
+    }
+    managerApi.allTasks(params)
+      .then(r => {
+        if (!alive) return
+        const raw = r.data
+        // Handle both old (plain array) and new (PagedResponse) formats
+        if (Array.isArray(raw)) {
+          setTasks(raw)
+          setTotalElements(raw.length)
+          setTotalPages(1)
+        } else {
+          const d = raw || {}
+          setTasks(d.content || [])
+          setTotalElements(d.totalElements || 0)
+          setTotalPages(d.totalPages || 0)
         }
-        if (fPriority && t.campaignPriority !== fPriority) return false
-        if (fStatus   && t.status           !== fStatus)   return false
-        if (dateFrom || dateTo) {
-          const ts = t.assignedAt ? new Date(t.assignedAt).getTime() : 0
-          if (dateFrom && ts < dateFrom) return false
-          if (dateTo   && ts > dateTo)   return false
-        }
-        return true
       })
-      .sort((a, b) => {
-        const da = a.assignedAt ? new Date(a.assignedAt).getTime() : 0
-        const db = b.assignedAt ? new Date(b.assignedAt).getTime() : 0
-        return db - da
-      })
-  }, [tasks, fTaskId, fCampaign, fRequestor, fAssignee, fTaskType, fPriority, fStatus, fDateFrom, fDateTo])
+      .catch(() => { if (alive) toast.error('Failed to load requests') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [dTaskId, dCampaign, dRequestor, dAssignee, dActionDoneBy, fTaskType, fPriority, fStatus, fDateFrom, fDateTo, page, refreshSeed, location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeFilters = [fTaskId, fCampaign, fRequestor, fAssignee, fTaskType, fPriority, fStatus, fDateFrom, fDateTo]
+  // ── Master data for filter dropdowns ─────────────────────────────────────
+  const [allTaskTypeOpts, setAllTaskTypeOpts] = useState([])
+  useEffect(() => {
+    Promise.all([
+      masterApi.list('task-types').catch(() => []),
+      granularTasksApi.list().catch(() => []),
+    ]).then(([types, granular]) => {
+      const names = new Set([...types.map(t => t.name), ...granular.map(t => t.taskName)])
+      setAllTaskTypeOpts([...names].filter(Boolean).sort())
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const PRIORITY_OPTS = ['HIGH', 'MEDIUM', 'LOW']
+  const STATUS_OPTS   = ['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'QC_REVIEW', 'COMPLETED', 'CANCELLED', 'HELD']
+
+  const taskTypeOptions  = allTaskTypeOpts
+  const priorityOptions  = PRIORITY_OPTS
+  const statusOptions    = STATUS_OPTS
+
+  // The data shown in the table is the current page (server already filtered it)
+  const filtered = tasks
+
+  const activeFilters = [fTaskId, fCampaign, fRequestor, fAssignee, fTaskType, fPriority, fStatus, fActionDoneBy, fDateFrom, fDateTo]
     .filter(Boolean).length
 
   const clearFilters = () => {
     setFTaskId(''); setFCampaign(''); setFRequestor(''); setFAssignee('')
-    setFTaskType(''); setFPriority(''); setFStatus('')
+    setFTaskType(''); setFPriority(''); setFStatus(''); setFActionDoneBy('')
     setFDateFrom(null); setFDateTo(null)
+    // clear the URL query param if it was set from the dashboard
+    if (location.search) navigate('/manager/task-management', { replace: true })
   }
 
   // ── Hold ─────────────────────────────────────────────────────────────────────
@@ -505,7 +542,7 @@ export default function AllRequestsPage() {
     try {
       await managerApi.holdTask(task.taskId)
       toast.success(`Task ${task.taskId} is now on hold.`)
-      load(true)
+      setRefreshSeed(s => s + 1)
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Hold failed.')
     } finally {
@@ -566,7 +603,7 @@ export default function AllRequestsPage() {
         toast.success(`Task ${unholdTarget.taskId} assigned successfully.`)
       }
       closeUnholdModal()
-      load(true)
+      setRefreshSeed(s => s + 1)
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Unhold failed. Please retry.')
     } finally {
@@ -582,7 +619,7 @@ export default function AllRequestsPage() {
       await managerApi.cancelTask(cancelTarget.taskId)
       toast.success(`Task ${cancelTarget.taskId} cancelled.`)
       setCancelTarget(null)
-      load(true)
+      setRefreshSeed(s => s + 1)
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Cancel failed.')
     } finally {
@@ -595,13 +632,13 @@ export default function AllRequestsPage() {
       {/* ── Page header ── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">All Requests</h2>
+          <h2 className="text-xl font-bold text-slate-900">Task Management</h2>
           <p className="mt-0.5 text-sm text-slate-500">
             Every work task across the team. Hold, unhold, cancel (not-started only), edit, or view briefs.
           </p>
         </div>
         <button
-          onClick={() => load(true)} disabled={loading}
+          onClick={() => setRefreshSeed(s => s + 1)} disabled={loading}
           className="flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5
                      text-xs text-slate-600 hover:bg-slate-50 transition disabled:opacity-60 sm:w-auto"
         >
@@ -617,10 +654,10 @@ export default function AllRequestsPage() {
           to={fDateTo}
           onChange={({ from, to }) => { setFDateFrom(from); setFDateTo(to) }}
           placeholder="All dates"
+          maxDate={new Date().toISOString().slice(0, 10)}
         />
-        <StatChip icon="clipboard" label={`${filtered.length} / ${tasks.length} tasks`} color="slate" />
-        <StatChip icon="users"     label={`${uniq(tasks.map(t => t.assigneeName)).length} workers`} color="brand" />
-        <StatChip icon="pause"     label={`${tasks.filter(t => t.status === 'HELD').length} on hold`} color="amber" />
+        <StatChip icon="clipboard" label={`${totalElements} task${totalElements !== 1 ? 's' : ''}`} color="slate" />
+        <StatChip icon="pause"     label={`${tasks.filter(t => t.status === 'HELD').length} on hold (this page)`} color="amber" />
         {activeFilters > 0 && (
           <button onClick={clearFilters}
             className="flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50
@@ -634,8 +671,6 @@ export default function AllRequestsPage() {
       {/* ── Table ── */}
       {loading ? (
         <LoadingState />
-      ) : tasks.length === 0 ? (
-        <EmptyState hasFilters={false} onClear={clearFilters} />
       ) : (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
@@ -666,7 +701,7 @@ export default function AllRequestsPage() {
                   <td className="px-2 py-1.5" />
                   <td className="px-2 py-1.5" />
                   <td className="px-2 py-1.5" />
-                  <td className="px-2 py-1.5" />
+                  <td className="px-2 py-1.5"><TextFilter value={fActionDoneBy} onChange={setFActionDoneBy} placeholder="Search…" /></td>
                   <td className="px-2 py-1.5" />
                 </tr>
               </thead>
@@ -675,10 +710,14 @@ export default function AllRequestsPage() {
                   <tr>
                     <td colSpan={12} className="py-14 text-center">
                       <Icon name="inbox" className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-                      <p className="text-sm text-slate-500">No tasks match the current filters.</p>
-                      <button onClick={clearFilters} className="mt-2 text-xs text-brand-600 hover:underline">
-                        Clear all filters
-                      </button>
+                      <p className="text-sm text-slate-500">
+                        {activeFilters > 0 ? 'No tasks match the current filters.' : 'No tasks found.'}
+                      </p>
+                      {activeFilters > 0 && (
+                        <button onClick={clearFilters} className="mt-2 text-xs text-brand-600 hover:underline">
+                          Clear all filters
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ) : filtered.map((t, i) => (
@@ -698,11 +737,15 @@ export default function AllRequestsPage() {
               </tbody>
             </table>
           </div>
-          <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-400">
-            Showing {filtered.length} of {tasks.length} tasks
-            {activeFilters > 0 && (
-              <button onClick={clearFilters} className="ml-3 text-brand-600 hover:underline">Clear filters</button>
-            )}
+          <div className="border-t border-slate-100 bg-slate-50 px-4 py-1">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalElements={totalElements}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              loading={loading}
+            />
           </div>
         </div>
       )}
@@ -723,7 +766,7 @@ export default function AllRequestsPage() {
           campaignId={editTarget.campaignId}
           task={editTarget.task}
           onClose={() => setEditTarget(null)}
-          onSaved={() => load(true)}
+          onSaved={() => setRefreshSeed(s => s + 1)}
         />
       )}
 

@@ -51,11 +51,13 @@ export default function DashboardPage() {
 
     const need = (cond, fn) => cond ? fn().catch(() => []) : Promise.resolve([])
 
+    const toArray = (data) => Array.isArray(data) ? data : (data?.content || [])
+
     Promise.all([
-      need(showRequestWidgets, () => campaignsApi.list().then(r => r.data || [])),
-      need(showWorkerWidgets,  () => tasksApi.listMy().then(r => r.data || [])),
-      need(showOpsWidgets,     () => managerApi.pendingTasks().then(r => r.data || [])),
-      need(showOpsWidgets,     () => managerApi.allTasks().then(r => r.data || [])),
+      need(showRequestWidgets, () => campaignsApi.list().then(r => toArray(r.data))),
+      need(showWorkerWidgets,  () => tasksApi.listMy().then(r => toArray(r.data))),
+      need(showOpsWidgets,     () => managerApi.pendingTasks().then(r => toArray(r.data))),
+      need(showOpsWidgets,     () => managerApi.allTasks().then(r => toArray(r.data))),
     ]).then(([cs, ts, qc, at]) => {
       if (!alive) return
       setCampaigns(cs); setTasks(ts)
@@ -74,15 +76,12 @@ export default function DashboardPage() {
   }), [tasks])
 
   const myRequestCounts = useMemo(() => {
-    // campaignsApi.list() already returns only the caller's own campaigns
-    // (the isAdminOrManager bypass was removed from the backend), so we
-    // can always use the full list directly.
     const my = campaigns
     return {
-      total:      my.length,
-      inProgress: my.filter(c => ['IN_PROGRESS','QC_REVIEW'].includes(c.status)).length,
-      completed:  my.filter(c => c.status === 'COMPLETED').length,
-      cancelled:  my.filter(c => c.status === 'CANCELLED' || c.status === 'REJECTED').length,
+      total:     my.length,
+      completed: my.filter(c => c.status === 'COMPLETED').length,
+      rejected:  my.filter(c => c.status === 'REJECTED').length,
+      cancelled: my.filter(c => c.status === 'CANCELLED').length,
     }
   }, [campaigns])
 
@@ -92,6 +91,8 @@ export default function DashboardPage() {
     inProgress: opsAllTasks.filter(t => t.status === 'IN_PROGRESS').length,
     completed:  opsAllTasks.filter(t => t.status === 'COMPLETED').length,
     assigned:   opsAllTasks.filter(t => t.status === 'ASSIGNED').length,
+    held:       opsAllTasks.filter(t => t.status === 'HELD').length,
+    cancelled:  opsAllTasks.filter(t => t.status === 'CANCELLED').length,
   }), [opsQcTasks, opsAllTasks])
 
   return (
@@ -129,17 +130,7 @@ export default function DashboardPage() {
               <Icon name="send" className="h-3 w-3" /> QC Review Queue
             </Link>
           )}
-          {/* Master Data shortcut — Admin only */}
-          {isAdmin && (
-            <Link
-              to="/admin/master/departments"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200
-                         px-3 py-1.5 text-xs font-semibold text-slate-600
-                         transition hover:bg-slate-50"
-            >
-              <Icon name="cog" className="h-3 w-3" /> Master Data
-            </Link>
-          )}
+          
           {/* New Request CTA — Requestor, Head, Regional Manager */}
           {canSubmitRequest && (
             <Link
@@ -177,7 +168,7 @@ export default function DashboardPage() {
               cta="Review queue →"
             />
             <KpiCard
-              to="/manager/qc-review"
+              to="/manager/task-management?status=REWORK"
               tone="amber"
               icon="alertCircle"
               label="Sent for Rework"
@@ -185,7 +176,7 @@ export default function DashboardPage() {
               cta="View →"
             />
             <KpiCard
-              to="/manager/all-requests"
+              to="/manager/task-management?status=IN_PROGRESS"
               tone="brand"
               icon="play"
               label="Tasks In Progress"
@@ -193,7 +184,7 @@ export default function DashboardPage() {
               cta="View all →"
             />
             <KpiCard
-              to="/manager/all-requests"
+              to="/manager/task-management?status=COMPLETED"
               tone="emerald"
               icon="check"
               label="Tasks Completed"
@@ -207,7 +198,7 @@ export default function DashboardPage() {
             subtitle="Breakdown of where work currently stands across all team members."
           >
             <KpiCard
-              to="/manager/all-requests"
+              to="/manager/task-management?status=ASSIGNED"
               tone="brand"
               icon="inbox"
               label="Newly Assigned"
@@ -215,34 +206,34 @@ export default function DashboardPage() {
               cta="View →"
             />
             <KpiCard
-              to="/manager/all-requests"
-              tone="violet"
-              icon="clock"
-              label="Total Active Tasks"
-              value={opsCounts.inProgress + opsCounts.assigned + opsCounts.qcReview + opsCounts.rework}
-              cta="View all →"
+              to="/manager/task-management?status=REWORK"
+              tone="amber"
+              icon="refresh"
+              label="Reworks"
+              value={opsCounts.rework}
+              cta="View →"
             />
             <KpiCard
-              to="/manager/reports"
+              to="/manager/task-management?status=HELD"
               tone="orange"
-              icon="trendingUp"
-              label="Time & Efficiency Report"
-              value="→"
-              cta="Open →"
+              icon="pause"
+              label="Held"
+              value={opsCounts.held}
+              cta="View →"
             />
             <KpiCard
-              to="/manager/all-requests"
-              tone="emerald"
-              icon="fileText"
-              label="All Requests"
-              value="→"
-              cta="Open →"
+              to="/manager/task-management?status=CANCELLED"
+              tone="rose"
+              icon="x"
+              label="Cancelled"
+              value={opsCounts.cancelled}
+              cta="View →"
             />
           </Section>
         </>
       )}
 
-      {/* ── Admin-only quick-access shortcuts ────────────────────────── */}
+      {/* ── Admin-only quick-access shortcuts ──────────────────────────
       {showAdminExtras && (
         <div>
           <div className="mb-3">
@@ -277,7 +268,7 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Worker section */}
       {showWorkerWidgets && (
@@ -316,28 +307,28 @@ export default function DashboardPage() {
             to="/campaigns"
             tone="brand"
             icon="fileText"
-            label="Total submitted"
+            label="Total Submitted"
             value={myRequestCounts.total}
             cta="View all →"
           />
           <KpiCard
-            to="/campaigns"
-            tone="violet"
-            icon="clock"
-            label="In Progress / QC"
-            value={myRequestCounts.inProgress}
-            cta="View →"
-          />
-          <KpiCard
-            to="/campaigns"
+            to="/campaigns/completed"
             tone="emerald"
             icon="check"
-            label="Delivered"
+            label="Delivered Tasks"
             value={myRequestCounts.completed}
             cta="View →"
           />
           <KpiCard
-            to="/campaigns"
+            to="/campaigns?status=REJECTED"
+            tone="orange"
+            icon="alertCircle"
+            label="Rejected"
+            value={myRequestCounts.rejected}
+            cta="View →"
+          />
+          <KpiCard
+            to="/campaigns?status=CANCELLED"
             tone="rose"
             icon="x"
             label="Cancelled"

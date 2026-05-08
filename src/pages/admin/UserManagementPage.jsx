@@ -1,17 +1,19 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import api from '../../api/client'
 import { masterApi } from '../../api/masterData'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
 import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
+import Pagination from '../../components/Pagination'
+import { useDebounce } from '../../hooks/useDebounce'
 
 const BASE = '/admin/users'
 const SKILL_LEVELS = ['JUNIOR', 'SENIOR']
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 const usersApi = {
-  list:          ()         => api.get(BASE, { params: { includeInactive: true } }).then(r => r.data),
+  list:          (params)   => api.get(BASE, { params: { includeInactive: true, ...params } }),
   create:        (data)     => api.post(BASE, data).then(r => r.data),
   update:        (id, data) => api.put(`${BASE}/${id}`, data).then(r => r.data),
   delete:        (id)       => api.delete(`${BASE}/${id}`),
@@ -338,8 +340,8 @@ function ColSelect({ value, onChange, options, placeholder }) {
   return (
     <div className="mt-1">
       <AppSelect
-        value={value === 'all' ? '' : value}
-        onChange={v => onChange(v || 'all')}
+        value={value}
+        onChange={v => onChange(v || '')}
         options={options}
         placeholder={placeholder}
         size="sm"
@@ -354,51 +356,93 @@ function ColSelect({ value, onChange, options, placeholder }) {
 export default function UserManagementPage() {
   const toast = useToast()
 
-  const [users, setUsers]               = useState([])
-  const [roles, setRoles]               = useState([])
-  const [departments, setDepartments]   = useState([])
-  const [designations, setDesignations] = useState([])
-  const [loading, setLoading]           = useState(true)
+  const PAGE_SIZE = 20
 
-  const [editing, setEditing]             = useState(null)
-  const [deleting, setDeleting]           = useState(null)
+  const [users,         setUsers]         = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages,    setTotalPages]    = useState(0)
+  const [page,          setPage]          = useState(0)
+  const [roles,         setRoles]         = useState([])
+  const [departments,   setDepartments]   = useState([])
+  const [designations,  setDesignations]  = useState([])
+  const [loading,       setLoading]       = useState(true)
+  const [refreshSeed,   setRefreshSeed]   = useState(0)
+
+  const [editing,       setEditing]       = useState(null)
+  const [deleting,      setDeleting]      = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
-  const [resetting, setResetting]         = useState(null)
-  const [resetLoading, setResetLoading]   = useState(false)
+  const [resetting,     setResetting]     = useState(null)
+  const [resetLoading,  setResetLoading]  = useState(false)
 
-  // Column filters
+  // ── Column filters ──────────────────────────────────────────────────────────
   const [fName,        setFName]        = useState('')
   const [fEmail,       setFEmail]       = useState('')
-  const [fRole,        setFRole]        = useState('all')
-  const [fDept,        setFDept]        = useState('all')
-  const [fDesignation, setFDesignation] = useState('all')
-  const [fSkill,       setFSkill]       = useState('all')
-  const [fStatus,      setFStatus]      = useState('all')
+  const [fRole,        setFRole]        = useState('')
+  const [fDept,        setFDept]        = useState('')
+  const [fDesignation, setFDesignation] = useState('')
+  const [fSkill,       setFSkill]       = useState('')
+  const [fStatus,      setFStatus]      = useState('')
 
+  // ── Debounced text filters ─────────────────────────────────────────────────
+  const dName  = useDebounce(fName)
+  const dEmail = useDebounce(fEmail)
+
+  // ── Reset page when filters change ────────────────────────────────────────
+  useEffect(() => { setPage(0) },
+    [dName, dEmail, fRole, fDept, fDesignation, fSkill, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch data from backend ───────────────────────────────────────────────
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    const params = {
+      page, size: PAGE_SIZE,
+      ...(dName        && { name:          dName        }),
+      ...(dEmail       && { email:         dEmail       }),
+      ...(fRole        && { roleName:      fRole        }),
+      ...(fDept        && { departmentId:  fDept        }),
+      ...(fDesignation && { designationId: fDesignation }),
+      ...(fSkill       && { skillLevel:    fSkill       }),
+      ...(fStatus      && { status:        fStatus      }),
+    }
+    usersApi.list(params)
+      .then(res => {
+        if (!alive) return
+        const raw = res.data
+        if (Array.isArray(raw)) {
+          setUsers(raw)
+          setTotalElements(raw.length)
+          setTotalPages(1)
+        } else {
+          const d = raw || {}
+          setUsers(d.content || [])
+          setTotalElements(d.totalElements || 0)
+          setTotalPages(d.totalPages || 0)
+        }
+      })
+      .catch(() => { if (alive) toast.error('Failed to load users.') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [dName, dEmail, fRole, fDept, fDesignation, fSkill, fStatus, page, refreshSeed]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Load master data for dropdowns once ──────────────────────────────────
   useEffect(() => {
     Promise.all([
-      usersApi.list(),
       masterApi.list('roles', false),
       masterApi.list('departments', false),
       masterApi.list('designations', false),
     ])
-      .then(([u, r, d, dsg]) => {
-        setUsers(u)
+      .then(([r, d, dsg]) => {
         setRoles(r.map(x => ({ id: x.id, name: x.name })))
         setDepartments(d.map(x => ({ id: x.id, name: x.name })))
         setDesignations(dsg.map(x => ({ id: x.id, name: x.name })))
       })
-      .catch(() => toast.error('Failed to load data.'))
-      .finally(() => setLoading(false))
+      .catch(() => toast.error('Failed to load master data.'))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleSaved = (saved) => {
-    setUsers(curr => {
-      const i = curr.findIndex(u => u.userId === saved.userId)
-      if (i === -1) return [...curr, saved]
-      const next = [...curr]; next[i] = saved; return next
-    })
+  const handleSaved = () => {
+    setRefreshSeed(s => s + 1)
   }
 
   const handleDelete = async () => {
@@ -406,9 +450,9 @@ export default function UserManagementPage() {
     setDeleteLoading(true)
     try {
       await usersApi.delete(deleting.userId)
-      setUsers(curr => curr.filter(u => u.userId !== deleting.userId))
       toast.success(`User "${deleting.fullName}" deleted.`)
       setDeleting(null)
+      setRefreshSeed(s => s + 1)
     } catch { toast.error('Delete failed.') }
     finally { setDeleteLoading(false) }
   }
@@ -424,38 +468,18 @@ export default function UserManagementPage() {
     finally { setResetLoading(false) }
   }
 
-  const roleOptions = useMemo(() =>
-    roles.map(r => ({ value: r.name, label: r.name })),
-  [roles])
+  const roleOptions        = roles.map(r => ({ value: r.name, label: r.name }))
+  const deptOptions        = departments.map(x => ({ value: x.id, label: x.name }))
+  const designationOptions = designations.map(x => ({ value: x.id, label: x.name }))
+  const skillOptions       = SKILL_LEVELS.map(s => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase() }))
+  const statusOptions      = [{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]
 
-  const deptOptions = useMemo(() =>
-    [...new Map(users.map(u => [u.departmentId, u.departmentName])).entries()]
-      .filter(([id]) => id).map(([id, name]) => ({ value: id, label: name })),
-  [users])
+  const filtered = users  // server already filtered
 
-  const designationOptions = useMemo(() =>
-    [...new Map(users.map(u => [u.designationId, u.designationName])).entries()]
-      .filter(([id]) => id).map(([id, name]) => ({ value: id, label: name })),
-  [users])
-
-  const skillOptions  = SKILL_LEVELS.map(s => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase() }))
-  const statusOptions = [{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]
-
-  const filtered = useMemo(() => users.filter(u => {
-    if (fStatus      !== 'all' && u.status          !== fStatus)                         return false
-    if (fDept        !== 'all' && u.departmentId    !== fDept)                           return false
-    if (fDesignation !== 'all' && u.designationId   !== fDesignation)                    return false
-    if (fSkill       !== 'all' && u.skillLevel      !== fSkill)                          return false
-    if (fRole        !== 'all' && !(u.roleNames ?? []).includes(fRole))                  return false
-    if (fName  && !u.fullName?.toLowerCase().includes(fName.toLowerCase()))              return false
-    if (fEmail && !u.email?.toLowerCase().includes(fEmail.toLowerCase()))                return false
-    return true
-  }), [users, fStatus, fDept, fDesignation, fSkill, fRole, fName, fEmail])
-
-  const hasFilter = fName || fEmail || fDept !== 'all' || fDesignation !== 'all' || fSkill !== 'all' || fStatus !== 'all' || fRole !== 'all'
+  const hasFilter = !!(fName || fEmail || fRole || fDept || fDesignation || fSkill || fStatus)
   const clearFilters = () => {
     setFName(''); setFEmail('')
-    setFRole('all'); setFDept('all'); setFDesignation('all'); setFSkill('all'); setFStatus('all')
+    setFRole(''); setFDept(''); setFDesignation(''); setFSkill(''); setFStatus('')
   }
 
   const th = 'px-3 pt-3 pb-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 align-top'
@@ -466,7 +490,7 @@ export default function UserManagementPage() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-slate-500">
-            {filtered.length} of {users.length} user{users.length !== 1 ? 's' : ''}
+            {totalElements} user{totalElements !== 1 ? 's' : ''}
           </span>
           {hasFilter && (
             <button onClick={clearFilters}
@@ -488,11 +512,12 @@ export default function UserManagementPage() {
         {loading ? (
           <div className="flex h-48 items-center justify-center text-sm text-slate-400">Loading users…</div>
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1000px] text-sm">
               <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  <th className="px-3 pt-3 pb-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 w-8">#</th>
+                  <th className="px-3 pt-3 pb-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 w-24">User ID</th>
                   <th className={th}>Name</th>
                   <th className={th}>Email</th>
                   <th className={th}>Roles</th>
@@ -521,9 +546,9 @@ export default function UserManagementPage() {
                   <tr>
                     <td colSpan={10} className="py-12 text-center text-slate-400">No users match the current filters.</td>
                   </tr>
-                ) : filtered.map((u, idx) => (
+                ) : filtered.map((u) => (
                   <tr key={u.userId} className="hover:bg-slate-50/60 transition">
-                    <td className="px-3 py-2.5 text-slate-400 font-mono text-xs">{idx + 1}</td>
+                    <td className="px-3 py-2.5 text-slate-500 font-mono text-xs">{u.userId}</td>
                     <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{u.fullName}</td>
                     <td className="px-3 py-2.5 text-slate-500 text-xs">{u.email}</td>
                     <td className="px-3 py-2.5">
@@ -557,6 +582,17 @@ export default function UserManagementPage() {
               </tbody>
             </table>
           </div>
+          <div className="border-t border-slate-100 bg-slate-50 px-4 py-1">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalElements={totalElements}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              loading={loading}
+            />
+          </div>
+          </>
         )}
       </div>
 

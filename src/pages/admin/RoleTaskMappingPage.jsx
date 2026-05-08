@@ -2,11 +2,13 @@
 import { masterApi, granularTasksApi, roleTaskApi } from '../../api/masterData'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
+import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
 
 export default function RoleTaskMappingPage() {
   const toast = useToast()
+  const PAGE_SIZE = 20
 
   const [mappings, setMappings]           = useState([])
   const [roles, setRoles]                 = useState([])
@@ -15,11 +17,15 @@ export default function RoleTaskMappingPage() {
   const [addOpen, setAddOpen]             = useState(false)
   const [editRow, setEditRow]             = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [page, setPage]                   = useState(0)
 
   // Column filters
   const [fRole,   setFRole]   = useState('all')
   const [fTask,   setFTask]   = useState('')
   const [fStatus, setFStatus] = useState('all')
+
+  // Reset page on filter change
+  useEffect(() => { setPage(0) }, [fRole, fTask, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load reference data and mappings
   useEffect(() => {
@@ -102,6 +108,12 @@ export default function RoleTaskMappingPage() {
     return opts
   }, [mappings])
 
+  const paged = useMemo(
+    () => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [filtered, page]
+  )
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+
   // ---------------------------------------------------------------- render
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -141,7 +153,7 @@ export default function RoleTaskMappingPage() {
             <thead>
               <tr className="bg-slate-50/70 text-left text-xs font-semibold uppercase
                               tracking-wider text-slate-500">
-                <th className="w-16 px-4 py-2.5">#</th>
+                <th className="w-20 px-4 py-2.5">ID</th>
                 <th className="w-48 px-4 py-2.5">Role</th>
                 <th className="px-4 py-2.5">Granular Task</th>
                 <th className="w-32 px-4 py-2.5">Status</th>
@@ -176,7 +188,7 @@ export default function RoleTaskMappingPage() {
                     : 'No matching records.'}
                 </td></tr>
               ) : (
-                filtered.map((row) => (
+                paged.map((row) => (
                   <tr key={row.mappingId}
                       className={`transition hover:bg-slate-50/60 ${
                         (row.status ?? 'ACTIVE') === 'INACTIVE' ? 'opacity-60' : ''
@@ -219,6 +231,10 @@ export default function RoleTaskMappingPage() {
               )}
             </tbody>
           </table>
+          <div className="border-t border-slate-100 px-4 py-1">
+            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+              pageSize={PAGE_SIZE} onPageChange={setPage} />
+          </div>
         </div>
 
         {/* Mobile */}
@@ -239,7 +255,7 @@ export default function RoleTaskMappingPage() {
               {mappings.length === 0 ? 'No mappings yet.' : 'No matching records.'}
             </div>
           ) : (
-            filtered.map((row) => (
+            paged.map((row) => (
               <div key={row.mappingId}
                    className={`flex items-start justify-between gap-3 px-4 py-3 ${
                      (row.status ?? 'ACTIVE') === 'INACTIVE' ? 'opacity-60' : ''
@@ -270,6 +286,10 @@ export default function RoleTaskMappingPage() {
               </div>
             ))
           )}
+          <div className="px-4 py-1">
+            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+              pageSize={PAGE_SIZE} onPageChange={setPage} />
+          </div>
         </div>
       </section>
 

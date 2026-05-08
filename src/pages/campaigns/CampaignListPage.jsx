@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import AppSelect from '../../components/AppSelect'
 import DateRangePicker from '../../components/DateRangePicker'
+import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
 import campaignsApi from '../../api/campaigns'
 import { masterApi, granularTasksApi } from '../../api/masterData'
@@ -10,6 +11,7 @@ import tasksApi from '../../api/tasks'
 import api from '../../api/client'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
+import { useDebounce } from '../../hooks/useDebounce'
 
 // ─── Status / Priority helpers ────────────────────────────────────────────────
 
@@ -1339,30 +1341,89 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
 
 // ─── Requestor campaign-level view ───────────────────────────────────────────
 
-function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefresh }) {
-  const navigate = useNavigate()
-  const toast    = useToast()
+function RequestorCampaignView({ onTotalChange }) {
+  const navigate  = useNavigate()
+  const location  = useLocation()
+  const toast     = useToast()
 
-  const [briefId,        setBriefId]        = useState(null)
-  const [editCampaign,   setEditCampaign]   = useState(null)
+  const PAGE_SIZE = 20
+
+  // ── Data state ─────────────────────────────────────────────────────────────
+  const [campaigns,     setCampaigns]     = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages,    setTotalPages]    = useState(0)
+  const [page,          setPage]          = useState(0)
+  const [loading,       setLoading]       = useState(true)
+  const [refreshSeed,   setRefreshSeed]   = useState(0)
+
+  const [briefId,      setBriefId]      = useState(null)
+  const [editCampaign, setEditCampaign] = useState(null)
+
+  // ── Column filters ──────────────────────────────────────────────────────────
   const [fCampaign,  setFCampaign]  = useState('')
-  const [fReqType,   setFReqType]   = useState('')
   const [fPriority,  setFPriority]  = useState('')
-  const [fStatus,    setFStatus]    = useState('')
+  const [fStatus,    setFStatus]    = useState(() => new URLSearchParams(location.search).get('status') || '')
   const [fDateFrom,  setFDateFrom]  = useState(null)
   const [fDateTo,    setFDateTo]    = useState(null)
   const [activeTab,  setActiveTab]  = useState('all')
 
-  // Bookmark state — derived from campaign.bookmarked returned by API
-  const [bookmarkedIds, setBookmarkedIds] = useState(() =>
-    new Set(campaigns.filter(c => c.bookmarked).map(c => c.campaignId))
-  )
-  const [bookmarkingId, setBookmarkingId] = useState(null)
+  // ── Debounced text filters ─────────────────────────────────────────────────
+  const dCampaign = useDebounce(fCampaign)
 
-  // Keep bookmarkedIds in sync when campaigns prop updates (e.g. after refresh)
+  // ── Reset page when filters/tab change ────────────────────────────────────
+  useEffect(() => { setPage(0) },
+    [dCampaign, fPriority, fStatus, fDateFrom, fDateTo, activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch data ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    setBookmarkedIds(new Set(campaigns.filter(c => c.bookmarked).map(c => c.campaignId)))
-  }, [campaigns])
+    let alive = true
+    setLoading(true)
+    const params = {
+      page, size: PAGE_SIZE,
+      ...(dCampaign  && { campaignId: dCampaign  }),
+      ...(fPriority  && { priority:   fPriority  }),
+      ...(fStatus    && { status:     fStatus    }),
+      ...(fDateFrom  && { dateFrom:   fDateFrom  }),
+      ...(fDateTo    && { dateTo:     fDateTo    }),
+    }
+
+    // For the bookmarked tab, use the dedicated bookmarked endpoint
+    const req = activeTab === 'bookmarked'
+      ? campaignsApi.getBookmarked()
+      : campaignsApi.list(params)
+
+    req.then(res => {
+        if (!alive) return
+        if (activeTab === 'bookmarked') {
+          // Bookmarked endpoint returns a plain array (not paged)
+          const list = res.data || []
+          setCampaigns(list)
+          setTotalElements(list.length)
+          setTotalPages(1)
+          onTotalChange?.(list.length)
+        } else {
+          const raw = res.data
+          if (Array.isArray(raw)) {
+            setCampaigns(raw)
+            setTotalElements(raw.length)
+            setTotalPages(1)
+            onTotalChange?.(raw.length)
+          } else {
+            const d = raw || {}
+            setCampaigns(d.content || [])
+            setTotalElements(d.totalElements || 0)
+            setTotalPages(d.totalPages || 0)
+            onTotalChange?.(d.totalElements || 0)
+          }
+        }
+      })
+      .catch(() => { if (alive) toast.error?.('Failed to load campaigns') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [dCampaign, fPriority, fStatus, fDateFrom, fDateTo, page, activeTab, refreshSeed, location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Bookmark handling ─────────────────────────────────────────────────────
+  const [bookmarkingId, setBookmarkingId] = useState(null)
 
   const toggleBookmark = async (e, campaignId) => {
     e.stopPropagation()
@@ -1370,11 +1431,10 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
     try {
       const res = await campaignsApi.toggleBookmark(campaignId)
       const isNow = res.data?.bookmarked ?? false
-      setBookmarkedIds(prev => {
-        const next = new Set(prev)
-        isNow ? next.add(campaignId) : next.delete(campaignId)
-        return next
-      })
+      // Optimistically update the bookmarked flag in the list
+      setCampaigns(prev => prev.map(c =>
+        c.campaignId === campaignId ? { ...c, bookmarked: isNow } : c
+      ))
     } catch {
       toast.error?.('Failed to update bookmark.')
     } finally {
@@ -1387,55 +1447,32 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
     navigate(`/campaigns/new?cloneFrom=${campaignId}`)
   }
 
-  const reqTypeOptions  = useMemo(() => [...new Set(campaigns.map(c => c.taskTypeName).filter(Boolean))].sort(), [campaigns])
-  const priorityOptions = useMemo(() => [...new Set(campaigns.map(c => c.priority).filter(Boolean))].sort(), [campaigns])
-  const statusOptions   = useMemo(() => [...new Set(campaigns.map(c => c.status).filter(Boolean))].sort(), [campaigns])
+  // ── Master data for filter dropdowns ──────────────────────────────────────
+  const [allTaskTypes, setAllTaskTypes] = useState([])
+  useEffect(() => {
+    masterApi.list('task-types').then(d => setAllTaskTypes(d.map(t => t.name).sort())).catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const PRIORITY_OPTS = ['HIGH', 'MEDIUM', 'LOW']
+  const STATUS_OPTS   = ['IN_PROGRESS', 'COMPLETED', 'REJECTED', 'CANCELLED']
 
   const TERMINAL = ['COMPLETED', 'REJECTED', 'CANCELLED']
 
-  // Tab counts
-  const tabCounts = useMemo(() => ({
-    all:        campaigns.length,
-    bookmarked: campaigns.filter(c => bookmarkedIds.has(c.campaignId)).length,
-  }), [campaigns, bookmarkedIds]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const tabFiltered = useMemo(() => campaigns.filter(c => {
-    if (activeTab === 'bookmarked') return bookmarkedIds.has(c.campaignId)
-    return true // 'all' tab — no status filter
-  }), [campaigns, activeTab, bookmarkedIds]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const filtered = useMemo(() => {
-    const dateFrom = fDateFrom ? new Date(fDateFrom + 'T00:00:00').getTime() : null
-    const dateTo   = fDateTo   ? new Date(fDateTo   + 'T23:59:59').getTime() : null
-
-    return tabFiltered
-      .filter(c => {
-        if (fCampaign && !String(c.campaignId).includes(fCampaign.trim())) return false
-        if (fReqType  && c.taskTypeName !== fReqType) return false
-        if (fPriority && c.priority !== fPriority)                          return false
-        if (fStatus   && c.status   !== fStatus)                            return false
-        if (dateFrom || dateTo) {
-          const ts = c.createdAt ? new Date(c.createdAt).getTime() : 0
-          if (dateFrom && ts < dateFrom) return false
-          if (dateTo   && ts > dateTo)   return false
-        }
-        return true
-      })
-      .sort((a, b) => b.campaignId - a.campaignId)
-  }, [tabFiltered, fCampaign, fReqType, fPriority, fStatus, fDateFrom, fDateTo])
-
-  const hasFilters = fCampaign || fReqType || fPriority || fStatus || fDateFrom || fDateTo
+  const hasFilters = !!(fCampaign || fPriority || fStatus || fDateFrom || fDateTo)
   const clearAll   = () => {
-    setFCampaign(''); setFReqType(''); setFPriority(''); setFStatus('')
+    setFCampaign(''); setFPriority(''); setFStatus('')
     setFDateFrom(null); setFDateTo(null)
+    if (location.search) navigate('/campaigns', { replace: true })
   }
 
   const colFilterCls = `w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-600
     placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-300 focus:border-brand-400`
 
+  const filtered = campaigns   // server already filtered; keep variable name for template compatibility
+
   const tabs = [
-    { id: 'all',        label: 'All Requests', count: tabCounts.all        },
-    { id: 'bookmarked', label: '★ Bookmarked',  count: tabCounts.bookmarked },
+    { id: 'all',        label: 'All Requests', count: activeTab === 'all'        ? totalElements : null },
+    { id: 'bookmarked', label: '★ Bookmarked',  count: activeTab === 'bookmarked' ? totalElements : null },
   ]
 
   return (
@@ -1470,8 +1507,9 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
             to={fDateTo}
             onChange={({ from, to }) => { setFDateFrom(from); setFDateTo(to) }}
             placeholder="All dates"
+            maxDate={new Date().toISOString().slice(0, 10)}
           />
-          <span className="text-xs text-slate-400">{filtered.length} campaign{filtered.length !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-slate-400">{totalElements} campaign{totalElements !== 1 ? 's' : ''}</span>
         </div>
         {hasFilters && (
           <button onClick={clearAll}
@@ -1481,7 +1519,7 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
         )}
       </div>
 
-      {loadingDetails ? (
+      {loading ? (
         <div className="flex items-center justify-center gap-2 py-12 text-slate-400">
           <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
@@ -1489,18 +1527,13 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
           </svg>
           <span className="text-sm">Loading…</span>
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white py-14 text-center">
-          <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
-          <p className="text-sm text-slate-500">No requests found.</p>
-        </div>
       ) : (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign</th>
+                  <th className="w-20 px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign</th>
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task Type</th>
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Priority</th>
                   <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Status</th>
@@ -1513,14 +1546,12 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                   <td className="px-2 pb-2 pt-1">
                     <input value={fCampaign} onChange={e => setFCampaign(e.target.value)} placeholder="Filter…" className={colFilterCls} />
                   </td>
+                  <td className="px-2 pb-2 pt-1" />
                   <td className="px-2 pb-2 pt-1">
-                    <AppSelect value={fReqType} onChange={setFReqType} options={reqTypeOptions} placeholder="All" size="sm" isSearchable menuPortal />
+                    <AppSelect value={fPriority} onChange={setFPriority} options={PRIORITY_OPTS} placeholder="All" size="sm" isSearchable menuPortal />
                   </td>
                   <td className="px-2 pb-2 pt-1">
-                    <AppSelect value={fPriority} onChange={setFPriority} options={priorityOptions} placeholder="All" size="sm" isSearchable menuPortal />
-                  </td>
-                  <td className="px-2 pb-2 pt-1">
-                    <AppSelect value={fStatus} onChange={setFStatus} options={statusOptions.map(v => ({ value: v, label: CAMPAIGN_STATUS_LABELS[v] || v }))} placeholder="All" size="sm" isSearchable menuPortal />
+                    <AppSelect value={fStatus} onChange={setFStatus} options={STATUS_OPTS.map(v => ({ value: v, label: CAMPAIGN_STATUS_LABELS[v] || v }))} placeholder="All" size="sm" isSearchable menuPortal />
                   </td>
                   <td className="px-2 pb-2 pt-1" />
                   <td className="px-2 pb-2 pt-1" />
@@ -1529,19 +1560,28 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map((c) => {
-                  const taskCount    = (c.workTasks || []).length
-                  const doneCount    = (c.workTasks || []).filter(t => t.status === 'COMPLETED').length
-                  const canEdit      = !TERMINAL.includes(c.status)
-                  const fmtDate      = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
-                  const commentTasks = (c.workTasks || []).filter(t => t.status === 'HELD' && t.activeComments?.length > 0)
-                  const hasComment   = commentTasks.length > 0
-                  const isBookmarked = bookmarkedIds.has(c.campaignId)
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-14 text-center">
+                      <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
+                      <p className="text-sm text-slate-500">No requests found.</p>
+                      {hasFilters && (
+                        <button onClick={clearAll} className="mt-2 text-xs text-brand-600 hover:underline">
+                          Clear filters
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ) : filtered.map((c) => {
+                  const taskCount  = c.taskCount ?? (c.workTasks || []).length
+                  const doneCount  = c.completedTaskCount ?? (c.workTasks || []).filter(t => t.status === 'COMPLETED').length
+                  const hasRework  = c.hasRework  ?? (c.workTasks || []).some(t => t.status === 'REWORK')
+                  const hasQcReview = c.hasQcReview ?? (c.workTasks || []).some(t => t.status === 'QC_REVIEW')
+                  const canEdit    = !TERMINAL.includes(c.status)
+                  const fmtDate    = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
+                  const isBookmarked = !!c.bookmarked
                   return (
-                    <tr key={c.campaignId}
-                      className={`transition ${hasComment
-                        ? 'row-comment-pulse'
-                        : 'hover:bg-slate-50/70'}`}>
+                    <tr key={c.campaignId} className="transition hover:bg-slate-50/70">
                       <td className="px-3 py-3">
                         <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{c.campaignId}</span>
                       </td>
@@ -1555,12 +1595,12 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                           {taskCount === 0
                             ? <span className="italic text-slate-400">None yet</span>
                             : <span>{doneCount}/{taskCount} done</span>}
-                          {(c.workTasks || []).some(t => t.status === 'REWORK') && (
+                          {hasRework && (
                             <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 ring-1 ring-orange-200">
                               ↩ Rework
                             </span>
                           )}
-                          {(c.workTasks || []).some(t => t.status === 'QC_REVIEW') && (
+                          {hasQcReview && (
                             <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 ring-1 ring-purple-200">
                               ⏳ QC
                             </span>
@@ -1607,9 +1647,9 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                           </button>
                           {canEdit && (
                             <button
-                              onClick={() => !refreshing && setEditCampaign(c)}
-                              disabled={refreshing}
-                              title={refreshing ? 'Refreshing data…' : 'Edit campaign'}
+                              onClick={() => !loading && setEditCampaign(c)}
+                              disabled={loading}
+                              title={loading ? 'Loading…' : 'Edit campaign'}
                               className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
                               <Icon name="edit" className="h-3.5 w-3.5" /> Edit
                             </button>
@@ -1621,6 +1661,16 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
                 })}
               </tbody>
             </table>
+          <div className="border-t border-slate-100 bg-slate-50 px-4 py-1">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalElements={totalElements}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              loading={loading}
+            />
+          </div>
           </div>
         </div>
       )}
@@ -1638,7 +1688,7 @@ function RequestorCampaignView({ campaigns, loadingDetails, refreshing, onRefres
         <EditCampaignModal
           campaign={editCampaign}
           onClose={() => setEditCampaign(null)}
-          onSuccess={() => { setEditCampaign(null); onRefresh() }}
+          onSuccess={() => { setEditCampaign(null); setRefreshSeed(s => s + 1) }}
         />
       )}
     </div>
@@ -1734,12 +1784,11 @@ export default function CampaignListPage() {
   const navigate  = useNavigate()
   const location  = useLocation()
 
-  const [campaigns,       setCampaigns]       = useState([])
-  const [campaignDetails, setCampaignDetails] = useState([])  // with workTasks, for requestor view
-  const [loading,         setLoading]         = useState(true)
-  const [loadingDetails,  setLoadingDetails]  = useState(false)
-  const [refreshing,      setRefreshing]      = useState(false)
-  const [successBanner,   setSuccessBanner]   = useState(
+  const [campaigns,     setCampaigns]     = useState([])
+  const [loading,       setLoading]       = useState(true)
+  const [refreshing,    setRefreshing]    = useState(false)
+  const [requestorTotal, setRequestorTotal] = useState(0)
+  const [successBanner, setSuccessBanner] = useState(
     location.state?.justSubmitted
       ? 'Your request was submitted successfully.'
       : null
@@ -1752,26 +1801,13 @@ export default function CampaignListPage() {
     else setLoading(true)
 
     try {
-      const res = await campaignsApi.list()
-      const list = res.data || []
-      setCampaigns(list)
-
-      // For requestors: batch-fetch campaign details to get work tasks.
-      // During a silent refresh, skip the loadingDetails spinner so the table
-      // doesn't flash away — the existing rows stay visible while data updates.
-      if (isRequestor && list.length > 0) {
-        if (!silent) setLoadingDetails(true)
-        try {
-          const details = await Promise.all(
-            list.map(c => campaignsApi.getById(c.campaignId).then(r => r.data).catch(() => c))
-          )
-          setCampaignDetails(details)
-        } finally {
-          if (!silent) setLoadingDetails(false)
-        }
-      } else {
-        setCampaignDetails(list)
+      if (!isRequestor) {
+        // Non-requestor path: load all campaigns (manager / admin view)
+        const res = await campaignsApi.list()
+        const list = res.data?.content || res.data || []
+        setCampaigns(Array.isArray(list) ? list : [])
       }
+      // Requestor path: RequestorCampaignView handles its own data loading
     } catch {
       showToast('Failed to load requests', 'error')
     } finally {
@@ -1786,10 +1822,6 @@ export default function CampaignListPage() {
       navigate(location.pathname, { replace: true, state: {} })
     }
   }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Intentionally no window-focus auto-refresh here — it caused the entire
-  // campaign table to flash a loading spinner every time the user tabbed back.
-  // Users can use the manual "Refresh" button instead.
 
   return (
     <div className="space-y-5">
@@ -1814,23 +1846,25 @@ export default function CampaignListPage() {
           </h2>
           <p className="mt-0.5 text-sm text-slate-500">
             {isRequestor
-              ? `${campaigns.length} campaign${campaigns.length !== 1 ? 's' : ''} submitted`
+              ? `${requestorTotal} campaign${requestorTotal !== 1 ? 's' : ''} submitted`
               : `${campaigns.length} total request${campaigns.length !== 1 ? 's' : ''}`
             }
           </p>
         </div>
         <div className="flex w-full items-center gap-2 sm:w-auto">
-          <button
-            onClick={() => load(true)}
-            disabled={refreshing || loading}
-            title="Refresh"
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 transition disabled:opacity-50 sm:flex-none"
-          >
-            <svg className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
+          {!isRequestor && (
+            <button
+              onClick={() => load(true)}
+              disabled={refreshing || loading}
+              title="Refresh"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 transition disabled:opacity-50 sm:flex-none"
+            >
+              <svg className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+          )}
           {!isCreator && (
             <button
               onClick={() => navigate('/campaigns/new')}
@@ -1843,15 +1877,10 @@ export default function CampaignListPage() {
       </div>
 
       {/* View */}
-      {loading ? (
+      {isRequestor ? (
+        <RequestorCampaignView onTotalChange={setRequestorTotal} />
+      ) : loading ? (
         <p className="text-sm text-slate-400 py-8 text-center">Loading…</p>
-      ) : isRequestor ? (
-        <RequestorCampaignView
-          campaigns={campaignDetails}
-          loadingDetails={loadingDetails}
-          refreshing={refreshing}
-          onRefresh={() => load(true)}
-        />
       ) : (
         <CampaignTableView
           campaigns={campaigns}

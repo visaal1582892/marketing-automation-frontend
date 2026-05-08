@@ -6,8 +6,8 @@ const campaignsApi = {
   /** Submit a new Smart Form request. */
   create: (data) => api.post(BASE, data),
 
-  /** List campaigns (admins/managers see all; others see own). */
-  list: () => api.get(BASE),
+  /** List campaigns — server-side paged + filtered. */
+  list: (params = {}) => api.get(BASE, { params }),
 
   /** Get full campaign detail with deliverables and work tasks. */
   getById: (id) => api.get(`${BASE}/${id}`),
@@ -63,7 +63,8 @@ const campaignsApi = {
    * Used by the Completed Tasks page — avoids loading every campaign detail
    * just to find approved deliverables.
    */
-  completedTasks: () => api.get(`${BASE}/completed-tasks`),
+  /** Completed tasks — server-side paged + filtered. */
+  completedTasks: (params = {}) => api.get(`${BASE}/completed-tasks`, { params }),
 
   /**
    * Toggles a bookmark for the caller on the given campaign.

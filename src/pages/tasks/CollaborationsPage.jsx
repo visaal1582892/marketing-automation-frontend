@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import collaborationApi from '../../api/collaboration'
 import AppSelect from '../../components/AppSelect'
 import useTaskChat from '../../hooks/useTaskChat'
-import useUnreadWatcher from '../../hooks/useUnreadWatcher'
 import Icon from '../../components/Icon'
 import { useToast } from '../../components/Toast'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import { useAuth } from '../../auth/AuthContext'
+import Pagination from '../../components/Pagination'
 import AssetPanel, { CHAT_OPEN_STATUSES, UploadRow, isImage, isVideo, displayName, openUrl, triggerDownload } from '../../components/AssetPanel'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -36,35 +36,66 @@ function fmtDate(iso) {
 }
 
 const STATUS_STYLES = {
-  ASSIGNED:    'bg-blue-50 text-blue-700 ring-blue-200',
-  IN_PROGRESS: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  REWORK:      'bg-amber-50 text-amber-700 ring-amber-200',
-  QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
-  COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
-  CANCELLED:   'bg-rose-50 text-rose-700 ring-rose-200',
-  HELD:        'bg-amber-50 text-amber-700 ring-amber-200',
+  ASSIGNED:    { badge: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',     stripe: 'bg-blue-400',    dot: 'bg-blue-400'    },
+  IN_PROGRESS: { badge: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', stripe: 'bg-emerald-400', dot: 'bg-emerald-400' },
+  REWORK:      { badge: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',  stripe: 'bg-amber-400',   dot: 'bg-amber-400'   },
+  QC_REVIEW:   { badge: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200', stripe: 'bg-purple-400', dot: 'bg-purple-400'  },
+  COMPLETED:   { badge: 'bg-green-50 text-green-700 ring-1 ring-green-200',  stripe: 'bg-green-500',   dot: 'bg-green-500'   },
+  CANCELLED:   { badge: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',     stripe: 'bg-rose-400',    dot: 'bg-rose-400'    },
+  HELD:        { badge: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',  stripe: 'bg-amber-400',   dot: 'bg-amber-400'   },
 }
 const STATUS_LABELS = {
   ASSIGNED: 'New', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
   QC_REVIEW: 'In QC', COMPLETED: 'Completed', CANCELLED: 'Cancelled', HELD: 'On Hold',
 }
+const getStatus = (s) => STATUS_STYLES[s] || { badge: 'bg-slate-100 text-slate-600', stripe: 'bg-slate-300', dot: 'bg-slate-300' }
 
 function StatusBadge({ status }) {
-  const cls = STATUS_STYLES[status] || 'bg-slate-100 text-slate-600'
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${getStatus(status).badge}`}>
+      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${getStatus(status).dot}`} />
       {STATUS_LABELS[status] || status}
     </span>
   )
 }
 
+// ─── Avatar helpers ────────────────────────────────────────────────────────────
+
+const AVATAR_PALETTE = [
+  'bg-blue-100 text-blue-700',
+  'bg-violet-100 text-violet-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-amber-100 text-amber-700',
+  'bg-rose-100 text-rose-700',
+  'bg-cyan-100 text-cyan-700',
+  'bg-orange-100 text-orange-700',
+  'bg-teal-100 text-teal-700',
+]
+
+function avatarCls(name) {
+  if (!name) return AVATAR_PALETTE[0]
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h)
+  return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length]
+}
+
+function initials(name) {
+  if (!name) return '?'
+  return name.split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
+}
+
+function Avatar({ name, size = 'md' }) {
+  const sz = size === 'sm' ? 'h-6 w-6 text-[9px]' : 'h-7 w-7 text-[10px]'
+  return (
+    <div className={`${sz} rounded-full flex items-center justify-center font-bold shrink-0 ${avatarCls(name)}`}>
+      {initials(name)}
+    </div>
+  )
+}
+
 // ─── Chat Panel ───────────────────────────────────────────────────────────────
 
-// Chat and asset uploads are only open when the task is actively being worked on.
-// ASSIGNED = not yet started → interaction locked until the worker hits Start.
-// COMPLETED / QC_REVIEW / HELD / CANCELLED → entire card locked.
 const CARD_BLOCKED_STATUSES = ['HELD', 'QC_REVIEW', 'CANCELLED', 'COMPLETED']
-// CHAT_OPEN_STATUSES imported from ../../components/AssetPanel
 
 function TypingDots() {
   return (
@@ -86,8 +117,8 @@ function ChatPanel({ task, onClose }) {
   const [text, setText]         = useState('')
   const [sending, setSending]   = useState(false)
   const [members, setMembers]   = useState([])
-  const bottomRef   = useRef(null)
-  const typingTimer = useRef(null)
+  const bottomRefEl             = useRef(null)
+  const typingTimer             = useRef(null)
 
   const isCardBlocked = CARD_BLOCKED_STATUSES.includes(task.status)
   const isNotStarted  = task.status === 'ASSIGNED'
@@ -122,8 +153,8 @@ function ChatPanel({ task, onClose }) {
   }, [task.taskId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, typingUsers])
+    bottomRefEl.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, typingUsers]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = async () => {
     if (!text.trim() || sending) return
@@ -155,7 +186,7 @@ function ChatPanel({ task, onClose }) {
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="w-full max-w-lg flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden" style={{ height: 'min(600px, 90vh)' }}>
 
-        {/* ── Header ─────────────────────────────────────────────────────────── */}
+        {/* Header */}
         <div className="shrink-0 bg-brand-600 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 min-w-0">
@@ -189,7 +220,7 @@ function ChatPanel({ task, onClose }) {
           </div>
         </div>
 
-        {/* ── Messages ───────────────────────────────────────────────────────── */}
+        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-slate-50">
           {messages.length === 0 && typingUsers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-300">
@@ -211,7 +242,6 @@ function ChatPanel({ task, onClose }) {
                     <div className="flex-1 h-px bg-slate-200" />
                   </div>
                 )}
-
                 {isOwn ? (
                   <div className="flex justify-end">
                     <div className="max-w-[72%]">
@@ -253,10 +283,10 @@ function ChatPanel({ task, onClose }) {
             </div>
           )}
 
-          <div ref={bottomRef} />
+          <div ref={bottomRefEl} />
         </div>
 
-        {/* ── Status banners ─────────────────────────────────────────────────── */}
+        {/* Status banners */}
         {cardBlockReason && (
           <div className="shrink-0 px-4 py-2.5 bg-brand-50 border-t border-brand-100 flex items-center justify-center gap-1.5">
             <Icon name="lock" className="h-3.5 w-3.5 text-brand-600" />
@@ -276,7 +306,7 @@ function ChatPanel({ task, onClose }) {
           </div>
         )}
 
-        {/* ── Input ──────────────────────────────────────────────────────────── */}
+        {/* Input */}
         {isChatOpen && (
           <div className="shrink-0 border-t border-slate-100 bg-white px-4 py-3 flex items-end gap-2">
             <textarea
@@ -301,17 +331,14 @@ function ChatPanel({ task, onClose }) {
   )
 }
 
-// ─── Shared helpers + AssetPanel imported from ../../components/AssetPanel ────
-// isImage, isVideo, displayName, openUrl, triggerDownload, UploadRow, AssetPanel
-
 // ─── Role Config ──────────────────────────────────────────────────────────────
 
 const ROLE_CONFIG = {
-  OWNER:        { border: 'border-brand-600',  badge: 'bg-brand-600 text-white',                         icon: 'star',      label: 'Owner' },
-  REQUESTOR:    { border: 'border-accent-400', badge: 'bg-accent-50 text-accent-700 ring-1 ring-accent-200', icon: 'briefcase', label: 'Requestor' },
-  COLLABORATOR: { border: 'border-brand-200',  badge: 'bg-brand-50 text-brand-700 ring-1 ring-brand-200',    icon: 'users',     label: 'Collaborator' },
-  ADMIN:        { border: 'border-slate-500',  badge: 'bg-slate-800 text-white',                         icon: 'shield',    label: 'Admin' },
-  MANAGER:      { border: 'border-purple-400', badge: 'bg-purple-100 text-purple-700 ring-1 ring-purple-200', icon: 'briefcase', label: 'Manager' },
+  OWNER:        { accent: 'brand',   badge: 'bg-brand-600 text-white',                              icon: 'star',      label: 'Owner'         },
+  REQUESTOR:    { accent: 'accent',  badge: 'bg-accent-50 text-accent-700 ring-1 ring-accent-200',  icon: 'briefcase', label: 'Requestor'      },
+  COLLABORATOR: { accent: 'brand',   badge: 'bg-brand-50 text-brand-700 ring-1 ring-brand-200',     icon: 'users',     label: 'Collaborator'   },
+  ADMIN:        { accent: 'slate',   badge: 'bg-slate-800 text-white',                              icon: 'shield',    label: 'Admin'          },
+  MANAGER:      { accent: 'purple',  badge: 'bg-purple-100 text-purple-700 ring-1 ring-purple-200', icon: 'briefcase', label: 'Manager'        },
 }
 const rc = (role) => ROLE_CONFIG[role] || ROLE_CONFIG.COLLABORATOR
 
@@ -406,18 +433,15 @@ function AddPeopleModal({ task, onClose, onDone }) {
 
 // ─── Collaboration Card ────────────────────────────────────────────────────────
 
-function CollabCard({ task, onChat, onAssets, onBrief, onRefresh, unreadCount = 0 }) {
-  const toast          = useToast()
-  const role           = task.myRole || 'COLLABORATOR'
-  const cfg            = rc(role)
-  const canManage      = ['OWNER', 'ADMIN', 'MANAGER'].includes(role)
-  const isCardBlocked      = CARD_BLOCKED_STATUSES.includes(task.status)
-  // Locked when card is blocked, task not started, OR collaboration is not active (manual pause)
+function CollabCard({ task, onChat, onAssets, onBrief, onRefresh }) {
+  const toast               = useToast()
+  const role                = task.myRole || 'COLLABORATOR'
+  const cfg                 = rc(role)
+  const canManage           = ['OWNER', 'ADMIN', 'MANAGER'].includes(role)
+  const isCardBlocked       = CARD_BLOCKED_STATUSES.includes(task.status)
   const isInteractionLocked = isCardBlocked || task.status === 'ASSIGNED' || !task.collaborationActive
-  // Owner/Admin can still toggle the pause even when locked (to resume), but not when card is fully blocked or ASSIGNED
-  const canPauseChat        = ['OWNER', 'ADMIN'].includes(role)
-    && !isCardBlocked
-    && task.status !== 'ASSIGNED'
+  const canPauseChat        = ['OWNER', 'ADMIN'].includes(role) && !isCardBlocked && task.status !== 'ASSIGNED'
+  const statusStyle         = getStatus(task.status)
 
   const [showAddPeople, setShowAddPeople] = useState(false)
   const [togglingChat,  setTogglingChat]  = useState(false)
@@ -438,115 +462,125 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh, unreadCount = 
 
   return (
     <>
-      {/* Fixed-height card — uniform across all cards */}
-      <div className={`relative flex flex-col rounded-2xl border-l-4 ${cfg.border} bg-white shadow-sm hover:shadow-md transition-shadow overflow-hidden ${isCardBlocked ? 'opacity-70' : ''}`}
-           style={{ height: '178px' }}>
+      <div className="flex flex-col rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 overflow-hidden">
 
-        {/* ── Content area ── */}
-        <div className="flex-1 flex flex-col px-4 pt-3.5 pb-2 min-h-0 overflow-hidden">
+        {/* ── Status stripe (top) ── */}
+        <div className={`h-[3px] w-full shrink-0 ${statusStyle.stripe}`} />
 
-          {/* Row 1: title + all badges on the same line */}
-          <div className="flex items-center gap-2">
-            <p className="flex-1 text-sm font-bold text-slate-900 leading-tight truncate min-w-0">
-              {task.granularTaskName || task.taskTypeName || 'Task'}
-            </p>
-            {unreadCount > 0 && (
-              <span className="animate-pulse inline-flex items-center rounded-full bg-brand-600 px-1.5 py-0.5 text-[9px] font-bold text-white shrink-0">
-                {unreadCount}
-              </span>
-            )}
-            <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[9px] font-semibold shrink-0 ${cfg.badge}`}>
-              <Icon name={cfg.icon} className="h-2.5 w-2.5" />
-              {cfg.label}
+        {/* ── Card header: IDs + status + pause toggle ── */}
+        <div className="flex items-center justify-between gap-2 px-3 pt-2.5 pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-100 shrink-0">
+              CMP&nbsp;{task.campaignId}
             </span>
+            <span className="text-[10px] font-mono text-slate-400 shrink-0">·</span>
+            <span className="text-[10px] font-mono text-slate-500 truncate">T-{task.taskId}</span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {canPauseChat && (
+              <button
+                title={!task.collaborationActive ? 'Resume chat' : 'Pause chat'}
+                onClick={handleToggleChat}
+                disabled={togglingChat}
+                className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold transition disabled:opacity-50
+                  ${!task.collaborationActive
+                    ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                    : 'border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+              >
+                <Icon name={!task.collaborationActive ? 'play' : 'lock'} className="h-2.5 w-2.5" />
+                {!task.collaborationActive ? 'Resume' : 'Pause'}
+              </button>
+            )}
             <StatusBadge status={task.status} />
           </div>
-
-          {/* Row 2: campaign + task ID on one line */}
-          <p className="text-[10px] text-slate-400 mt-1 truncate">
-            Campaign #{task.campaignId}
-            <span className="mx-1.5 text-slate-200">·</span>
-            <span className="font-mono text-[9px]">{task.taskId}</span>
-          </p>
-
-          {/* Row 3: assignee & requestor on one line with separator */}
-          <div className="flex items-center gap-1 mt-1.5 text-[10px] text-slate-500 min-w-0 overflow-hidden">
-            {task.assigneeName && (
-              <>
-                <Icon name="user" className="h-2.5 w-2.5 text-slate-300 shrink-0" />
-                <span className="font-medium text-slate-700 truncate max-w-[100px]">{task.assigneeName}</span>
-                <span className="text-slate-300 shrink-0">assignee</span>
-              </>
-            )}
-            {task.assigneeName && task.requestorName && (
-              <span className="text-slate-200 mx-0.5 shrink-0">·</span>
-            )}
-            {task.requestorName && (
-              <>
-                <Icon name="briefcase" className="h-2.5 w-2.5 text-slate-300 shrink-0" />
-                <span className="font-medium text-slate-700 truncate max-w-[100px]">{task.requestorName}</span>
-                <span className="text-slate-300 shrink-0">requestor</span>
-              </>
-            )}
-          </div>
-
-          {/* Row 4: inline status banner (single compact line, only when needed) */}
-          {isCardBlocked ? (
-            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-brand-700">
-              <Icon name="lock" className="h-2.5 w-2.5 shrink-0" />
-              <span className="truncate">{{
-                HELD:      'On hold — chat and assets paused.',
-                QC_REVIEW: 'In QC review — locked.',
-                COMPLETED: 'Completed — locked.',
-                CANCELLED: 'Task cancelled.',
-              }[task.status]}</span>
-            </div>
-          ) : task.status === 'ASSIGNED' ? (
-            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-slate-500">
-              <Icon name="lock" className="h-2.5 w-2.5 shrink-0" />
-              <span className="truncate">Not started — chat and assets unlock on start.</span>
-            </div>
-          ) : !task.collaborationActive ? (
-            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-amber-600">
-              <Icon name="lock" className="h-2.5 w-2.5 shrink-0" />
-              <span className="truncate">Chat paused — assets still available.</span>
-            </div>
-          ) : null}
         </div>
 
-        {/* ── Action row — icon-only circular buttons, all in one line ── */}
-        <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-t border-slate-100">
-
-          <button title="Chat" onClick={isInteractionLocked ? undefined : onChat} disabled={isInteractionLocked}
-            className="h-8 w-8 rounded-full bg-brand-600 flex items-center justify-center text-white hover:bg-brand-700 active:scale-95 transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed shrink-0">
-            <Icon name="messageSquare" className="h-3.5 w-3.5" />
-          </button>
-
-          <button title="Assets" onClick={isInteractionLocked ? undefined : onAssets} disabled={isInteractionLocked}
-            className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed shrink-0">
-            <Icon name="upload" className="h-3.5 w-3.5" />
-          </button>
-
-          <button title="Brief" onClick={onBrief}
-            className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-100 transition shrink-0">
-            <Icon name="eye" className="h-3.5 w-3.5" />
-          </button>
-
-          {canManage && !isInteractionLocked && (
-            <button title="Add People" onClick={() => setShowAddPeople(true)}
-              className="h-8 w-8 rounded-full border border-accent-200 bg-accent-50 flex items-center justify-center text-accent-700 hover:bg-accent-100 transition shrink-0">
-              <Icon name="userPlus" className="h-3.5 w-3.5" />
-            </button>
+        {/* ── Task name + type ── */}
+        <div className="px-3 py-2.5">
+          <p className="text-[13px] font-bold text-slate-900 leading-snug line-clamp-2">
+            {task.granularTaskName || task.taskTypeName || 'Task'}
+          </p>
+          {task.taskTypeName && task.granularTaskName && (
+            <span className="mt-1 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+              {task.taskTypeName}
+            </span>
           )}
+        </div>
 
-          {canPauseChat && (
-            <button title={!task.collaborationActive ? 'Resume Chat' : 'Pause Chat'}
-              onClick={handleToggleChat} disabled={togglingChat}
-              className={`h-8 w-8 rounded-full flex items-center justify-center transition disabled:opacity-50 shrink-0 ml-auto
-                ${!task.collaborationActive
-                  ? 'bg-accent-500 text-white hover:bg-accent-600'
-                  : 'border border-slate-300 bg-white text-slate-500 hover:bg-slate-100'}`}>
-              <Icon name={!task.collaborationActive ? 'play' : 'lock'} className="h-3.5 w-3.5" />
+        {/* ── People: side-by-side ── */}
+        <div className="px-3 pb-2.5 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2">
+          {task.assigneeName && (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Avatar name={task.assigneeName} size="sm" />
+              <div className="min-w-0">
+                <p className="text-[10px] text-slate-400 leading-none">Assignee</p>
+                <p className="text-xs font-semibold text-slate-800 truncate leading-tight">{task.assigneeName}</p>
+              </div>
+            </div>
+          )}
+          {task.requestorName && (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Avatar name={task.requestorName} size="sm" />
+              <div className="min-w-0">
+                <p className="text-[10px] text-slate-400 leading-none">Requestor</p>
+                <p className="text-xs font-semibold text-slate-800 truncate leading-tight">{task.requestorName}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Chat-paused notice */}
+        {!isCardBlocked && task.status !== 'ASSIGNED' && !task.collaborationActive && (
+          <div className="mx-3 mb-2 flex items-center gap-1.5 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-1.5">
+            <Icon name="lock" className="h-3 w-3 text-amber-500 shrink-0" />
+            <span className="text-[10px] text-amber-700 font-medium">Chat paused — assets still accessible</span>
+          </div>
+        )}
+
+        {/* ── Footer ── */}
+        <div className="px-3 py-2 bg-slate-50 border-t border-slate-100 space-y-1.5">
+          {/* Action buttons */}
+          <div className="grid grid-cols-3 gap-1">
+            <button
+              title={isInteractionLocked ? 'Chat unavailable' : 'Open chat'}
+              onClick={isInteractionLocked ? undefined : onChat}
+              disabled={isInteractionLocked}
+              className={`flex items-center justify-center gap-1 rounded-md py-1.5 text-[11px] font-bold transition
+                ${isInteractionLocked
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : 'bg-brand-600 text-white hover:bg-brand-700 active:scale-95'}`}
+            >
+              <Icon name="messageSquare" className="h-3 w-3" />
+              Chat
+            </button>
+
+            <button
+              title="Files & assets"
+              onClick={onAssets}
+              className="flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100 transition active:scale-95"
+            >
+              <Icon name="upload" className="h-3 w-3" />
+              Assets
+            </button>
+
+            <button
+              title="View campaign brief"
+              onClick={onBrief}
+              className="flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100 transition active:scale-95"
+            >
+              <Icon name="eye" className="h-3 w-3" />
+              Brief
+            </button>
+          </div>
+
+          {/* Add people */}
+          {canManage && !isInteractionLocked && (
+            <button
+              onClick={() => setShowAddPeople(true)}
+              className="w-full flex items-center justify-center gap-1 rounded-md border border-dashed border-slate-300 py-1 text-[10px] font-semibold text-slate-500 hover:border-brand-400 hover:text-brand-600 hover:bg-brand-50 transition"
+            >
+              <Icon name="userPlus" className="h-3 w-3" />
+              Add collaborators
             </button>
           )}
         </div>
@@ -565,20 +599,21 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh, unreadCount = 
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 12
+
 export default function CollaborationsPage() {
-  const { user }  = useAuth()
   const toast     = useToast()
   const [tasks,   setTasks]   = useState([])
   const [loading, setLoading] = useState(true)
+  const [page,    setPage]    = useState(0)
 
   const [chatTask,   setChatTask]   = useState(null)
   const [assetTask,  setAssetTask]  = useState(null)
   const [briefTask,  setBriefTask]  = useState(null)
 
   // ── Filter state ─────────────────────────────────────────────────────────────
-  const [search,          setSearch]          = useState('')
-  const [filterUnread,    setFilterUnread]    = useState(false)
-  const [filterActivity,  setFilterActivity]  = useState('active') // 'active' | 'inactive' | 'all'
+  const [search,     setSearch]     = useState('')
+  const [roleFilter, setRoleFilter] = useState('all') // 'all' | 'mine' | 'involved'
 
   const load = () => {
     setLoading(true)
@@ -590,176 +625,158 @@ export default function CollaborationsPage() {
 
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Unread watcher ────────────────────────────────────────────────────────────
-  const taskIds = useMemo(() => tasks.map(t => t.taskId), [tasks])
-  const { unreadCounts, clearUnread } = useUnreadWatcher(
-    taskIds,
-    user?.id,
-    chatTask?.taskId ?? null,
-  )
-
-  const openChat = (t) => {
-    setChatTask(t)
-    clearUnread(t.taskId)
-  }
-
-  // ── Derived filtered list ─────────────────────────────────────────────────────
+  // ── Derived filtered list (active only + search + role filter) ───────────
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase()
     return tasks.filter(t => {
-      if (filterActivity === 'active'   && !t.collaborationActive) return false
-      if (filterActivity === 'inactive' &&  t.collaborationActive) return false
-      if (filterUnread && !(unreadCounts[t.taskId] > 0)) return false
-      if (q) {
-        const hay = [
-          t.taskId, t.granularTaskName, t.taskTypeName,
-          t.campaignId, t.assigneeName, t.requestorName,
-        ].join(' ').toLowerCase()
-        if (!hay.includes(q)) return false
-      }
-      return true
+      if (!t.collaborationActive) return false
+      if (roleFilter === 'mine'     && t.myRole !== 'OWNER') return false
+      if (roleFilter === 'involved' && t.myRole === 'OWNER') return false
+      if (!q) return true
+      const hay = [
+        t.taskId,
+        t.granularTaskName,
+        t.taskTypeName,
+        String(t.campaignId),
+        t.assigneeName,
+        t.requestorName,
+        t.myRole,
+        STATUS_LABELS[t.status] || t.status,
+      ].filter(Boolean).join(' ').toLowerCase()
+      return hay.includes(q)
     })
-  }, [tasks, filterUnread, filterActivity, search, unreadCounts])
+  }, [tasks, search, roleFilter])
 
-  const owned  = filteredTasks.filter(t => t.myRole === 'OWNER')
-  const others = filteredTasks.filter(t => t.myRole !== 'OWNER')
+  // Reset page when filters change
+  useEffect(() => { setPage(0) }, [search, roleFilter])
 
-  const totalUnread = Object.values(unreadCounts).reduce((s, n) => s + n, 0)
+  const totalPages = Math.ceil(filteredTasks.length / PAGE_SIZE)
+  const paged      = filteredTasks.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
-  const RoleSection = ({ title, subtitle, items, icon }) => (
-    items.length > 0 && (
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 px-1">
-          <Icon name={icon} className="h-4 w-4 text-slate-400" />
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">{title}</h3>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{items.length}</span>
-          {subtitle && <p className="text-[10px] text-slate-400 ml-1">{subtitle}</p>}
-        </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {items.map(t => (
-            <CollabCard
-              key={t.taskId}
-              task={t}
-              onChat={() => openChat(t)}
-              onAssets={() => setAssetTask(t)}
-              onBrief={() => setBriefTask(t)}
-              onRefresh={load}
-              unreadCount={unreadCounts[t.taskId] || 0}
-            />
-          ))}
-        </div>
-      </section>
-    )
-  )
+  const activeCount = tasks.filter(t => t.collaborationActive).length
 
   return (
-    <div className="mx-auto max-w-7xl pb-10 space-y-6">
-      {/* Page header */}
-      <div className="rounded-2xl bg-brand-600 px-6 py-5 shadow-sm">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+    <div className="mx-auto max-w-7xl pb-10 space-y-5">
+
+      {/* ── Page header ─────────────────────────────────────────────────────── */}
+      <div className="rounded-xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Left: title + counts */}
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-              <Icon name="users" className="h-5 w-5 text-white" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm">
+              <Icon name="users" className="h-4.5 w-4.5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Collaborations</h2>
-              <p className="text-xs text-brand-100 mt-0.5">Chat, share assets and coordinate with your team in real time.</p>
+              <h1 className="text-base font-bold text-slate-900 leading-tight">Collaborations</h1>
+              {!loading && (
+                <p className="text-xs text-slate-500">
+                  {activeCount} active · {tasks.length} total
+                </p>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {totalUnread > 0 && (
-              <span className="animate-pulse rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-brand-700 shadow">
-                {totalUnread} unread
+
+          {/* Right: role select + search + refresh */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Role type select */}
+            <select
+              value={roleFilter}
+              onChange={e => setRoleFilter(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 cursor-pointer"
+            >
+              <option value="all">All</option>
+              <option value="mine">Created by me</option>
+              <option value="involved">I'm involved</option>
+            </select>
+
+            {/* Search */}
+            <div className="relative">
+              <Icon name="search" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search…"
+                className="w-48 rounded-lg border border-slate-200 pl-8 pr-7 py-1.5 text-xs text-slate-700
+                  placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 focus:w-64 transition-all"
+              />
+              {search && (
+                <button onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition">
+                  <Icon name="x" className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Result count chip */}
+            {!loading && (
+              <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500">
+                {filteredTasks.length}
               </span>
             )}
-            <button onClick={load} className="flex items-center gap-1.5 rounded-lg bg-white/20 hover:bg-white/30 px-3 py-1.5 text-xs font-semibold text-white transition">
-              <Icon name="refreshCw" className="h-3.5 w-3.5" /> Refresh
+
+            <button
+              onClick={load}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 active:scale-95"
+            >
+              <Icon name="refreshCw" className="h-3.5 w-3.5" />
+              Refresh
             </button>
           </div>
         </div>
       </div>
 
-      {/* ── Filter bar ─────────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm flex flex-wrap items-center gap-3">
-        {/* Search */}
-        <div className="flex items-center gap-2 flex-1 min-w-[180px] rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-          <Icon name="search" className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search task, campaign, person…"
-            className="flex-1 bg-transparent text-xs text-slate-700 placeholder-slate-400 outline-none"
-          />
-          {search && (
-            <button onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600">
-              <Icon name="x" className="h-3 w-3" />
-            </button>
-          )}
-        </div>
-
-        {/* Activity filter */}
-        <div className="w-36">
-          <AppSelect
-            value={filterActivity}
-            onChange={setFilterActivity}
-            options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'all', label: 'All' }]}
-            placeholder="Filter…"
-            size="sm"
-            isClearable={false}
-          />
-        </div>
-
-        {/* Unread toggle */}
-        <button
-          onClick={() => setFilterUnread(v => !v)}
-          className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition
-            ${filterUnread
-              ? 'border-brand-600 bg-brand-600 text-white'
-              : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
-        >
-          <Icon name="bell" className="h-3.5 w-3.5" />
-          Unread only
-          {totalUnread > 0 && !filterUnread && (
-            <span className="rounded-full bg-brand-600 text-white px-1.5 py-0 text-[10px] font-bold">{totalUnread}</span>
-          )}
-        </button>
-
-        {/* Clear filters */}
-        {(search || filterUnread || filterActivity !== 'active') && (
-          <button
-            onClick={() => { setSearch(''); setFilterUnread(false); setFilterActivity('active') }}
-            className="text-xs text-brand-600 hover:underline font-medium"
-          >
-            Clear filters
-          </button>
-        )}
-
-        <span className="ml-auto text-[11px] text-slate-400">{filteredTasks.length} of {tasks.length}</span>
-      </div>
-
+      {/* ── Content ─────────────────────────────────────────────────────────── */}
       {loading ? (
-        <div className="flex justify-center py-16">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600" />
+        <div className="flex flex-col items-center justify-center gap-3 py-24">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-100 border-t-brand-600" />
+          <p className="text-sm text-slate-400">Loading collaborations…</p>
         </div>
       ) : tasks.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white py-16 text-center">
-          <div className="mx-auto h-14 w-14 rounded-2xl bg-brand-50 flex items-center justify-center mb-4">
-            <Icon name="users" className="h-7 w-7 text-brand-400" />
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white py-24 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-50">
+            <Icon name="users" className="h-8 w-8 text-brand-300" />
           </div>
-          <p className="text-sm font-semibold text-slate-700">No collaborations yet</p>
-          <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">Use the <strong>Collaborate</strong> button on any task to open a chat and coordinate with your team.</p>
+          <p className="text-sm font-bold text-slate-700">No collaborations yet</p>
+          <p className="mt-1.5 max-w-xs mx-auto text-xs text-slate-400 leading-relaxed">
+            Use the <strong className="text-slate-600">Collaborate</strong> button on any task to start
+            coordinating with your team.
+          </p>
         </div>
       ) : filteredTasks.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white py-10 text-center">
-          <Icon name="search" className="mx-auto h-8 w-8 text-slate-300 mb-3" />
-          <p className="text-sm font-semibold text-slate-700">No results match your filters</p>
-          <button onClick={() => { setSearch(''); setFilterUnread(false); setFilterActivity('active') }}
-            className="mt-2 text-xs text-brand-600 hover:underline">Clear filters</button>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
+          <Icon name="search" className="mx-auto mb-3 h-9 w-9 text-slate-300" />
+          <p className="text-sm font-bold text-slate-700">No results for "{search}"</p>
+          <p className="mt-1 text-xs text-slate-400">Try a different keyword.</p>
+          <button onClick={() => setSearch('')}
+            className="mt-3 inline-flex items-center gap-1 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-600 hover:bg-brand-100 transition">
+            <Icon name="x" className="h-3 w-3" /> Clear search
+          </button>
         </div>
       ) : (
-        <div className="space-y-8">
-          <RoleSection title="My Tasks" subtitle="Tasks assigned to you with active collaborators" icon="star" items={owned} />
-          <RoleSection title="Joined Collaborations" subtitle="Tasks you were invited to or are involved in" icon="users" items={others} />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {paged.map(t => (
+              <CollabCard
+                key={t.taskId}
+                task={t}
+                onChat={() => setChatTask(t)}
+                onAssets={() => setAssetTask(t)}
+                onBrief={() => setBriefTask(t)}
+                onRefresh={load}
+              />
+            ))}
+          </div>
+
+          {/* Pagination */}
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-1 shadow-sm">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalElements={filteredTasks.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+            />
+          </div>
         </div>
       )}
 

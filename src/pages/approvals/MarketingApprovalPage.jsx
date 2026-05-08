@@ -628,7 +628,7 @@ function CampaignCard({ campaign: c, onApprove, onReject, onViewBrief, checkingC
       {c.flaggedInconsistency && c.inconsistencyReason && (
         <div className="border-t border-amber-100 bg-amber-50 px-4 py-2 flex items-start gap-2 text-xs text-amber-800">
           <Icon name="alertCircle" className="h-4 w-4 shrink-0 mt-0.5" />
-          <span><span className="font-semibold">Inconsistency:</span> {c.inconsistencyReason}</span>
+          <span className="whitespace-pre-wrap"><span className="font-semibold">Inconsistency:</span> {c.inconsistencyReason}</span>
         </div>
       )}
     </div>

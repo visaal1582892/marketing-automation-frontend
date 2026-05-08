@@ -285,7 +285,7 @@ export function HistoryTable({ campaigns, stage, onViewBrief }) {
               <td className="px-4 py-3 text-slate-500 text-xs">{fmtDateTime(c[timestampField])}</td>
               <td className="px-4 py-3 text-slate-600 text-xs max-w-[300px]">
                 {c[decisionField] === 'REJECTED'
-                  ? <span className="text-red-700">{c.rejectionReason || '—'}</span>
+                  ? <span className="text-red-700 whitespace-pre-wrap">{c.rejectionReason || '—'}</span>
                   : <StatusBadge v={c.status} />}
               </td>
               <td className="px-4 py-3">
