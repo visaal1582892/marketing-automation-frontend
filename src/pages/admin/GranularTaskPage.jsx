@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, memo, useState } from 'react'
 import { granularTasksApi, masterApi } from '../../api/masterData'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
@@ -94,6 +94,9 @@ export default function GranularTaskPage() {
       toast.error(e?.response?.data?.message || 'Delete failed')
     }
   }
+
+  const handleEditRow   = useCallback((row) => setEditing({ ...row, isActive: row.status === 'ACTIVE' }), [])
+  const handleDeleteRow = useCallback((row) => setConfirmDelete(row), [])
 
   // ---------------------------------------------------------------- filter
   const filtered = useMemo(() => items.filter((it) => {
@@ -201,27 +204,7 @@ export default function GranularTaskPage() {
                 <tr><td colSpan="6" className="px-4 py-12 text-center text-slate-500">No matching records.</td></tr>
               ) : (
                 paged.map((row) => (
-                  <tr key={row.taskId} className="transition hover:bg-slate-50/60">
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{row.taskId}</td>
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{row.taskName}</td>
-                    <td className="px-4 py-2.5">
-                      {row.taskTypeName
-                        ? <TypePill name={row.taskTypeName} />
-                        : <span className="text-slate-400 text-xs">—</span>}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {row.taskCategory
-                        ? <CategoryPill category={row.taskCategory} />
-                        : <span className="text-slate-400 text-xs">—</span>}
-                    </td>
-                    <td className="px-4 py-2.5"><StatusPill active={isActive(row)} /></td>
-                    <td className="px-4 py-2.5">
-                      <RowActions
-                        onEdit={() => setEditing({ ...row, isActive: isActive(row) })}
-                        onDelete={() => setConfirmDelete(row)}
-                      />
-                    </td>
-                  </tr>
+                  <GranularTaskRow key={row.taskId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} />
                 ))
               )}
             </tbody>
@@ -248,24 +231,7 @@ export default function GranularTaskPage() {
             <div className="px-4 py-12 text-center text-sm text-slate-500">No matching records.</div>
           ) : (
             paged.map((row) => (
-              <div key={row.taskId} className="flex items-start justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-xs text-slate-500">{row.taskId}</span>
-                    <span className="font-medium text-slate-800">{row.taskName}</span>
-                  </div>
-                  {row.taskTypeName && (
-                    <div className="mt-1"><TypePill name={row.taskTypeName} /></div>
-                  )}
-                  <div className="mt-1.5">
-                    <StatusPill active={isActive(row)} />
-                  </div>
-                </div>
-                <RowActions
-                  onEdit={() => setEditing({ ...row, isActive: isActive(row) })}
-                  onDelete={() => setConfirmDelete(row)}
-                />
-              </div>
+              <GranularTaskRow key={row.taskId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} mobile />
             ))
           )}
           <div className="px-4 py-1">
@@ -375,6 +341,49 @@ function RowActions({ onEdit, onDelete }) {
     </div>
   )
 }
+
+const GranularTaskRow = memo(function GranularTaskRow({ row, onEdit, onDelete, mobile = false }) {
+  const active = row.status === 'ACTIVE'
+  if (mobile) {
+    return (
+      <div className="flex items-start justify-between gap-3 px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xs text-slate-500">{row.taskId}</span>
+            <span className="font-medium text-slate-800">{row.taskName}</span>
+          </div>
+          {row.taskTypeName && (
+            <div className="mt-1"><TypePill name={row.taskTypeName} /></div>
+          )}
+          <div className="mt-1.5">
+            <StatusPill active={active} />
+          </div>
+        </div>
+        <RowActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} />
+      </div>
+    )
+  }
+  return (
+    <tr className="transition hover:bg-slate-50/60">
+      <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{row.taskId}</td>
+      <td className="px-4 py-2.5 font-medium text-slate-800">{row.taskName}</td>
+      <td className="px-4 py-2.5">
+        {row.taskTypeName
+          ? <TypePill name={row.taskTypeName} />
+          : <span className="text-slate-400 text-xs">—</span>}
+      </td>
+      <td className="px-4 py-2.5">
+        {row.taskCategory
+          ? <CategoryPill category={row.taskCategory} />
+          : <span className="text-slate-400 text-xs">—</span>}
+      </td>
+      <td className="px-4 py-2.5"><StatusPill active={active} /></td>
+      <td className="px-4 py-2.5">
+        <RowActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} />
+      </td>
+    </tr>
+  )
+})
 
 /* ---------- modals ---------- */
 

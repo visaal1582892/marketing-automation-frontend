@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback, memo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import AppSelect from '../../components/AppSelect'
@@ -1339,6 +1339,111 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   )
 }
 
+// ─── Helpers shared with CampaignRow ─────────────────────────────────────────
+
+const fmtRequestorDate = (iso) =>
+  iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
+
+const ROW_TERMINAL = ['COMPLETED', 'REJECTED', 'CANCELLED']
+
+// ─── Memoised table row for RequestorCampaignView ────────────────────────────
+
+const CampaignRow = memo(function CampaignRow({
+  campaign: c,
+  bookmarkingId,
+  isLoading,
+  onToggleBookmark,
+  onViewBrief,
+  onClone,
+  onEdit,
+}) {
+  const taskCount   = c.taskCount ?? (c.workTasks || []).length
+  const doneCount   = c.completedTaskCount ?? (c.workTasks || []).filter(t => t.status === 'COMPLETED').length
+  const hasRework   = c.hasRework   ?? (c.workTasks || []).some(t => t.status === 'REWORK')
+  const hasQcReview = c.hasQcReview ?? (c.workTasks || []).some(t => t.status === 'QC_REVIEW')
+  const canEdit     = !ROW_TERMINAL.includes(c.status)
+  const isBookmarked = !!c.bookmarked
+
+  return (
+    <tr className="transition hover:bg-slate-50/70">
+      <td className="px-3 py-3">
+        <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{c.campaignId}</span>
+      </td>
+      <td className="px-3 py-3 font-medium text-slate-800">{c.taskTypeName || '—'}</td>
+      <td className="px-3 py-3"><PriorityBadge priority={c.priority} /></td>
+      <td className="px-3 py-3">
+        <CampaignStatusBadge status={c.status} />
+      </td>
+      <td className="px-3 py-3 text-slate-600">
+        <div className="flex items-center gap-2 flex-wrap">
+          {taskCount === 0
+            ? <span className="italic text-slate-400">None yet</span>
+            : <span>{doneCount}/{taskCount} done</span>}
+          {hasRework && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 ring-1 ring-orange-200">
+              ↩ Rework
+            </span>
+          )}
+          {hasQcReview && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 ring-1 ring-purple-200">
+              ⏳ QC
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-3 py-3 text-slate-500">{fmtRequestorDate(c.createdAt)}</td>
+
+      {/* Bookmark toggle */}
+      <td className="px-1 py-3 text-center">
+        <button
+          onClick={(e) => onToggleBookmark(e, c.campaignId)}
+          disabled={bookmarkingId === c.campaignId}
+          title={isBookmarked ? 'Remove bookmark' : 'Bookmark this request'}
+          className={`rounded p-1 transition ${isBookmarked
+            ? 'text-amber-500 hover:text-amber-700'
+            : 'text-slate-300 hover:text-amber-400'}`}
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24"
+            fill={isBookmarked ? 'currentColor' : 'none'}
+            stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+          </svg>
+        </button>
+      </td>
+
+      <td className="px-3 py-3">
+        <div className="flex items-center gap-2">
+          <button onClick={() => onViewBrief(c.campaignId)}
+            className="flex items-center gap-1 text-brand-600 hover:text-brand-800 text-xs font-medium whitespace-nowrap">
+            <Icon name="eye" className="h-3.5 w-3.5" /> Brief
+          </button>
+          {/* Clone */}
+          <button
+            onClick={(e) => onClone(e, c.campaignId)}
+            title="Clone this request"
+            className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition">
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+            </svg>
+            Clone
+          </button>
+          {canEdit && (
+            <button
+              onClick={() => onEdit(c)}
+              disabled={isLoading}
+              title={isLoading ? 'Loading…' : 'Edit campaign'}
+              className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
+              <Icon name="edit" className="h-3.5 w-3.5" /> Edit
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+})
+
 // ─── Requestor campaign-level view ───────────────────────────────────────────
 
 function RequestorCampaignView({ onTotalChange }) {
@@ -1425,7 +1530,7 @@ function RequestorCampaignView({ onTotalChange }) {
   // ── Bookmark handling ─────────────────────────────────────────────────────
   const [bookmarkingId, setBookmarkingId] = useState(null)
 
-  const toggleBookmark = async (e, campaignId) => {
+  const toggleBookmark = useCallback(async (e, campaignId) => {
     e.stopPropagation()
     setBookmarkingId(campaignId)
     try {
@@ -1440,12 +1545,12 @@ function RequestorCampaignView({ onTotalChange }) {
     } finally {
       setBookmarkingId(null)
     }
-  }
+  }, [toast]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleClone = (e, campaignId) => {
+  const handleClone = useCallback((e, campaignId) => {
     e.stopPropagation()
     navigate(`/campaigns/new?cloneFrom=${campaignId}`)
-  }
+  }, [navigate])
 
   // ── Master data for filter dropdowns ──────────────────────────────────────
   const [allTaskTypes, setAllTaskTypes] = useState([])
@@ -1469,6 +1574,10 @@ function RequestorCampaignView({ onTotalChange }) {
     placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-300 focus:border-brand-400`
 
   const filtered = campaigns   // server already filtered; keep variable name for template compatibility
+
+  // ── Stable callbacks for CampaignRow ───────────────────────────────────────
+  const cbViewBrief = useCallback((id) => setBriefId(id), [setBriefId])
+  const cbEdit      = useCallback((campaign) => setEditCampaign(campaign), [setEditCampaign])
 
   const tabs = [
     { id: 'all',        label: 'All Requests', count: activeTab === 'all'        ? totalElements : null },
@@ -1519,16 +1628,7 @@ function RequestorCampaignView({ onTotalChange }) {
         )}
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center gap-2 py-12 text-slate-400">
-          <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-          </svg>
-          <span className="text-sm">Loading…</span>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-xs border-collapse">
               <thead>
@@ -1560,7 +1660,19 @@ function RequestorCampaignView({ onTotalChange }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center">
+                      <span className="inline-flex items-center gap-2 text-sm text-slate-400">
+                        <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                        Loading…
+                      </span>
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-14 text-center">
                       <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
@@ -1572,93 +1684,18 @@ function RequestorCampaignView({ onTotalChange }) {
                       )}
                     </td>
                   </tr>
-                ) : filtered.map((c) => {
-                  const taskCount  = c.taskCount ?? (c.workTasks || []).length
-                  const doneCount  = c.completedTaskCount ?? (c.workTasks || []).filter(t => t.status === 'COMPLETED').length
-                  const hasRework  = c.hasRework  ?? (c.workTasks || []).some(t => t.status === 'REWORK')
-                  const hasQcReview = c.hasQcReview ?? (c.workTasks || []).some(t => t.status === 'QC_REVIEW')
-                  const canEdit    = !TERMINAL.includes(c.status)
-                  const fmtDate    = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
-                  const isBookmarked = !!c.bookmarked
-                  return (
-                    <tr key={c.campaignId} className="transition hover:bg-slate-50/70">
-                      <td className="px-3 py-3">
-                        <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{c.campaignId}</span>
-                      </td>
-                      <td className="px-3 py-3 font-medium text-slate-800">{c.taskTypeName || '—'}</td>
-                      <td className="px-3 py-3"><PriorityBadge priority={c.priority} /></td>
-                      <td className="px-3 py-3">
-                        <CampaignStatusBadge status={c.status} />
-                      </td>
-                      <td className="px-3 py-3 text-slate-600">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {taskCount === 0
-                            ? <span className="italic text-slate-400">None yet</span>
-                            : <span>{doneCount}/{taskCount} done</span>}
-                          {hasRework && (
-                            <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 ring-1 ring-orange-200">
-                              ↩ Rework
-                            </span>
-                          )}
-                          {hasQcReview && (
-                            <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 ring-1 ring-purple-200">
-                              ⏳ QC
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-slate-500">{fmtDate(c.createdAt)}</td>
-
-                      {/* Bookmark toggle */}
-                      <td className="px-1 py-3 text-center">
-                        <button
-                          onClick={(e) => toggleBookmark(e, c.campaignId)}
-                          disabled={bookmarkingId === c.campaignId}
-                          title={isBookmarked ? 'Remove bookmark' : 'Bookmark this request'}
-                          className={`rounded p-1 transition ${isBookmarked
-                            ? 'text-amber-500 hover:text-amber-700'
-                            : 'text-slate-300 hover:text-amber-400'}`}
-                        >
-                          <svg className="h-4 w-4" viewBox="0 0 24 24"
-                            fill={isBookmarked ? 'currentColor' : 'none'}
-                            stroke="currentColor" strokeWidth="2"
-                            strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-                          </svg>
-                        </button>
-                      </td>
-
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => setBriefId(c.campaignId)}
-                            className="flex items-center gap-1 text-brand-600 hover:text-brand-800 text-xs font-medium whitespace-nowrap">
-                            <Icon name="eye" className="h-3.5 w-3.5" /> Brief
-                          </button>
-                          {/* Clone */}
-                          <button
-                            onClick={(e) => handleClone(e, c.campaignId)}
-                            title="Clone this request"
-                            className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition">
-                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                            </svg>
-                            Clone
-                          </button>
-                          {canEdit && (
-                            <button
-                              onClick={() => !loading && setEditCampaign(c)}
-                              disabled={loading}
-                              title={loading ? 'Loading…' : 'Edit campaign'}
-                              className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
-                              <Icon name="edit" className="h-3.5 w-3.5" /> Edit
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
+                ) : filtered.map((c) => (
+                  <CampaignRow
+                    key={c.campaignId}
+                    campaign={c}
+                    bookmarkingId={bookmarkingId}
+                    isLoading={loading}
+                    onToggleBookmark={toggleBookmark}
+                    onViewBrief={cbViewBrief}
+                    onClone={handleClone}
+                    onEdit={cbEdit}
+                  />
+                ))}
               </tbody>
             </table>
           <div className="border-t border-slate-100 bg-slate-50 px-4 py-1">
@@ -1673,7 +1710,6 @@ function RequestorCampaignView({ onTotalChange }) {
           </div>
           </div>
         </div>
-      )}
 
       {/* Brief drawer */}
       {briefId && (

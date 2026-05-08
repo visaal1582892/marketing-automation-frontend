@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, memo, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 import { findResource, masterApi, MASTER_RESOURCES } from '../../api/masterData'
 import Icon from '../../components/Icon'
@@ -105,6 +105,9 @@ export default function MasterTablePage() {
     }
   }
 
+  const handleEditRow   = useCallback((row) => setEditing({ ...row, isActive: row.status === 'ACTIVE' }), [])
+  const handleDeleteRow = useCallback((row) => setConfirmDelete(row), [])
+
   // ---------------------------------------------------------------- filter
   const filtered = useMemo(() => items.filter((it) => {
     if (fId   && !String(it.id).toLowerCase().includes(fId.toLowerCase())) return false
@@ -195,17 +198,7 @@ export default function MasterTablePage() {
                 <tr><td colSpan="4" className="px-4 py-12 text-center text-slate-500">No matching records.</td></tr>
               ) : (
                 paged.map((row) => (
-                  <tr key={row.id} className="transition hover:bg-slate-50/60">
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{row.id}</td>
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{row.name}</td>
-                    <td className="px-4 py-2.5"><StatusPill active={isActive(row)} /></td>
-                    <td className="px-4 py-2.5">
-                      <RowActions
-                        onEdit={() => setEditing({ ...row, isActive: isActive(row) })}
-                        onDelete={() => setConfirmDelete(row)}
-                      />
-                    </td>
-                  </tr>
+                  <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} />
                 ))
               )}
             </tbody>
@@ -232,21 +225,7 @@ export default function MasterTablePage() {
             <div className="px-4 py-12 text-center text-sm text-slate-500">No matching records.</div>
           ) : (
             paged.map((row) => (
-              <div key={row.id} className="flex items-start justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-xs text-slate-500">{row.id}</span>
-                    <span className="font-medium text-slate-800">{row.name}</span>
-                  </div>
-                  <div className="mt-1.5">
-                    <StatusPill active={isActive(row)} />
-                  </div>
-                </div>
-                <RowActions
-                  onEdit={() => setEditing({ ...row, isActive: isActive(row) })}
-                  onDelete={() => setConfirmDelete(row)}
-                />
-              </div>
+              <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} mobile />
             ))
           )}
           <div className="px-4 py-1">
@@ -281,6 +260,36 @@ function singular(resource) {
   if (!resource) return 'Record'
   return resource.label.replace(/s$/, '')
 }
+
+const MasterRow = memo(function MasterRow({ row, onEdit, onDelete, mobile = false }) {
+  const active = row.status === 'ACTIVE'
+  if (mobile) {
+    return (
+      <div className="flex items-start justify-between gap-3 px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xs text-slate-500">{row.id}</span>
+            <span className="font-medium text-slate-800">{row.name}</span>
+          </div>
+          <div className="mt-1.5">
+            <StatusPill active={active} />
+          </div>
+        </div>
+        <RowActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} />
+      </div>
+    )
+  }
+  return (
+    <tr className="transition hover:bg-slate-50/60">
+      <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{row.id}</td>
+      <td className="px-4 py-2.5 font-medium text-slate-800">{row.name}</td>
+      <td className="px-4 py-2.5"><StatusPill active={active} /></td>
+      <td className="px-4 py-2.5">
+        <RowActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} />
+      </td>
+    </tr>
+  )
+})
 
 function FilterInput({ value, onChange, placeholder, icon }) {
   return (

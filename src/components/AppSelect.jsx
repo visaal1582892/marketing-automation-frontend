@@ -2,14 +2,16 @@
  * AppSelect — a react-select wrapper styled to match the app's Tailwind design.
  *
  * Props:
- *   value        string | null           currently selected value (raw string, not {value,label})
- *   onChange     (value: string) => void called with the selected raw string (or '' when cleared)
- *   options      string[] | {value,label}[]  list of options
- *   placeholder  string                  text shown when nothing is selected
- *   size         'sm' | 'md'             'sm' for table filters, 'md' (default) for forms
- *   isClearable  boolean                 show a × button (default true)
+ *   value        string | null                         single: raw string; multi: {value,label}[]
+ *   onChange     (value: string|{value,label}[]) => void  single: raw string; multi: option array
+ *   options      string[] | {value,label}[]             list of options
+ *   placeholder  string                                text shown when nothing is selected
+ *   size         'sm' | 'md'                           'sm' for table filters, 'md' (default) for forms
+ *   isClearable  boolean                               show a × button (default true)
  *   isDisabled   boolean
- *   menuPortal   boolean                 render menu in document.body (avoids table overflow clipping)
+ *   isMulti      boolean                               enable multi-select mode
+ *   isSearchable boolean                               enable text search
+ *   menuPortal   boolean                               render menu in document.body (avoids overflow clipping)
  */
 import ReactSelect from 'react-select'
 
@@ -24,6 +26,8 @@ const B = {
   700: '#a31418',
 }
 
+const PORTAL_ZINDEX = 9999
+
 function buildStyles(size) {
   const isSmall = size === 'sm'
   const ctrlH   = isSmall ? '28px' : '36px'
@@ -31,6 +35,9 @@ function buildStyles(size) {
   const optPad  = isSmall ? '4px 8px' : '6px 10px'
 
   return {
+    // This is the critical one: controls the portal wrapper's z-index so it
+    // sits above modal backdrops (z-50) when menuPortalTarget is used.
+    menuPortal: (base) => ({ ...base, zIndex: PORTAL_ZINDEX }),
     control: (base, state) => ({
       ...base,
       minHeight: ctrlH,
@@ -76,7 +83,7 @@ function buildStyles(size) {
       borderRadius: '8px',
       border: '1px solid #e2e8f0',
       boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -1px rgba(0,0,0,0.05)',
-      zIndex: 9999,
+      zIndex: PORTAL_ZINDEX,
       overflow: 'hidden',
     }),
     menuList: (base) => ({
@@ -141,14 +148,59 @@ export default function AppSelect({
   isClearable = true,
   isDisabled = false,
   isSearchable = false,
+  isMulti = false,
   menuPortal = false,
 }) {
   const normOpts = normalise(options)
-  // Flatten grouped options for the value lookup
+  const styles   = buildStyles(size)
+
+  // Multi mode: normalise value items to strings so they match normOpts
+  if (isMulti) {
+    const normValue = (value ?? []).map(v => ({ ...v, value: String(v.value) }))
+    return (
+      <ReactSelect
+        isMulti
+        hideSelectedOptions={false}
+        value={normValue}
+        onChange={(opts) => onChange(opts || [])}
+        options={normOpts}
+        placeholder={placeholder}
+        isClearable={isClearable}
+        isDisabled={isDisabled}
+        isSearchable
+        noOptionsMessage={() => 'No matches found'}
+        styles={{
+          ...styles,
+          valueContainer: (base) => ({ ...base, padding: '2px 8px', flexWrap: 'wrap' }),
+          multiValue: (base) => ({
+            ...base,
+            backgroundColor: B[100],
+            borderRadius: '4px',
+          }),
+          multiValueLabel: (base) => ({
+            ...base,
+            color: B[700],
+            fontSize: '0.75rem',
+            padding: '1px 4px',
+          }),
+          multiValueRemove: (base) => ({
+            ...base,
+            color: B[400],
+            borderRadius: '0 4px 4px 0',
+            ':hover': { backgroundColor: B[200], color: B[700] },
+          }),
+        }}
+        menuPortalTarget={menuPortal ? document.body : undefined}
+        menuPosition={menuPortal ? 'fixed' : undefined}
+        classNamePrefix="app-select"
+      />
+    )
+  }
+
+  // Single mode: value is a raw string
   const flatOpts = normOpts.flatMap(o => o.options ?? [o])
   const strVal   = value != null && value !== '' ? String(value) : null
   const selected = strVal ? (flatOpts.find(o => o.value === strVal) ?? null) : null
-  const styles     = buildStyles(size)
 
   const handleChange = (opt) => onChange(opt ? opt.value : '')
 
@@ -161,6 +213,7 @@ export default function AppSelect({
       isClearable={isClearable}
       isDisabled={isDisabled}
       isSearchable={isSearchable}
+      noOptionsMessage={() => 'No matches found'}
       styles={styles}
       menuPortalTarget={menuPortal ? document.body : undefined}
       menuPosition={menuPortal ? 'fixed' : undefined}

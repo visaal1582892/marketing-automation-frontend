@@ -47,7 +47,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
             <Icon name="x" className="h-4 w-4" />
           </button>
         </header>
-        <div className="px-5 py-5">{children}</div>
+        <div className="overflow-y-auto px-5 py-5" style={{ maxHeight: 'calc(90vh - 8rem)' }}>{children}</div>
         {footer && (
           <footer className="flex items-center justify-end gap-2 rounded-b-xl
                              border-t border-slate-100 bg-slate-50/60 px-5 py-3">

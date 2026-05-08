@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, memo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import campaignsApi from '../../api/campaigns'
 import { masterApi, granularTasksApi } from '../../api/masterData'
@@ -10,6 +10,10 @@ import Pagination from '../../components/Pagination'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
 import { useAuth } from '../../auth/AuthContext'
 import { useDebounce } from '../../hooks/useDebounce'
+
+function fmtDate(iso) {
+  return iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
+}
 
 /**
  * Requestor view — tasks approved by the Marketing Head, shown as a filterable
@@ -102,6 +106,9 @@ export default function CompletedTasksPage() {
 
   const openRework = (task) => { setReworkTask(task); setReworkMsg('') }
 
+  const handleViewAssets = useCallback((t) => setAssetTask(t), [])
+  const handleOpenRework = useCallback((t) => { setReworkTask(t); setReworkMsg('') }, [])
+
   const submitRework = async () => {
     if (!reworkTask || !reworkMsg.trim()) return
     setReworkSaving(true)
@@ -129,9 +136,6 @@ export default function CompletedTasksPage() {
 
   const colCls = `w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-600
     placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-300 focus:border-brand-400`
-
-  const fmtDate = (iso) =>
-    iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
 
   return (
     <div className="space-y-6">
@@ -176,12 +180,7 @@ export default function CompletedTasksPage() {
       )}
 
       {/* ── Table ── */}
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <span className="animate-spin h-6 w-6 rounded-full border-2 border-brand-300 border-t-brand-600" />
-        </div>
-      ) : (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-xs border-collapse">
               <thead>
@@ -215,7 +214,16 @@ export default function CompletedTasksPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="py-14 text-center">
+                      <span className="inline-flex items-center gap-2 text-sm text-slate-400">
+                        <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-brand-500" />
+                        Loading…
+                      </span>
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-14 text-center">
                       <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
@@ -230,47 +238,12 @@ export default function CompletedTasksPage() {
                     </td>
                   </tr>
                 ) : filtered.map(t => (
-                  <tr key={t.taskId} className="hover:bg-slate-50/70 transition">
-                    <td className="px-3 py-3">
-                      <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">
-                        {t.campaignId}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">
-                        {t.taskId}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 font-medium text-slate-800">
-                      {t.granularTaskName || t.taskTypeName || '—'}
-                    </td>
-                    <td className="px-3 py-3 text-slate-600">
-                      {t.taskTypeName
-                        ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{t.taskTypeName}</span>
-                        : '—'}
-                    </td>
-                    <td className="px-3 py-3 text-slate-600">{t.assigneeName || '—'}</td>
-                    <td className="px-3 py-3 text-slate-500">{fmtDate(t.completedAt)}</td>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2 justify-end">
-                        <button
-                          onClick={() => setAssetTask(t)}
-                          className="flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition"
-                          title="View submitted assets"
-                        >
-                          <Icon name="fileText" className="h-3.5 w-3.5" />
-                          Assets
-                        </button>
-                        <button
-                          onClick={() => openRework(t)}
-                          className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition"
-                        >
-                          <Icon name="refresh" className="h-3.5 w-3.5" />
-                          Rework
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                  <CompletedTaskRow
+                    key={t.taskId}
+                    task={t}
+                    onViewAssets={handleViewAssets}
+                    onRework={handleOpenRework}
+                  />
                 ))}
               </tbody>
             </table>
@@ -286,7 +259,6 @@ export default function CompletedTasksPage() {
             />
           </div>
         </div>
-      )}
 
       {/* ── Asset preview modal ── */}
       {assetTask && (
@@ -312,6 +284,53 @@ export default function CompletedTasksPage() {
     </div>
   )
 }
+
+// ─── Memoized table row ───────────────────────────────────────────────────────
+const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, onViewAssets, onRework }) {
+  return (
+    <tr className="hover:bg-slate-50/70 transition">
+      <td className="px-3 py-3">
+        <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">
+          {t.campaignId}
+        </span>
+      </td>
+      <td className="px-3 py-3">
+        <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">
+          {t.taskId}
+        </span>
+      </td>
+      <td className="px-3 py-3 font-medium text-slate-800">
+        {t.granularTaskName || t.taskTypeName || '—'}
+      </td>
+      <td className="px-3 py-3 text-slate-600">
+        {t.taskTypeName
+          ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{t.taskTypeName}</span>
+          : '—'}
+      </td>
+      <td className="px-3 py-3 text-slate-600">{t.assigneeName || '—'}</td>
+      <td className="px-3 py-3 text-slate-500">{fmtDate(t.completedAt)}</td>
+      <td className="px-3 py-3">
+        <div className="flex items-center gap-2 justify-end">
+          <button
+            onClick={() => onViewAssets(t)}
+            className="flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition"
+            title="View submitted assets"
+          >
+            <Icon name="fileText" className="h-3.5 w-3.5" />
+            Assets
+          </button>
+          <button
+            onClick={() => onRework(t)}
+            className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition"
+          >
+            <Icon name="refresh" className="h-3.5 w-3.5" />
+            Rework
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+})
 
 // ─────────────────────────────────────────────────────────────────────────────
 

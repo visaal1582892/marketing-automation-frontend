@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, memo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import managerApi from '../../api/manager'
 import campaignsApi from '../../api/campaigns'
@@ -534,6 +534,14 @@ export default function TaskManagementPage() {
     if (location.search) navigate('/manager/task-management', { replace: true })
   }
 
+  // ── Stable row action callbacks (for React.memo on TaskRow) ──────────────────
+  const cbHold       = useCallback((task) => handleHold(task),      []) // eslint-disable-line react-hooks/exhaustive-deps
+  const cbOpenUnhold = useCallback((task) => openUnholdModal(task), []) // eslint-disable-line react-hooks/exhaustive-deps
+  const cbSetCancel  = useCallback((task) => setCancelTarget(task), [])
+  const cbSetEdit    = useCallback((task) => setEditTarget({ campaignId: task.campaignId, task }), [])
+  const cbSetBrief   = useCallback((task) => setBriefId(task.campaignId), [])
+  const cbSetAssets  = useCallback((task) => setAssetPreviewTask(task), [])
+
   // ── Hold ─────────────────────────────────────────────────────────────────────
   const [holdingId, setHoldingId] = useState(null)
 
@@ -669,10 +677,7 @@ export default function TaskManagementPage() {
       </div>
 
       {/* ── Table ── */}
-      {loading ? (
-        <LoadingState />
-      ) : (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1280px] text-xs border-collapse">
               <thead>
@@ -706,7 +711,13 @@ export default function TaskManagementPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={12} className="py-14 text-center">
+                      <LoadingState inline />
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan={12} className="py-14 text-center">
                       <Icon name="inbox" className="mx-auto h-8 w-8 text-slate-300 mb-2" />
@@ -726,12 +737,12 @@ export default function TaskManagementPage() {
                     task={t}
                     alt={i % 2 === 1}
                     holding={holdingId === t.taskId}
-                    onHold={() => handleHold(t)}
-                    onUnhold={() => openUnholdModal(t)}
-                    onCancel={() => setCancelTarget(t)}
-                    onEdit={() => setEditTarget({ campaignId: t.campaignId, task: t })}
-                    onViewBrief={() => setBriefId(t.campaignId)}
-                    onViewAssets={() => setAssetPreviewTask(t)}
+                    onHold={cbHold}
+                    onUnhold={cbOpenUnhold}
+                    onCancel={cbSetCancel}
+                    onEdit={cbSetEdit}
+                    onViewBrief={cbSetBrief}
+                    onViewAssets={cbSetAssets}
                   />
                 ))}
               </tbody>
@@ -748,7 +759,6 @@ export default function TaskManagementPage() {
             />
           </div>
         </div>
-      )}
 
       {/* Assets modal — completed tasks */}
       {assetPreviewTask && (
@@ -818,7 +828,7 @@ function Th({ children, align = 'left', width = '', sticky = false }) {
 
 // ─── Data row ─────────────────────────────────────────────────────────────────
 
-function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, onViewBrief, onViewAssets }) {
+const TaskRow = memo(function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, onViewBrief, onViewAssets }) {
   // Hold: only ASSIGNED (not started yet)
   const canHold   = t.status === 'ASSIGNED'
   // Unhold: only HELD
@@ -837,7 +847,7 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
       </td>
 
       <td className="px-3 py-2.5">
-        <button onClick={onViewBrief} className="font-medium text-brand-700 hover:underline leading-tight">
+        <button onClick={() => onViewBrief(t)} className="font-medium text-brand-700 hover:underline leading-tight">
           #{t.campaignId}
         </button>
         {t.taskTypeName && (
@@ -913,7 +923,7 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
                       ${alt ? 'bg-slate-50' : 'bg-white'}`}>
         <div className="flex items-center justify-end gap-1">
           {/* Brief */}
-          <button onClick={onViewBrief} title="View brief"
+          <button onClick={() => onViewBrief(t)} title="View brief"
             className="rounded border border-slate-200 p-1.5 text-slate-400
                        hover:bg-slate-50 hover:text-slate-700 transition">
             <Icon name="eye" className="h-3.5 w-3.5" />
@@ -921,7 +931,7 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
 
           {/* Assets — completed tasks only */}
           {t.status === 'COMPLETED' && (
-            <button onClick={onViewAssets} title="View assets"
+            <button onClick={() => onViewAssets(t)} title="View assets"
               className="rounded border border-green-200 bg-green-50 p-1.5 text-green-600
                          hover:bg-green-100 hover:text-green-800 transition">
               <Icon name="fileText" className="h-3.5 w-3.5" />
@@ -929,7 +939,7 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
           )}
 
           {/* Edit */}
-          <button onClick={onEdit} title="Edit campaign"
+          <button onClick={() => onEdit(t)} title="Edit campaign"
             className="rounded border border-slate-200 p-1.5 text-slate-400
                        hover:bg-slate-50 hover:text-slate-700 transition">
             <Icon name="edit" className="h-3.5 w-3.5" />
@@ -937,7 +947,7 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
 
           {/* Hold */}
           {canHold && (
-            <button onClick={onHold} disabled={holding} title="Hold task"
+            <button onClick={() => onHold(t)} disabled={holding} title="Hold task"
               className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs
                          font-medium text-amber-700 hover:bg-amber-100 transition disabled:opacity-50
                          flex items-center gap-1">
@@ -949,7 +959,7 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
 
           {/* Unhold → opens modal */}
           {canUnhold && (
-            <button onClick={onUnhold} title="Unhold task"
+            <button onClick={() => onUnhold(t)} title="Unhold task"
               className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs
                          font-medium text-emerald-700 hover:bg-emerald-100 transition flex items-center gap-1">
               <Icon name="check" className="h-3 w-3" /> Unhold
@@ -958,7 +968,7 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
 
           {/* Cancel */}
           {canCancel && (
-            <button onClick={onCancel} title="Cancel task"
+            <button onClick={() => onCancel(t)} title="Cancel task"
               className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs
                          font-medium text-red-600 hover:bg-red-100 transition flex items-center gap-1">
               <Icon name="x" className="h-3 w-3" /> Cancel
@@ -968,7 +978,7 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
       </td>
     </tr>
   )
-}
+})
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -991,7 +1001,15 @@ function fmtDate(dt) {
   return new Date(dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function LoadingState() {
+function LoadingState({ inline = false }) {
+  if (inline) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-10 text-slate-400">
+        <Icon name="refresh" className="h-5 w-5 animate-spin" />
+        <span className="text-sm">Loading…</span>
+      </div>
+    )
+  }
   return (
     <div className="rounded-xl border border-slate-200 bg-white py-16 text-center">
       <Icon name="refresh" className="mx-auto h-8 w-8 text-slate-300 mb-3 animate-spin" />

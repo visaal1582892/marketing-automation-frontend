@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, memo, useState } from 'react'
 import { granularTasksApi } from '../../api/masterData'
 import questionnaireApi from '../../api/questionnaire'
 import Icon from '../../components/Icon'
@@ -110,7 +110,7 @@ export default function QuestionMasterPage() {
       fieldType:       q.fieldType,
       options:         optionsStr,
       isRequired:      q.required,
-      granularTaskIds: (q.mappedTasks || []).map(t => t.granularTaskId),
+      granularTaskIds: (q.mappedTasks || []).map(t => String(t.granularTaskId)),
     })
     setModalOpen(true)
   }
@@ -165,13 +165,22 @@ export default function QuestionMasterPage() {
     }
   }
 
-  const toggleTask = (taskId) =>
-    setForm(f => ({
-      ...f,
-      granularTaskIds: f.granularTaskIds.includes(taskId)
-        ? f.granularTaskIds.filter(id => id !== taskId)
-        : [...f.granularTaskIds, taskId],
-    }))
+  const handleEditRow = useCallback((q) => {
+    setEditing(q)
+    let optionsStr = ''
+    if (q.options) {
+      try { optionsStr = JSON.parse(q.options).join(', ') } catch { optionsStr = q.options }
+    }
+    setForm({
+      questionText:    q.questionText,
+      fieldType:       q.fieldType,
+      options:         optionsStr,
+      isRequired:      q.required,
+      granularTaskIds: (q.mappedTasks || []).map(t => String(t.granularTaskId)),
+    })
+    setModalOpen(true)
+  }, [])
+  const handleDeleteRow = useCallback((q) => setDeleting(q), [])
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -255,57 +264,7 @@ export default function QuestionMasterPage() {
                 <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">No matching questions.</td></tr>
               ) : (
                 paged.map((q) => (
-                  <tr key={q.questionId} className="transition hover:bg-slate-50/60">
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{q.questionId}</td>
-                    <td className="px-4 py-2.5 font-medium text-slate-800 max-w-md">
-                      <p className="line-clamp-2">{q.questionText}</p>
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      <FieldTypeBadge type={q.fieldType} />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {q.required ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-accent-50 px-2 py-0.5
-                          text-xs font-medium text-accent-700 ring-1 ring-accent-200">
-                          Required
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5
-                          text-xs font-medium text-slate-500 ring-1 ring-slate-200">
-                          Optional
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {(q.mappedTasks || []).length === 0 ? (
-                        <span className="text-slate-400 text-xs">—</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {q.mappedTasks.slice(0, 3).map((t) => (
-                            <span
-                              key={t.granularTaskId}
-                              className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5
-                                text-xs font-medium text-brand-700 ring-1 ring-brand-100"
-                            >
-                              {t.granularTaskName}
-                            </span>
-                          ))}
-                          {q.mappedTasks.length > 3 && (
-                            <span
-                              title={q.mappedTasks.slice(3).map(t => t.granularTaskName).join(', ')}
-                              className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5
-                                text-xs font-medium text-slate-600 ring-1 ring-slate-200 cursor-default"
-                            >
-                              +{q.mappedTasks.length - 3}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <RowActions onEdit={() => openEdit(q)} onDelete={() => setDeleting(q)} />
-                    </td>
-                  </tr>
+                  <QuestionRow key={q.questionId} question={q} onEdit={handleEditRow} onDelete={handleDeleteRow} />
                 ))
               )}
             </tbody>
@@ -387,7 +346,7 @@ export default function QuestionMasterPage() {
             <textarea
               value={form.questionText}
               onChange={(e) => setForm((f) => ({ ...f, questionText: e.target.value }))}
-              rows={3}
+              rows={2}
               className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800
                 shadow-sm transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
               required
@@ -432,56 +391,25 @@ export default function QuestionMasterPage() {
             </div>
           )}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-sm font-medium text-slate-700">
-                Map to granular tasks
-                <span className="ml-1.5 font-normal text-slate-400">({form.granularTaskIds.length} of {granularTasks.length} selected)</span>
-              </label>
-              {granularTasks.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setForm(f => ({
-                      ...f,
-                      granularTaskIds:
-                        f.granularTaskIds.length === granularTasks.length
-                          ? []
-                          : granularTasks.map(t => t.taskId),
-                    }))
-                  }
-                  className="text-xs font-medium text-brand-600 hover:text-brand-800 transition"
-                >
-                  {form.granularTaskIds.length === granularTasks.length ? 'Clear all' : 'Select all'}
-                </button>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Map to granular tasks
+              {form.granularTaskIds.length > 0 && (
+                <span className="ml-1.5 font-normal text-slate-400">({form.granularTaskIds.length} selected)</span>
               )}
-            </div>
-            <div className="max-h-52 overflow-y-auto rounded-md border border-slate-200 divide-y divide-slate-100">
-              {granularTasks.length === 0 ? (
-                <p className="px-4 py-3 text-xs text-slate-400">No granular tasks found.</p>
-              ) : (
-                granularTasks.map((gt) => {
-                  const checked = form.granularTaskIds.includes(gt.taskId)
-                  return (
-                    <label
-                      key={gt.taskId}
-                      className={`flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm transition
-                        ${checked ? 'bg-brand-50/80' : 'hover:bg-slate-50'}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleTask(gt.taskId)}
-                        className="h-3.5 w-3.5 accent-brand-600"
-                      />
-                      <span className={`font-mono text-xs ${checked ? 'text-brand-600' : 'text-slate-400'}`}>
-                        {gt.taskId}
-                      </span>
-                      <span className={checked ? 'font-medium text-brand-900' : 'text-slate-700'}>{gt.taskName}</span>
-                    </label>
-                  )
-                })
-              )}
-            </div>
+            </label>
+            <AppSelect
+              isMulti
+              isSearchable
+              menuPortal
+              value={granularTasks
+                .filter(t => form.granularTaskIds.includes(String(t.taskId)))
+                .map(t => ({ value: String(t.taskId), label: t.taskName }))}
+              onChange={(selected) =>
+                setForm(f => ({ ...f, granularTaskIds: (selected || []).map(s => s.value) }))
+              }
+              options={granularTasks.map(t => ({ value: String(t.taskId), label: t.taskName }))}
+              placeholder="Search and select tasks…"
+            />
           </div>
         </form>
       </Modal>
@@ -588,3 +516,59 @@ function FieldTypeBadge({ type }) {
     </span>
   )
 }
+
+const QuestionRow = memo(function QuestionRow({ question: q, onEdit, onDelete }) {
+  return (
+    <tr className="transition hover:bg-slate-50/60">
+      <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{q.questionId}</td>
+      <td className="px-4 py-2.5 font-medium text-slate-800 max-w-md">
+        <p className="line-clamp-2">{q.questionText}</p>
+      </td>
+      <td className="px-4 py-2.5 whitespace-nowrap">
+        <FieldTypeBadge type={q.fieldType} />
+      </td>
+      <td className="px-4 py-2.5">
+        {q.required ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-accent-50 px-2 py-0.5
+            text-xs font-medium text-accent-700 ring-1 ring-accent-200">
+            Required
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5
+            text-xs font-medium text-slate-500 ring-1 ring-slate-200">
+            Optional
+          </span>
+        )}
+      </td>
+      <td className="px-4 py-2.5">
+        {(q.mappedTasks || []).length === 0 ? (
+          <span className="text-slate-400 text-xs">—</span>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {q.mappedTasks.slice(0, 3).map((t) => (
+              <span
+                key={t.granularTaskId}
+                className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5
+                  text-xs font-medium text-brand-700 ring-1 ring-brand-100"
+              >
+                {t.granularTaskName}
+              </span>
+            ))}
+            {q.mappedTasks.length > 3 && (
+              <span
+                title={q.mappedTasks.slice(3).map(t => t.granularTaskName).join(', ')}
+                className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5
+                  text-xs font-medium text-slate-600 ring-1 ring-slate-200 cursor-default"
+              >
+                +{q.mappedTasks.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-2.5">
+        <RowActions onEdit={() => onEdit(q)} onDelete={() => onDelete(q)} />
+      </td>
+    </tr>
+  )
+})

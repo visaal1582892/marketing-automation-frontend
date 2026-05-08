@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, memo, useRef, useState } from 'react'
 import api from '../../api/client'
 import { masterApi } from '../../api/masterData'
 import Icon from '../../components/Icon'
@@ -374,6 +374,10 @@ export default function UserManagementPage() {
   const [resetting,     setResetting]     = useState(null)
   const [resetLoading,  setResetLoading]  = useState(false)
 
+  const handleEditUser   = useCallback((u) => setEditing(u), [])
+  const handleDeleteUser = useCallback((u) => setDeleting(u), [])
+  const handleResetUser  = useCallback((u) => setResetting(u), [])
+
   // ── Column filters ──────────────────────────────────────────────────────────
   const [fName,        setFName]        = useState('')
   const [fEmail,       setFEmail]       = useState('')
@@ -509,10 +513,6 @@ export default function UserManagementPage() {
 
       {/* ── Table ── */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {loading ? (
-          <div className="flex h-48 items-center justify-center text-sm text-slate-400">Loading users…</div>
-        ) : (
-          <>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1000px] text-sm">
               <thead className="border-b border-slate-200 bg-slate-50">
@@ -526,7 +526,7 @@ export default function UserManagementPage() {
                   <th className={th}>Skill</th>
                   <th className="px-3 pt-3 pb-1 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Active Tasks</th>
                   <th className={th}>Status</th>
-                  <th className="px-3 pt-3 pb-1 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+                  <th className="sticky right-0 z-10 bg-slate-50 px-3 pt-3 pb-1 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)]">Actions</th>
                 </tr>
                 <tr className="border-t border-slate-100">
                   <td className="px-3 pb-2" />
@@ -538,46 +538,31 @@ export default function UserManagementPage() {
                   <td className="px-3 pb-2"><ColSelect value={fSkill}       onChange={setFSkill}       options={skillOptions}       placeholder="All skills" /></td>
                   <td className="px-3 pb-2" />
                   <td className="px-3 pb-2"><ColSelect value={fStatus} onChange={setFStatus} options={statusOptions} placeholder="All statuses" /></td>
-                  <td className="px-3 pb-2" />
+                  <td className="sticky right-0 z-10 bg-slate-50 px-3 pb-2 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)]" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={10} className="py-12 text-center">
+                      <span className="inline-flex items-center gap-2 text-sm text-slate-400">
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-brand-500" />
+                        Loading users…
+                      </span>
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="py-12 text-center text-slate-400">No users match the current filters.</td>
                   </tr>
                 ) : filtered.map((u) => (
-                  <tr key={u.userId} className="hover:bg-slate-50/60 transition">
-                    <td className="px-3 py-2.5 text-slate-500 font-mono text-xs">{u.userId}</td>
-                    <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{u.fullName}</td>
-                    <td className="px-3 py-2.5 text-slate-500 text-xs">{u.email}</td>
-                    <td className="px-3 py-2.5">
-                      <RolePillList roleNames={u.roleNames ?? []} />
-                    </td>
-                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{u.designationName || '—'}</td>
-                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{u.departmentName || '—'}</td>
-                    <td className="px-3 py-2.5 text-slate-500 capitalize">
-                      {u.skillLevel ? u.skillLevel.charAt(0) + u.skillLevel.slice(1).toLowerCase() : '—'}
-                    </td>
-                    <td className="px-3 py-2.5 text-center text-slate-600">{u.currentActiveTasks ?? 0}</td>
-                    <td className="px-3 py-2.5"><StatusBadge status={u.status} /></td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button onClick={() => setEditing(u)} title="Edit user"
-                          className="rounded-md p-1.5 text-slate-500 transition hover:bg-brand-50 hover:text-brand-700">
-                          <Icon name="edit" className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => setResetting(u)} title="Reset password to default"
-                          className="rounded-md p-1.5 text-slate-500 transition hover:bg-amber-50 hover:text-amber-600">
-                          <Icon name="lock" className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => setDeleting(u)} title="Delete user"
-                          className="rounded-md p-1.5 text-slate-500 transition hover:bg-red-50 hover:text-red-600">
-                          <Icon name="trash" className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                  <UserRow
+                    key={u.userId}
+                    user={u}
+                    onEdit={handleEditUser}
+                    onDelete={handleDeleteUser}
+                    onReset={handleResetUser}
+                  />
                 ))}
               </tbody>
             </table>
@@ -592,8 +577,6 @@ export default function UserManagementPage() {
               loading={loading}
             />
           </div>
-          </>
-        )}
       </div>
 
       {/* ── Form modal ── */}
@@ -702,3 +685,40 @@ function RolePillList({ roleNames }) {
     </div>
   )
 }
+
+// ─── Memoized table row ───────────────────────────────────────────────────────
+const UserRow = memo(function UserRow({ user: u, onEdit, onDelete, onReset }) {
+  return (
+    <tr className="hover:bg-slate-50/60 transition">
+      <td className="px-3 py-2.5 text-slate-500 font-mono text-xs">{u.userId}</td>
+      <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{u.fullName}</td>
+      <td className="px-3 py-2.5 text-slate-500 text-xs">{u.email}</td>
+      <td className="px-3 py-2.5">
+        <RolePillList roleNames={u.roleNames ?? []} />
+      </td>
+      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{u.designationName || '—'}</td>
+      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{u.departmentName || '—'}</td>
+      <td className="px-3 py-2.5 text-slate-500 capitalize">
+        {u.skillLevel ? u.skillLevel.charAt(0) + u.skillLevel.slice(1).toLowerCase() : '—'}
+      </td>
+      <td className="px-3 py-2.5 text-center text-slate-600">{u.currentActiveTasks ?? 0}</td>
+      <td className="px-3 py-2.5"><StatusBadge status={u.status} /></td>
+      <td className="sticky right-0 z-10 bg-white px-3 py-2.5 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)]">
+        <div className="flex items-center justify-end gap-1.5">
+          <button onClick={() => onEdit(u)} title="Edit user"
+            className="rounded-md p-1.5 text-slate-500 transition hover:bg-brand-50 hover:text-brand-700">
+            <Icon name="edit" className="h-4 w-4" />
+          </button>
+          <button onClick={() => onReset(u)} title="Reset password to default"
+            className="rounded-md p-1.5 text-slate-500 transition hover:bg-amber-50 hover:text-amber-600">
+            <Icon name="lock" className="h-4 w-4" />
+          </button>
+          <button onClick={() => onDelete(u)} title="Delete user"
+            className="rounded-md p-1.5 text-slate-500 transition hover:bg-red-50 hover:text-red-600">
+            <Icon name="trash" className="h-4 w-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+})

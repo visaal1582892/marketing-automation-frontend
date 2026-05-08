@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
  * @param {*}      value  – the live value to debounce
  * @param {number} delay  – debounce window in milliseconds (default 400)
  */
-export function useDebounce(value, delay = 400) {
+export function useDebounce(value, delay = 600) {
   const [debounced, setDebounced] = useState(value)
 
   useEffect(() => {

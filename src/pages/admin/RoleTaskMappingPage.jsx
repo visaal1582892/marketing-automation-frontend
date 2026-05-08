@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, memo, useState } from 'react'
 import { masterApi, granularTasksApi, roleTaskApi } from '../../api/masterData'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
@@ -52,7 +52,7 @@ export default function RoleTaskMappingPage() {
 
   // ---------------------------------------------------------------- handlers
   const handleAdd = async (roleId, taskId) => {
-    const exists = mappings.some((m) => m.roleId === roleId && m.taskId === taskId)
+    const exists = mappings.some((m) => String(m.roleId) === String(roleId) && String(m.taskId) === String(taskId))
     if (exists) { toast.error('This role → task mapping already exists.'); return }
     try {
       const saved = await roleTaskApi.create(roleId, taskId)
@@ -87,6 +87,9 @@ export default function RoleTaskMappingPage() {
       toast.error(e?.response?.data?.message || 'Delete failed')
     }
   }
+
+  const handleEditRow   = useCallback((row) => setEditRow(row), [])
+  const handleDeleteRow = useCallback((row) => setConfirmDelete(row), [])
 
   // ---------------------------------------------------------------- filter
   const filtered = useMemo(() => mappings.filter((m) => {
@@ -189,44 +192,7 @@ export default function RoleTaskMappingPage() {
                 </td></tr>
               ) : (
                 paged.map((row) => (
-                  <tr key={row.mappingId}
-                      className={`transition hover:bg-slate-50/60 ${
-                        (row.status ?? 'ACTIVE') === 'INACTIVE' ? 'opacity-60' : ''
-                      }`}>
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{row.mappingId}</td>
-                    <td className="px-4 py-2.5">
-                      <RolePill name={row.roleName || row.roleId} />
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-800">
-                      <span className="font-medium">{row.taskName || row.taskId}</span>
-                      {row.taskId && (
-                        <span className="ml-2 font-mono text-xs text-slate-400">{row.taskId}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <StatusPill status={row.status ?? 'ACTIVE'} />
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-0.5">
-                        <button
-                          title="Edit mapping"
-                          onClick={() => setEditRow(row)}
-                          className="rounded-md p-1.5 text-slate-400 transition
-                                     hover:bg-brand-50 hover:text-brand-700"
-                        >
-                          <Icon name="pencil" className="h-4 w-4" />
-                        </button>
-                        <button
-                          title="Remove mapping"
-                          onClick={() => setConfirmDelete(row)}
-                          className="rounded-md p-1.5 text-slate-400 transition
-                                     hover:bg-red-50 hover:text-red-600"
-                        >
-                          <Icon name="trash" className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                  <MappingRow key={row.mappingId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} />
                 ))
               )}
             </tbody>
@@ -256,34 +222,7 @@ export default function RoleTaskMappingPage() {
             </div>
           ) : (
             paged.map((row) => (
-              <div key={row.mappingId}
-                   className={`flex items-start justify-between gap-3 px-4 py-3 ${
-                     (row.status ?? 'ACTIVE') === 'INACTIVE' ? 'opacity-60' : ''
-                   }`}>
-                <div className="min-w-0 space-y-1.5">
-                  <RolePill name={row.roleName || row.roleId} />
-                  <div className="text-sm font-medium text-slate-800">
-                    {row.taskName || row.taskId}
-                  </div>
-                  <StatusPill status={row.status ?? 'ACTIVE'} />
-                </div>
-                <div className="flex shrink-0 gap-0.5">
-                  <button
-                    title="Edit"
-                    onClick={() => setEditRow(row)}
-                    className="rounded-md p-1.5 text-slate-400 transition hover:bg-brand-50 hover:text-brand-700"
-                  >
-                    <Icon name="pencil" className="h-4 w-4" />
-                  </button>
-                  <button
-                    title="Remove"
-                    onClick={() => setConfirmDelete(row)}
-                    className="rounded-md p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
-                  >
-                    <Icon name="trash" className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
+              <MappingRow key={row.mappingId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} mobile />
             ))
           )}
           <div className="px-4 py-1">
@@ -365,6 +304,74 @@ function StatusPill({ status }) {
   )
 }
 
+const MappingRow = memo(function MappingRow({ row, onEdit, onDelete, mobile = false }) {
+  const inactive = (row.status ?? 'ACTIVE') === 'INACTIVE'
+  if (mobile) {
+    return (
+      <div className={`flex items-start justify-between gap-3 px-4 py-3 ${inactive ? 'opacity-60' : ''}`}>
+        <div className="min-w-0 space-y-1.5">
+          <RolePill name={row.roleName || row.roleId} />
+          <div className="text-sm font-medium text-slate-800">
+            {row.taskName || row.taskId}
+          </div>
+          <StatusPill status={row.status ?? 'ACTIVE'} />
+        </div>
+        <div className="flex shrink-0 gap-0.5">
+          <button
+            title="Edit"
+            onClick={() => onEdit(row)}
+            className="rounded-md p-1.5 text-slate-400 transition hover:bg-brand-50 hover:text-brand-700"
+          >
+            <Icon name="pencil" className="h-4 w-4" />
+          </button>
+          <button
+            title="Remove"
+            onClick={() => onDelete(row)}
+            className="rounded-md p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+          >
+            <Icon name="trash" className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <tr className={`transition hover:bg-slate-50/60 ${inactive ? 'opacity-60' : ''}`}>
+      <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{row.mappingId}</td>
+      <td className="px-4 py-2.5">
+        <RolePill name={row.roleName || row.roleId} />
+      </td>
+      <td className="px-4 py-2.5 text-slate-800">
+        <span className="font-medium">{row.taskName || row.taskId}</span>
+        {row.taskId && (
+          <span className="ml-2 font-mono text-xs text-slate-400">{row.taskId}</span>
+        )}
+      </td>
+      <td className="px-4 py-2.5">
+        <StatusPill status={row.status ?? 'ACTIVE'} />
+      </td>
+      <td className="px-4 py-2.5 text-right">
+        <div className="flex items-center justify-end gap-0.5">
+          <button
+            title="Edit mapping"
+            onClick={() => onEdit(row)}
+            className="rounded-md p-1.5 text-slate-400 transition hover:bg-brand-50 hover:text-brand-700"
+          >
+            <Icon name="pencil" className="h-4 w-4" />
+          </button>
+          <button
+            title="Remove mapping"
+            onClick={() => onDelete(row)}
+            className="rounded-md p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+          >
+            <Icon name="trash" className="h-4 w-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+})
+
 /* ---------- modals ---------- */
 
 function AddMappingModal({ open, roles, granularTasks, onClose, onSave }) {
@@ -384,11 +391,11 @@ function AddMappingModal({ open, roles, granularTasks, onClose, onSave }) {
 
   useEffect(() => {
     if (open) {
-      setRoleId(roles[0]?.id ?? '')
-      setTaskId(granularTasks[0]?.taskId ?? '')
+      setRoleId('')
+      setTaskId('')
       setSubmitting(false)
     }
-  }, [open, roles, granularTasks])
+  }, [open])
 
   if (!open) return null
 
@@ -425,7 +432,9 @@ function AddMappingModal({ open, roles, granularTasks, onClose, onSave }) {
             value={roleId ? String(roleId) : ''}
             onChange={setRoleId}
             options={roles.map(r => ({ value: String(r.id), label: r.name }))}
-            placeholder="— Select a role —"
+            placeholder="Search & select a role…"
+            isSearchable
+            menuPortal
           />
         </div>
 
@@ -438,16 +447,18 @@ function AddMappingModal({ open, roles, granularTasks, onClose, onSave }) {
               label: typeName,
               options: tasks.map(t => ({ value: String(t.taskId), label: t.taskName })),
             }))}
-            placeholder="— Select a task —"
+            placeholder="Search & select a task…"
+            isSearchable
+            menuPortal
           />
         </div>
 
         {roleId && taskId && (
           <div className="rounded-md border border-brand-100 bg-brand-50 px-3 py-2.5 text-xs text-brand-700">
             <strong className="font-semibold">Preview: </strong>
-            {roles.find((r) => r.id === roleId)?.name ?? roleId}
+            {roles.find((r) => String(r.id) === String(roleId))?.name ?? roleId}
             {' → '}
-            {granularTasks.find((t) => t.taskId === taskId)?.taskName ?? taskId}
+            {granularTasks.find((t) => String(t.taskId) === String(taskId))?.taskName ?? taskId}
           </div>
         )}
       </form>
