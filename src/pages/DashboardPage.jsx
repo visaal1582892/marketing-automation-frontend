@@ -39,29 +39,52 @@ export default function DashboardPage() {
   // Whether to show the "New Request" CTA (same set of roles that can submit)
   const canSubmitRequest = isRequestor || isHead || isRegionalManager
 
-  const [campaigns,   setCampaigns]   = useState([])
-  const [tasks,       setTasks]       = useState([])
-  const [opsQcTasks,  setOpsQcTasks]  = useState([])
-  const [opsAllTasks, setOpsAllTasks] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [campaigns,      setCampaigns]      = useState([])
+  const [tasks,          setTasks]          = useState([])
+  const [opsQcTasks,     setOpsQcTasks]     = useState([])
+  const [opsCounts,      setOpsCounts]      = useState({ qcReview: 0, rework: 0, inProgress: 0, completed: 0, assigned: 0, held: 0, cancelled: 0 })
+  const [loading,        setLoading]        = useState(true)
 
   useEffect(() => {
     let alive = true
     setLoading(true)
 
-    const need = (cond, fn) => cond ? fn().catch(() => []) : Promise.resolve([])
-
-    const toArray = (data) => Array.isArray(data) ? data : (data?.content || [])
+    // Returns null when condition is false, or catches to null on error
+    const need = (cond, fn) => cond ? fn().catch(() => null) : Promise.resolve(null)
+    // Extract array from plain array or PagedResponse
+    const toArr = (data) => Array.isArray(data) ? data : (data?.content || [])
+    // Extract total count from plain array or PagedResponse
+    const toCount = (data) => Array.isArray(data) ? data.length : (data?.totalElements ?? 0)
 
     Promise.all([
-      need(showRequestWidgets, () => campaignsApi.list().then(r => toArray(r.data))),
-      need(showWorkerWidgets,  () => tasksApi.listMy().then(r => toArray(r.data))),
-      need(showOpsWidgets,     () => managerApi.pendingTasks().then(r => toArray(r.data))),
-      need(showOpsWidgets,     () => managerApi.allTasks().then(r => toArray(r.data))),
-    ]).then(([cs, ts, qc, at]) => {
+      // Requestor: just first page is enough for the array (used for task-level status filters)
+      need(showRequestWidgets, () => campaignsApi.list().then(r => r.data)),
+      // Worker: own task list
+      need(showWorkerWidgets,  () => tasksApi.listMy().then(r => r.data)),
+      // Ops: QC pending (full list — usually small)
+      need(showOpsWidgets,     () => managerApi.pendingTasks().then(r => r.data)),
+      // Ops: per-status counts — fetch size=1 so backend returns totalElements accurately
+      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'REWORK',      size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'IN_PROGRESS', size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'COMPLETED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'ASSIGNED',    size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'HELD',        size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'CANCELLED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
+    ]).then(([cs, ts, qc, rework, inProgress, completed, assigned, held, cancelled]) => {
       if (!alive) return
-      setCampaigns(cs); setTasks(ts)
-      setOpsQcTasks(qc); setOpsAllTasks(at)
+      setCampaigns(toArr(cs))
+      setTasks(toArr(ts))
+      const qcArr = toArr(qc)
+      setOpsQcTasks(qcArr)
+      setOpsCounts({
+        qcReview:   toCount(qc),
+        rework:     rework     ?? 0,
+        inProgress: inProgress ?? 0,
+        completed:  completed  ?? 0,
+        assigned:   assigned   ?? 0,
+        held:       held       ?? 0,
+        cancelled:  cancelled  ?? 0,
+      })
     }).finally(() => alive && setLoading(false))
 
     return () => { alive = false }
@@ -84,16 +107,6 @@ export default function DashboardPage() {
       cancelled: my.filter(c => c.status === 'CANCELLED').length,
     }
   }, [campaigns])
-
-  const opsCounts = useMemo(() => ({
-    qcReview:   opsQcTasks.length,
-    rework:     opsAllTasks.filter(t => t.status === 'REWORK').length,
-    inProgress: opsAllTasks.filter(t => t.status === 'IN_PROGRESS').length,
-    completed:  opsAllTasks.filter(t => t.status === 'COMPLETED').length,
-    assigned:   opsAllTasks.filter(t => t.status === 'ASSIGNED').length,
-    held:       opsAllTasks.filter(t => t.status === 'HELD').length,
-    cancelled:  opsAllTasks.filter(t => t.status === 'CANCELLED').length,
-  }), [opsQcTasks, opsAllTasks])
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">

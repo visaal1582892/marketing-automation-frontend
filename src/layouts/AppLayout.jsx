@@ -528,10 +528,21 @@ function SidebarLink({ to, label, icon, collapsed, nested = false, onNavigate, b
 
 function SidebarGroup({ label, icon, collapsed, open, onToggle, children }) {
   if (collapsed) {
+    // Icon-only mode: group icon acts as a toggle; children show when open
     return (
-      <div className="space-y-0.5 pt-2">
+      <div className="pt-2">
         <div className="mx-2 mb-1.5 border-t border-slate-100" />
-        {children}
+        <button
+          onClick={onToggle}
+          title={label}
+          className={`mx-auto flex h-9 w-9 items-center justify-center rounded-lg transition
+            ${open
+              ? 'bg-brand-50 text-brand-600'
+              : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
+        >
+          <Icon name={icon} className="h-[18px] w-[18px]" />
+        </button>
+        {open && <div className="mt-0.5 space-y-0.5">{children}</div>}
       </div>
     )
   }

@@ -688,7 +688,7 @@ export default function TaskManagementPage() {
                   <Th width="w-24" title="Times sent back by requestor">Req. Reworks</Th>
                   <Th width="w-28">Assigned On</Th>
                   <Th width="w-32" title="Who performed the most recent action on this task">Action done by</Th>
-                  <Th align="right" width="w-44">Actions</Th>
+                  <Th align="right" width="w-44" sticky>Actions</Th>
                 </tr>
                 <tr className="bg-white border-b border-slate-200">
                   <td className="px-2 py-1.5"><TextFilter value={fTaskId}    onChange={setFTaskId}    placeholder="e.g. 42" /></td>
@@ -702,7 +702,7 @@ export default function TaskManagementPage() {
                   <td className="px-2 py-1.5" />
                   <td className="px-2 py-1.5" />
                   <td className="px-2 py-1.5"><TextFilter value={fActionDoneBy} onChange={setFActionDoneBy} placeholder="Search…" /></td>
-                  <td className="px-2 py-1.5" />
+                  <td className="sticky right-0 z-10 bg-white border-l border-slate-200 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)] px-2 py-1.5" />
                 </tr>
               </thead>
               <tbody>
@@ -806,10 +806,11 @@ export default function TaskManagementPage() {
 
 // ─── Table header cell ────────────────────────────────────────────────────────
 
-function Th({ children, align = 'left', width = '' }) {
+function Th({ children, align = 'left', width = '', sticky = false }) {
   return (
     <th className={`px-3 py-2.5 text-xs font-semibold uppercase tracking-wider
-                    text-slate-500 whitespace-nowrap text-${align} ${width}`}>
+                    text-slate-500 whitespace-nowrap text-${align} ${width}
+                    ${sticky ? 'sticky right-0 z-10 bg-slate-50 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)] border-l border-slate-200' : ''}`}>
       {children}
     </th>
   )
@@ -827,7 +828,7 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
 
   return (
     <tr className={`border-b border-slate-100 transition-colors hover:bg-brand-50/30
-                    ${alt ? 'bg-slate-50/40' : 'bg-white'}`}>
+                    ${alt ? 'bg-slate-50' : 'bg-white'}`}>
 
       <td className="px-3 py-2.5">
         <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-500">
@@ -908,7 +909,8 @@ function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, on
           : <span className="text-slate-300">N/A</span>}
       </td>
 
-      <td className="px-3 py-2.5">
+      <td className={`sticky right-0 z-10 px-3 py-2.5 border-l border-slate-200 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]
+                      ${alt ? 'bg-slate-50' : 'bg-white'}`}>
         <div className="flex items-center justify-end gap-1">
           {/* Brief */}
           <button onClick={onViewBrief} title="View brief"
