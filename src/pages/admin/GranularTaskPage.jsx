@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, memo, useState } from 'react'
 import { granularTasksApi, masterApi } from '../../api/masterData'
+import useDebounce from '../../hooks/useDebounce'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
 import Pagination from '../../components/Pagination'
@@ -10,73 +11,76 @@ export default function GranularTaskPage() {
   const toast = useToast()
   const PAGE_SIZE = 20
 
-  const [items, setItems]                 = useState([])
+  const [rows, setRows]                   = useState([])
+  const [total, setTotal]                 = useState(0)
+  const [totalPages, setTotalPages]       = useState(0)
   const [taskTypes, setTaskTypes]         = useState([])
   const [loading, setLoading]             = useState(true)
   const [editing, setEditing]             = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [page, setPage]                   = useState(0)
+  const [refreshSeed, setRefreshSeed]     = useState(0)
 
   // Column filters
-  const [fId, setFId]               = useState('')
-  const [fName, setFName]           = useState('')
-  const [fTaskType, setFTaskType]   = useState('all')
-  const [fCategory, setFCategory]   = useState('all')
-  const [fStatus, setFStatus]       = useState('all')
+  const [fId, setFId]             = useState('')
+  const [fName, setFName]         = useState('')
+  const [fTaskType, setFTaskType] = useState('all')
+  const [fStatus, setFStatus]     = useState('all')
+
+  const dId   = useDebounce(fId,   400)
+  const dName = useDebounce(fName, 400)
 
   // Reset page on filter change
-  useEffect(() => { setPage(0) }, [fId, fName, fTaskType, fCategory, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(0) }, [dId, dName, fTaskType, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load task types for dropdown
+  // Load task types for filter dropdown
   useEffect(() => {
     masterApi.list('task-types', false)
       .then((data) => setTaskTypes(data))
-      .catch(() => {/* non-fatal */})
+      .catch(() => {})
   }, [])
 
-  // Load granular tasks
+  // Server-side fetch
   useEffect(() => {
     let alive = true
     setLoading(true)
-    granularTasksApi.list(false)
-      .then((data) => { if (alive) setItems(data) })
+    granularTasksApi.listPaged({
+      taskId:       dId         || undefined,
+      taskName:     dName       || undefined,
+      taskTypeName: fTaskType !== 'all' ? taskTypes.find((t) => t.id === fTaskType)?.name : undefined,
+      status:       fStatus !== 'all' ? fStatus.toUpperCase() : 'all',
+      page,
+      size: PAGE_SIZE,
+    })
+      .then((res) => {
+        if (!alive) return
+        setRows(res.content ?? [])
+        setTotal(res.totalElements ?? 0)
+        setTotalPages(res.totalPages ?? 0)
+      })
       .catch((e) => { if (alive) toast.error(e?.response?.data?.message || 'Failed to load granular tasks') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dId, dName, fTaskType, fStatus, page, refreshSeed])
 
-  // ---------------------------------------------------------------- helpers
-  const isActive = (row) => row.status === 'ACTIVE'
-
-  const upsertLocal = (row) =>
-    setItems((curr) => {
-      const i = curr.findIndex((x) => x.taskId === row.taskId)
-      if (i === -1) return [...curr, row]
-      const next = curr.slice()
-      next[i] = row
-      return next
-    })
-
-  const removeLocal = (taskId) =>
-    setItems((curr) => curr.filter((x) => x.taskId !== taskId))
+  const refresh = () => setRefreshSeed((s) => s + 1)
 
   // ---------------------------------------------------------------- handlers
   const handleSave = async (form) => {
     try {
       const payload = {
-        taskId:       form.taskId || undefined,
         taskName:     form.taskName,
         taskTypeId:   form.taskTypeId,
         taskCategory: form.taskCategory || null,
         status:       form.isActive ? 'ACTIVE' : 'INACTIVE',
       }
-      const saved = form.taskId
+      form.taskId
         ? await granularTasksApi.update(form.taskId, payload)
         : await granularTasksApi.create(payload)
-      upsertLocal(saved)
       setEditing(null)
       toast.success(`Granular task ${form.taskId ? 'updated' : 'created'}`)
+      refresh()
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Save failed')
     }
@@ -87,9 +91,9 @@ export default function GranularTaskPage() {
     if (!row) return
     try {
       await granularTasksApi.remove(row.taskId)
-      removeLocal(row.taskId)
       setConfirmDelete(null)
       toast.success(`${row.taskName} deleted`)
+      refresh()
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Delete failed')
     }
@@ -98,35 +102,10 @@ export default function GranularTaskPage() {
   const handleEditRow   = useCallback((row) => setEditing({ ...row, isActive: row.status === 'ACTIVE' }), [])
   const handleDeleteRow = useCallback((row) => setConfirmDelete(row), [])
 
-  // ---------------------------------------------------------------- filter
-  const filtered = useMemo(() => items.filter((it) => {
-    if (fId   && !String(it.taskId).toLowerCase().includes(fId.toLowerCase())) return false
-    if (fName && !it.taskName.toLowerCase().includes(fName.toLowerCase())) return false
-    if (fTaskType !== 'all' && it.taskTypeId !== fTaskType) return false
-    if (fCategory !== 'all' && (it.taskCategory || '').toUpperCase() !== fCategory.toUpperCase()) return false
-    if (fStatus !== 'all') {
-      const want = fStatus === 'active'
-      if (isActive(it) !== want) return false
-    }
-    return true
-  }), [items, fId, fName, fTaskType, fCategory, fStatus])
-
-  const counts = useMemo(() => ({
-    total:    items.length,
-    active:   items.filter(isActive).length,
-    inactive: items.filter((i) => !isActive(i)).length,
-  }), [items])
-
   const taskTypeOptions = useMemo(() =>
     [['all', 'All Types'], ...taskTypes.map((t) => [t.id, t.name])],
     [taskTypes]
   )
-
-  const paged = useMemo(
-    () => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
-    [filtered, page]
-  )
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
 
   // ---------------------------------------------------------------- render
   return (
@@ -139,14 +118,8 @@ export default function GranularTaskPage() {
             <Icon name="list" className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold text-slate-900">
-              Granular Tasks
-            </h1>
-            <p className="text-xs text-slate-500">
-              {counts.total} record{counts.total === 1 ? '' : 's'} •{' '}
-              <span className="text-accent-700">{counts.active} active</span> •{' '}
-              <span className="text-slate-500">{counts.inactive} inactive</span>
-            </p>
+            <h1 className="truncate text-lg font-semibold text-slate-900">Granular Tasks</h1>
+            <p className="text-xs text-slate-500">{total} record{total === 1 ? '' : 's'} total</p>
           </div>
         </div>
         <button
@@ -171,24 +144,18 @@ export default function GranularTaskPage() {
                 <th className="w-36 px-4 py-2.5">Task ID</th>
                 <th className="px-4 py-2.5">Task Name</th>
                 <th className="w-40 px-4 py-2.5">Task Type</th>
-                <th className="w-28 px-4 py-2.5">Category</th>
                 <th className="w-28 px-4 py-2.5">Status</th>
                 <th className="w-24 px-4 py-2.5 text-right">Actions</th>
               </tr>
-              {/* Column filters */}
               <tr className="border-y border-slate-100 bg-slate-50/40">
                 <th className="px-4 py-2">
                   <FilterInput value={fId} onChange={setFId} placeholder="TASK-…" />
                 </th>
                 <th className="px-4 py-2">
-                  <FilterInput value={fName} onChange={setFName} placeholder="Search name" icon="search" />
+                  <FilterInput value={fName} onChange={setFName} placeholder="Search name…" icon="search" />
                 </th>
                 <th className="px-4 py-2">
                   <FilterSelect value={fTaskType} onChange={setFTaskType} options={taskTypeOptions} />
-                </th>
-                <th className="px-4 py-2">
-                  <FilterSelect value={fCategory} onChange={setFCategory}
-                    options={[['all','All'],['DIGITAL','Digital'],['OFFLINE','Offline']]} />
                 </th>
                 <th className="px-4 py-2">
                   <FilterSelect value={fStatus} onChange={setFStatus}
@@ -199,18 +166,18 @@ export default function GranularTaskPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan="6" className="px-4 py-12 text-center text-slate-500">Loading…</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan="6" className="px-4 py-12 text-center text-slate-500">No matching records.</td></tr>
+                <tr><td colSpan="5" className="px-4 py-12 text-center text-slate-500">Loading…</td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan="5" className="px-4 py-12 text-center text-slate-500">No matching records.</td></tr>
               ) : (
-                paged.map((row) => (
+                rows.map((row) => (
                   <GranularTaskRow key={row.taskId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} />
                 ))
               )}
             </tbody>
           </table>
           <div className="border-t border-slate-100 px-4 py-1">
-            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+            <Pagination page={page} totalPages={totalPages} totalElements={total}
               pageSize={PAGE_SIZE} onPageChange={setPage} />
           </div>
         </div>
@@ -218,7 +185,7 @@ export default function GranularTaskPage() {
         {/* Mobile */}
         <div className="block divide-y divide-slate-100 sm:hidden">
           <div className="space-y-2 p-3">
-            <FilterInput value={fName} onChange={setFName} placeholder="Search name" icon="search" />
+            <FilterInput value={fName} onChange={setFName} placeholder="Search name…" icon="search" />
             <div className="grid grid-cols-2 gap-2">
               <FilterSelect value={fTaskType} onChange={setFTaskType} options={taskTypeOptions} />
               <FilterSelect value={fStatus} onChange={setFStatus}
@@ -227,15 +194,15 @@ export default function GranularTaskPage() {
           </div>
           {loading ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">Loading…</div>
-          ) : filtered.length === 0 ? (
+          ) : rows.length === 0 ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">No matching records.</div>
           ) : (
-            paged.map((row) => (
+            rows.map((row) => (
               <GranularTaskRow key={row.taskId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} mobile />
             ))
           )}
           <div className="px-4 py-1">
-            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+            <Pagination page={page} totalPages={totalPages} totalElements={total}
               pageSize={PAGE_SIZE} onPageChange={setPage} />
           </div>
         </div>
@@ -370,11 +337,6 @@ const GranularTaskRow = memo(function GranularTaskRow({ row, onEdit, onDelete, m
       <td className="px-4 py-2.5">
         {row.taskTypeName
           ? <TypePill name={row.taskTypeName} />
-          : <span className="text-slate-400 text-xs">—</span>}
-      </td>
-      <td className="px-4 py-2.5">
-        {row.taskCategory
-          ? <CategoryPill category={row.taskCategory} />
           : <span className="text-slate-400 text-xs">—</span>}
       </td>
       <td className="px-4 py-2.5"><StatusPill active={active} /></td>

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import managerApi from '../../api/manager'
 import campaignsApi from '../../api/campaigns'
 import { masterApi, granularTasksApi } from '../../api/masterData'
-import { useDebounce } from '../../hooks/useDebounce'
+import useDebounce from '../../hooks/useDebounce'
 import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
@@ -31,6 +31,7 @@ const STATUS_LABELS = {
   QC_REVIEW:   'QC Review',
   COMPLETED:   'Completed',
   CANCELLED:   'Cancelled',
+  REJECTED:    'Rejected',
   HELD:        'Held',
 }
 const PRIORITY_STYLES = {
@@ -514,7 +515,7 @@ export default function TaskManagementPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const PRIORITY_OPTS = ['HIGH', 'MEDIUM', 'LOW']
-  const STATUS_OPTS   = ['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'QC_REVIEW', 'COMPLETED', 'CANCELLED', 'HELD']
+  const STATUS_OPTS   = ['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'QC_REVIEW', 'COMPLETED', 'CANCELLED', 'REJECTED', 'HELD']
 
   const taskTypeOptions  = allTaskTypeOpts
   const priorityOptions  = PRIORITY_OPTS
@@ -691,6 +692,7 @@ export default function TaskManagementPage() {
                   <Th width="w-28">Status</Th>
                   <Th width="w-20" title="Times sent back by QC manager">QC Reworks</Th>
                   <Th width="w-24" title="Times sent back by requestor">Req. Reworks</Th>
+                  <Th width="w-28">Created On</Th>
                   <Th width="w-28">Assigned On</Th>
                   <Th width="w-32" title="Who performed the most recent action on this task">Action done by</Th>
                   <Th align="right" width="w-44" sticky>Actions</Th>
@@ -706,6 +708,7 @@ export default function TaskManagementPage() {
                   <td className="px-2 py-1.5" />
                   <td className="px-2 py-1.5" />
                   <td className="px-2 py-1.5" />
+                  <td className="px-2 py-1.5" />
                   <td className="px-2 py-1.5"><TextFilter value={fActionDoneBy} onChange={setFActionDoneBy} placeholder="Search…" /></td>
                   <td className="sticky right-0 z-10 bg-white border-l border-slate-200 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)] px-2 py-1.5" />
                 </tr>
@@ -713,13 +716,13 @@ export default function TaskManagementPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={12} className="py-14 text-center">
+                    <td colSpan={13} className="py-14 text-center">
                       <LoadingState inline />
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-14 text-center">
+                    <td colSpan={13} className="py-14 text-center">
                       <Icon name="inbox" className="mx-auto h-8 w-8 text-slate-300 mb-2" />
                       <p className="text-sm text-slate-500">
                         {activeFilters > 0 ? 'No tasks match the current filters.' : 'No tasks found.'}
@@ -904,6 +907,10 @@ const TaskRow = memo(function TaskRow({ task: t, alt, holding, onHold, onUnhold,
               {t.requestorReworkCount}
             </span>
           : <span className="text-slate-300">—</span>}
+      </td>
+
+      <td className="px-3 py-2.5 whitespace-nowrap text-slate-500 text-xs">
+        {t.createdAt ? fmtDate(t.createdAt) : <span className="text-slate-300">—</span>}
       </td>
 
       <td className="px-3 py-2.5 whitespace-nowrap text-slate-500 text-xs">

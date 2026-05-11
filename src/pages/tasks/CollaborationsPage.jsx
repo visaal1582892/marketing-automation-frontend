@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import collaborationApi from '../../api/collaboration'
 import AppSelect from '../../components/AppSelect'
 import useTaskChat from '../../hooks/useTaskChat'
@@ -8,6 +8,7 @@ import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import { useAuth } from '../../auth/AuthContext'
 import Pagination from '../../components/Pagination'
 import AssetPanel, { CHAT_OPEN_STATUSES, UploadRow, isImage, isVideo, displayName, openUrl, triggerDownload } from '../../components/AssetPanel'
+import useDebounce from '../../hooks/useDebounce'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -603,9 +604,11 @@ const PAGE_SIZE = 12
 
 export default function CollaborationsPage() {
   const toast     = useToast()
-  const [tasks,   setTasks]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [page,    setPage]    = useState(0)
+  const [tasks,         setTasks]        = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages,    setTotalPages]   = useState(0)
+  const [loading,       setLoading]      = useState(true)
+  const [page,          setPage]         = useState(0)
 
   const [chatTask,   setChatTask]   = useState(null)
   const [assetTask,  setAssetTask]  = useState(null)
@@ -615,45 +618,32 @@ export default function CollaborationsPage() {
   const [search,     setSearch]     = useState('')
   const [roleFilter, setRoleFilter] = useState('all') // 'all' | 'mine' | 'involved'
 
-  const load = () => {
-    setLoading(true)
-    collaborationApi.getMyCollaborations()
-      .then(res => setTasks(res.data || []))
-      .catch(() => toast.error?.('Failed to load collaborations.'))
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Derived filtered list (active only + search + role filter) ───────────
-  const filteredTasks = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return tasks.filter(t => {
-      if (!t.collaborationActive) return false
-      if (roleFilter === 'mine'     && t.myRole !== 'OWNER') return false
-      if (roleFilter === 'involved' && t.myRole === 'OWNER') return false
-      if (!q) return true
-      const hay = [
-        t.taskId,
-        t.granularTaskName,
-        t.taskTypeName,
-        String(t.campaignId),
-        t.assigneeName,
-        t.requestorName,
-        t.myRole,
-        STATUS_LABELS[t.status] || t.status,
-      ].filter(Boolean).join(' ').toLowerCase()
-      return hay.includes(q)
-    })
-  }, [tasks, search, roleFilter])
+  const dSearch = useDebounce(search, 350)
 
   // Reset page when filters change
-  useEffect(() => { setPage(0) }, [search, roleFilter])
+  useEffect(() => { setPage(0) }, [dSearch, roleFilter])
 
-  const totalPages = Math.ceil(filteredTasks.length / PAGE_SIZE)
-  const paged      = filteredTasks.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const fetchTasks = useCallback((silent = false) => {
+    if (!silent) setLoading(true)
+    const params = {
+      page, size: PAGE_SIZE,
+      role: roleFilter,
+      ...(dSearch && { search: dSearch }),
+    }
+    collaborationApi.getMyCollaborations(params)
+      .then(res => {
+        const data = res.data
+        setTasks(data.content || [])
+        setTotalElements(data.totalElements ?? 0)
+        setTotalPages(data.totalPages ?? 0)
+      })
+      .catch(() => { if (!silent) toast.error?.('Failed to load collaborations.') })
+      .finally(() => { if (!silent) setLoading(false) })
+  }, [page, dSearch, roleFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeCount = tasks.filter(t => t.collaborationActive).length
+  useEffect(() => { fetchTasks() }, [fetchTasks])
+
+  const load = () => fetchTasks()
 
   return (
     <div className="mx-auto max-w-7xl pb-10 space-y-5">
@@ -670,7 +660,7 @@ export default function CollaborationsPage() {
               <h1 className="text-base font-bold text-slate-900 leading-tight">Collaborations</h1>
               {!loading && (
                 <p className="text-xs text-slate-500">
-                  {activeCount} active · {tasks.length} total
+                  {totalElements} active collaboration{totalElements !== 1 ? 's' : ''}
                 </p>
               )}
             </div>
@@ -710,7 +700,7 @@ export default function CollaborationsPage() {
             {/* Result count chip */}
             {!loading && (
               <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500">
-                {filteredTasks.length}
+                {totalElements}
               </span>
             )}
 
@@ -736,26 +726,28 @@ export default function CollaborationsPage() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-50">
             <Icon name="users" className="h-8 w-8 text-brand-300" />
           </div>
-          <p className="text-sm font-bold text-slate-700">No collaborations yet</p>
-          <p className="mt-1.5 max-w-xs mx-auto text-xs text-slate-400 leading-relaxed">
-            Use the <strong className="text-slate-600">Collaborate</strong> button on any task to start
-            coordinating with your team.
-          </p>
-        </div>
-      ) : filteredTasks.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
-          <Icon name="search" className="mx-auto mb-3 h-9 w-9 text-slate-300" />
-          <p className="text-sm font-bold text-slate-700">No results for "{search}"</p>
-          <p className="mt-1 text-xs text-slate-400">Try a different keyword.</p>
-          <button onClick={() => setSearch('')}
-            className="mt-3 inline-flex items-center gap-1 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-600 hover:bg-brand-100 transition">
-            <Icon name="x" className="h-3 w-3" /> Clear search
-          </button>
+          {(search || roleFilter !== 'all') ? (
+            <>
+              <p className="text-sm font-bold text-slate-700">No collaborations match your filters.</p>
+              <button onClick={() => { setSearch(''); setRoleFilter('all') }}
+                className="mt-3 inline-flex items-center gap-1 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-600 hover:bg-brand-100 transition">
+                <Icon name="x" className="h-3 w-3" /> Clear filters
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-bold text-slate-700">No collaborations yet</p>
+              <p className="mt-1.5 max-w-xs mx-auto text-xs text-slate-400 leading-relaxed">
+                Use the <strong className="text-slate-600">Collaborate</strong> button on any task to start
+                coordinating with your team.
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {paged.map(t => (
+            {tasks.map(t => (
               <CollabCard
                 key={t.taskId}
                 task={t}
@@ -772,7 +764,7 @@ export default function CollaborationsPage() {
             <Pagination
               page={page}
               totalPages={totalPages}
-              totalElements={filteredTasks.length}
+              totalElements={totalElements}
               pageSize={PAGE_SIZE}
               onPageChange={setPage}
             />

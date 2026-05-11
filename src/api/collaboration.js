@@ -22,8 +22,8 @@ const collaborationApi = {
   /** List all collaborators on a task. */
   getMembers: (taskId) => api.get(`${BASE}/${taskId}/members`),
 
-  /** All tasks where the caller is a collaborator (newest first). */
-  getMyCollaborations: () => api.get(`${BASE}/my`),
+  /** All tasks where the caller is a collaborator — server-side paged + filtered. */
+  getMyCollaborations: (params = {}) => api.get(`${BASE}/my`, { params }),
 
   /**
    * Lightweight active-collaboration count for the sidebar badge.

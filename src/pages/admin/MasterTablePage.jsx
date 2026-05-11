@@ -1,6 +1,7 @@
-﻿import { useCallback, useEffect, useMemo, memo, useState } from 'react'
+﻿import { useCallback, useEffect, memo, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 import { findResource, masterApi, MASTER_RESOURCES } from '../../api/masterData'
+import useDebounce from '../../hooks/useDebounce'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
 import Pagination from '../../components/Pagination'
@@ -10,13 +11,7 @@ import AppSelect from '../../components/AppSelect'
 /**
  * Single page rendering the table for one master resource.
  *  URL: /admin/master/:slug
- *
- *  • Only status = 'ACTIVE' rows are listed by default.
- *  • Per-column filters: ID + Name + Status.
- *  • Optimistic local updates on create/edit/delete (no full re-fetch).
- *  • "Status" (ACTIVE/INACTIVE) is edited inside the form modal.
- *  • Delete = hard delete (permanent removal from database).
- *  • Insertion order is preserved (server returns rows ORDER BY seq_no).
+ *  Server-side pagination, filtering, and sorting (newest first by ID).
  */
 export default function MasterTablePage() {
   const { slug } = useParams()
@@ -25,68 +20,68 @@ export default function MasterTablePage() {
 
   const PAGE_SIZE = 20
 
-  const [items, setItems]                 = useState([])
+  const [rows, setRows]                   = useState([])
+  const [total, setTotal]                 = useState(0)
+  const [totalPages, setTotalPages]       = useState(0)
   const [loading, setLoading]             = useState(true)
-  const [editing, setEditing]             = useState(null)        // null | row | {}
+  const [editing, setEditing]             = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [page, setPage]                   = useState(0)
+  const [refreshSeed, setRefreshSeed]     = useState(0)
 
   // Column filters
   const [fId, setFId]         = useState('')
   const [fName, setFName]     = useState('')
-  const [fStatus, setFStatus] = useState('all')                   // all | active | inactive
+  const [fStatus, setFStatus] = useState('all')
+
+  const dId   = useDebounce(fId,   400)
+  const dName = useDebounce(fName, 400)
 
   // Reset filters and page when switching resource
   useEffect(() => {
-    setFId(''); setFName('')
-    setFStatus('all'); setPage(0)
+    setFId(''); setFName(''); setFStatus('all'); setPage(0)
   }, [slug])
 
-  // Reset page when filters change
-  useEffect(() => { setPage(0) }, [fId, fName, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Reset to page 0 when debounced filters or status change
+  useEffect(() => { setPage(0) }, [dId, dName, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch ACTIVE rows only by default
+  // Server-side fetch
   useEffect(() => {
     if (!resource) return
     let alive = true
     setLoading(true)
-    masterApi.list(slug, false)
-      .then((data) => { if (alive) setItems(data) })
+    masterApi.listPaged(slug, {
+      id:     dId     || undefined,
+      name:   dName   || undefined,
+      status: fStatus !== 'all' ? fStatus.toUpperCase() : 'all',
+      page,
+      size: PAGE_SIZE,
+    })
+      .then((res) => {
+        if (!alive) return
+        setRows(res.content ?? [])
+        setTotal(res.totalElements ?? 0)
+        setTotalPages(res.totalPages ?? 0)
+      })
       .catch((e) => { if (alive) toast.error(e?.response?.data?.message || 'Failed to load records') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, dId, dName, fStatus, page, refreshSeed])
 
   if (!resource) return <Navigate to="/dashboard" replace />
 
-  // ---------------------------------------------------------------- helpers
-  const isActive = (row) => row.status === 'ACTIVE'
-
-  const upsertLocal = (row) =>
-    setItems((curr) => {
-      const i = curr.findIndex((x) => x.id === row.id)
-      if (i === -1) return [...curr, row]
-      const next = curr.slice()
-      next[i] = row
-      return next
-    })
-
-  const removeLocal = (id) =>
-    setItems((curr) => curr.filter((x) => x.id !== id))
+  const refresh = () => setRefreshSeed((s) => s + 1)
 
   const handleSave = async (form) => {
     try {
-      const payload = {
-        name:   form.name,
-        status: form.isActive ? 'ACTIVE' : 'INACTIVE',
-      }
-      const saved = form.id
+      const payload = { name: form.name, status: form.isActive ? 'ACTIVE' : 'INACTIVE' }
+      form.id
         ? await masterApi.update(slug, form.id, payload)
         : await masterApi.create(slug, payload)
-      upsertLocal(saved)
       setEditing(null)
       toast.success(`${singular(resource)} ${form.id ? 'updated' : 'created'}`)
+      refresh()
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Save failed')
     }
@@ -97,9 +92,9 @@ export default function MasterTablePage() {
     if (!row) return
     try {
       await masterApi.remove(slug, row.id)
-      removeLocal(row.id)
       setConfirmDelete(null)
       toast.success(`${row.name} deleted`)
+      refresh()
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Delete failed')
     }
@@ -107,29 +102,6 @@ export default function MasterTablePage() {
 
   const handleEditRow   = useCallback((row) => setEditing({ ...row, isActive: row.status === 'ACTIVE' }), [])
   const handleDeleteRow = useCallback((row) => setConfirmDelete(row), [])
-
-  // ---------------------------------------------------------------- filter
-  const filtered = useMemo(() => items.filter((it) => {
-    if (fId   && !String(it.id).toLowerCase().includes(fId.toLowerCase())) return false
-    if (fName && !it.name.toLowerCase().includes(fName.toLowerCase())) return false
-    if (fStatus !== 'all') {
-      const want = fStatus === 'active'
-      if (isActive(it) !== want) return false
-    }
-    return true
-  }), [items, fId, fName, fStatus])
-
-  const counts = useMemo(() => ({
-    total:    items.length,
-    active:   items.filter(isActive).length,
-    inactive: items.filter((i) => !isActive(i)).length,
-  }), [items])
-
-  const paged = useMemo(
-    () => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
-    [filtered, page]
-  )
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
 
   // ---------------------------------------------------------------- render
   return (
@@ -142,14 +114,8 @@ export default function MasterTablePage() {
             <Icon name={resource.icon} className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold text-slate-900">
-              {resource.label}
-            </h1>
-            <p className="text-xs text-slate-500">
-              {counts.total} record{counts.total === 1 ? '' : 's'} •{' '}
-              <span className="text-accent-700">{counts.active} active</span> •{' '}
-              <span className="text-slate-500">{counts.inactive} inactive</span>
-            </p>
+            <h1 className="truncate text-lg font-semibold text-slate-900">{resource.label}</h1>
+            <p className="text-xs text-slate-500">{total} record{total === 1 ? '' : 's'} total</p>
           </div>
         </div>
         <button
@@ -176,13 +142,12 @@ export default function MasterTablePage() {
                 <th className="w-36 px-4 py-2.5">Status</th>
                 <th className="w-28 px-4 py-2.5 text-right">Actions</th>
               </tr>
-              {/* Column filters */}
               <tr className="border-y border-slate-100 bg-slate-50/40">
                 <th className="px-4 py-2">
                   <FilterInput value={fId} onChange={setFId} placeholder="Filter ID…" />
                 </th>
                 <th className="px-4 py-2">
-                  <FilterInput value={fName} onChange={setFName} placeholder="Search name" icon="search" />
+                  <FilterInput value={fName} onChange={setFName} placeholder="Search name…" icon="search" />
                 </th>
                 <th className="px-4 py-2">
                   <FilterSelect value={fStatus} onChange={setFStatus}
@@ -194,17 +159,17 @@ export default function MasterTablePage() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr><td colSpan="4" className="px-4 py-12 text-center text-slate-500">Loading…</td></tr>
-              ) : filtered.length === 0 ? (
+              ) : rows.length === 0 ? (
                 <tr><td colSpan="4" className="px-4 py-12 text-center text-slate-500">No matching records.</td></tr>
               ) : (
-                paged.map((row) => (
+                rows.map((row) => (
                   <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} />
                 ))
               )}
             </tbody>
           </table>
           <div className="border-t border-slate-100 px-4 py-1">
-            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+            <Pagination page={page} totalPages={totalPages} totalElements={total}
               pageSize={PAGE_SIZE} onPageChange={setPage} />
           </div>
         </div>
@@ -212,24 +177,24 @@ export default function MasterTablePage() {
         {/* Mobile */}
         <div className="block divide-y divide-slate-100 sm:hidden">
           <div className="space-y-2 p-3">
-            <FilterInput value={fName} onChange={setFName} placeholder="Search name" icon="search" />
+            <FilterInput value={fName} onChange={setFName} placeholder="Search name…" icon="search" />
             <div className="grid grid-cols-2 gap-2">
-                  <FilterInput value={fId} onChange={setFId} placeholder="Filter ID…" />
+              <FilterInput value={fId} onChange={setFId} placeholder="Filter ID…" />
               <FilterSelect value={fStatus} onChange={setFStatus}
                 options={[['all','All'],['active','Active'],['inactive','Inactive']]} />
             </div>
           </div>
           {loading ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">Loading…</div>
-          ) : filtered.length === 0 ? (
+          ) : rows.length === 0 ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">No matching records.</div>
           ) : (
-            paged.map((row) => (
+            rows.map((row) => (
               <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} mobile />
             ))
           )}
           <div className="px-4 py-1">
-            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+            <Pagination page={page} totalPages={totalPages} totalElements={total}
               pageSize={PAGE_SIZE} onPageChange={setPage} />
           </div>
         </div>

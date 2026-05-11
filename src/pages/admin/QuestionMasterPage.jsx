@@ -1,6 +1,7 @@
-﻿import { useCallback, useEffect, useMemo, memo, useState } from 'react'
-import { granularTasksApi } from '../../api/masterData'
+﻿import { useCallback, useEffect, memo, useState } from 'react'
+import { granularTasksApi, questionApi } from '../../api/masterData'
 import questionnaireApi from '../../api/questionnaire'
+import useDebounce from '../../hooks/useDebounce'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
 import Pagination from '../../components/Pagination'
@@ -22,7 +23,9 @@ export default function QuestionMasterPage() {
   const toast = useToast()
   const PAGE_SIZE = 20
 
-  const [questions,     setQuestions]     = useState([])
+  const [rows,          setRows]          = useState([])
+  const [total,         setTotal]         = useState(0)
+  const [totalPages,    setTotalPages]    = useState(0)
   const [granularTasks, setGranularTasks] = useState([])
   const [loading,       setLoading]       = useState(true)
   const [modalOpen,     setModalOpen]     = useState(false)
@@ -30,15 +33,14 @@ export default function QuestionMasterPage() {
   const [deleting,      setDeleting]      = useState(null)
   const [saving,        setSaving]        = useState(false)
   const [page,          setPage]          = useState(0)
+  const [refreshSeed,   setRefreshSeed]   = useState(0)
 
-  const [fId,        setFId]        = useState('')
-  const [fText,      setFText]      = useState('')
-  const [fType,      setFType]      = useState('ALL')
-  const [fRequired,  setFRequired]  = useState('ALL')
-  const [fTask,      setFTask]      = useState('')
+  const [fText, setFText] = useState('')
+
+  const dText = useDebounce(fText, 400)
 
   // Reset page on filter change
-  useEffect(() => { setPage(0) }, [fId, fText, fType, fRequired, fTask]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(0) }, [dText]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const BLANK_FORM = {
     questionText:    '',
@@ -49,55 +51,33 @@ export default function QuestionMasterPage() {
   }
   const [form, setForm] = useState(BLANK_FORM)
 
-  const loadAll = () => {
+  const refresh = () => setRefreshSeed((s) => s + 1)
+
+  // Load granular tasks for modal dropdown
+  useEffect(() => {
+    granularTasksApi.list(false)
+      .then((data) => setGranularTasks(data || []))
+      .catch(() => {})
+  }, [])
+
+  // Server-side fetch
+  useEffect(() => {
+    let alive = true
     setLoading(true)
-    Promise.all([
-      questionnaireApi.listAll(),
-      granularTasksApi.list(false),
-    ])
-      .then(([qRes, gtRes]) => {
-        setQuestions(qRes.data || [])
-        setGranularTasks(gtRes || [])
+    questionApi.listPaged({ questionText: dText || undefined, page, size: PAGE_SIZE })
+      .then((res) => {
+        if (!alive) return
+        setRows(res.content ?? [])
+        setTotal(res.totalElements ?? 0)
+        setTotalPages(res.totalPages ?? 0)
       })
-      .catch(() => toast.error('Failed to load questions'))
-      .finally(() => setLoading(false))
-  }
+      .catch(() => { if (alive) toast.error('Failed to load questions') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dText, page, refreshSeed])
 
-  useEffect(loadAll, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const filtered = useMemo(() => {
-    return questions.filter(q => {
-      if (fId   && !q.questionId.toLowerCase().includes(fId.toLowerCase()))   return false
-      if (fText && !q.questionText.toLowerCase().includes(fText.toLowerCase())) return false
-      if (fType !== 'ALL' && q.fieldType !== fType) return false
-      if (fRequired !== 'ALL') {
-        const want = fRequired === 'YES'
-        if (q.required !== want) return false
-      }
-      if (fTask) {
-        const taskStr = (q.mappedTasks || []).map(t => t.granularTaskName).join(' ').toLowerCase()
-        if (!taskStr.includes(fTask.toLowerCase())) return false
-      }
-      return true
-    })
-  }, [questions, fId, fText, fType, fRequired, fTask])
-
-  const counts = useMemo(() => ({
-    total: questions.length,
-    shown: filtered.length,
-  }), [questions.length, filtered.length])
-
-  const paged = useMemo(
-    () => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
-    [filtered, page]
-  )
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-
-  const openCreate = () => {
-    setEditing(null)
-    setForm(BLANK_FORM)
-    setModalOpen(true)
-  }
+  const openCreate = () => { setEditing(null); setForm(BLANK_FORM); setModalOpen(true) }
 
   const openEdit = (q) => {
     setEditing(q)
@@ -145,7 +125,7 @@ export default function QuestionMasterPage() {
         toast.success('Question created.')
       }
       closeModal()
-      loadAll()
+      refresh()
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to save question')
     } finally {
@@ -159,27 +139,13 @@ export default function QuestionMasterPage() {
       await questionnaireApi.remove(deleting.questionId)
       toast.success(`Question ${deleting.questionId} deleted.`)
       setDeleting(null)
-      loadAll()
+      refresh()
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to delete question')
     }
   }
 
-  const handleEditRow = useCallback((q) => {
-    setEditing(q)
-    let optionsStr = ''
-    if (q.options) {
-      try { optionsStr = JSON.parse(q.options).join(', ') } catch { optionsStr = q.options }
-    }
-    setForm({
-      questionText:    q.questionText,
-      fieldType:       q.fieldType,
-      options:         optionsStr,
-      isRequired:      q.required,
-      granularTaskIds: (q.mappedTasks || []).map(t => String(t.granularTaskId)),
-    })
-    setModalOpen(true)
-  }, [])
+  const handleEditRow   = useCallback((q) => openEdit(q), []) // eslint-disable-line react-hooks/exhaustive-deps
   const handleDeleteRow = useCallback((q) => setDeleting(q), [])
 
   return (
@@ -195,13 +161,7 @@ export default function QuestionMasterPage() {
               Question Library
             </h1>
             <p className="text-xs text-slate-500">
-              {loading ? 'Loading…' : (
-                <>
-                  {counts.shown} of {counts.total} question{counts.total === 1 ? '' : 's'} shown
-                  {' · '}
-                  Map questions to granular tasks for request forms and worker checklists
-                </>
-              )}
+              {loading ? 'Loading…' : `${total} question${total === 1 ? '' : 's'} total`}
             </p>
           </div>
         </div>
@@ -231,46 +191,26 @@ export default function QuestionMasterPage() {
                 <th className="w-24 px-4 py-2.5 text-right">Actions</th>
               </tr>
               <tr className="border-y border-slate-100 bg-slate-50/40">
-                <th className="px-4 py-2">
-                  <FilterInput value={fId} onChange={setFId} placeholder="QUES-…" />
+                <th className="px-4 py-2" colSpan={2}>
+                  <FilterInput value={fText} onChange={setFText} placeholder="Search question text…" icon="search" />
                 </th>
-                <th className="px-4 py-2">
-                  <FilterInput value={fText} onChange={setFText} placeholder="Search text" icon="search" />
-                </th>
-                <th className="px-4 py-2">
-                  <FilterSelect
-                    value={fType}
-                    onChange={setFType}
-                    options={[['ALL', 'All types'], ...FIELD_TYPES.map((ft) => [ft.value, ft.label])]}
-                  />
-                </th>
-                <th className="px-4 py-2">
-                  <FilterSelect
-                    value={fRequired}
-                    onChange={setFRequired}
-                    options={[['ALL', 'All'], ['YES', 'Required'], ['NO', 'Optional']]}
-                  />
-                </th>
-                <th className="px-4 py-2">
-                  <FilterInput value={fTask} onChange={setFTask} placeholder="Task name" />
-                </th>
-                <th />
+                <th colSpan={4} />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">Loading…</td></tr>
-              ) : filtered.length === 0 ? (
+              ) : rows.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">No matching questions.</td></tr>
               ) : (
-                paged.map((q) => (
+                rows.map((q) => (
                   <QuestionRow key={q.questionId} question={q} onEdit={handleEditRow} onDelete={handleDeleteRow} />
                 ))
               )}
             </tbody>
           </table>
           <div className="border-t border-slate-100 px-4 py-1">
-            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+            <Pagination page={page} totalPages={totalPages} totalElements={total}
               pageSize={PAGE_SIZE} onPageChange={setPage} />
           </div>
         </div>
@@ -281,10 +221,10 @@ export default function QuestionMasterPage() {
           </div>
           {loading ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">Loading…</div>
-          ) : filtered.length === 0 ? (
+          ) : rows.length === 0 ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">No matching questions.</div>
           ) : (
-            paged.map((q) => (
+            rows.map((q) => (
               <div key={q.questionId} className="flex items-start justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <div className="font-mono text-xs text-slate-500">{q.questionId}</div>
@@ -303,7 +243,7 @@ export default function QuestionMasterPage() {
             ))
           )}
           <div className="px-4 py-1">
-            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+            <Pagination page={page} totalPages={totalPages} totalElements={total}
               pageSize={PAGE_SIZE} onPageChange={setPage} />
           </div>
         </div>

@@ -1,5 +1,6 @@
-﻿import { useCallback, useEffect, useMemo, memo, useState } from 'react'
+﻿import { useCallback, useEffect, memo, useState, useMemo } from 'react'
 import { masterApi, granularTasksApi, roleTaskApi } from '../../api/masterData'
+import useDebounce from '../../hooks/useDebounce'
 import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
 import Pagination from '../../components/Pagination'
@@ -10,7 +11,9 @@ export default function RoleTaskMappingPage() {
   const toast = useToast()
   const PAGE_SIZE = 20
 
-  const [mappings, setMappings]           = useState([])
+  const [rows, setRows]                   = useState([])
+  const [total, setTotal]                 = useState(0)
+  const [totalPages, setTotalPages]       = useState(0)
   const [roles, setRoles]                 = useState([])
   const [granularTasks, setGranularTasks] = useState([])
   const [loading, setLoading]             = useState(true)
@@ -18,58 +21,72 @@ export default function RoleTaskMappingPage() {
   const [editRow, setEditRow]             = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [page, setPage]                   = useState(0)
+  const [refreshSeed, setRefreshSeed]     = useState(0)
 
   // Column filters
-  const [fRole,   setFRole]   = useState('all')
+  const [fRole,   setFRole]   = useState('')
   const [fTask,   setFTask]   = useState('')
   const [fStatus, setFStatus] = useState('all')
 
-  // Reset page on filter change
-  useEffect(() => { setPage(0) }, [fRole, fTask, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+  const dRole = useDebounce(fRole, 400)
+  const dTask = useDebounce(fTask, 400)
 
-  // Load reference data and mappings
+  // Reset page on filter change
+  useEffect(() => { setPage(0) }, [dRole, dTask, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load reference data for add/edit modals (roles + granular tasks full lists)
   useEffect(() => {
-    let alive = true
-    setLoading(true)
     Promise.all([
-      roleTaskApi.list(),
       masterApi.list('roles', false),
       granularTasksApi.list(false),
     ])
-      .then(([maps, roleList, taskList]) => {
+      .then(([roleList, taskList]) => { setRoles(roleList); setGranularTasks(taskList) })
+      .catch(() => {})
+  }, [])
+
+  // Server-side fetch
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    roleTaskApi.listPaged({
+      roleName: dRole   || undefined,
+      taskName: dTask   || undefined,
+      status:   fStatus !== 'all' ? fStatus : undefined,
+      page,
+      size: PAGE_SIZE,
+    })
+      .then((res) => {
         if (!alive) return
-        setMappings(maps)
-        setRoles(roleList)
-        setGranularTasks(taskList)
+        setRows(res.content ?? [])
+        setTotal(res.totalElements ?? 0)
+        setTotalPages(res.totalPages ?? 0)
       })
-      .catch((e) => {
-        if (alive) toast.error(e?.response?.data?.message || 'Failed to load data')
-      })
+      .catch((e) => { if (alive) toast.error(e?.response?.data?.message || 'Failed to load data') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dRole, dTask, fStatus, page, refreshSeed])
+
+  const refresh = () => setRefreshSeed((s) => s + 1)
 
   // ---------------------------------------------------------------- handlers
   const handleAdd = async (roleId, taskId) => {
-    const exists = mappings.some((m) => String(m.roleId) === String(roleId) && String(m.taskId) === String(taskId))
-    if (exists) { toast.error('This role → task mapping already exists.'); return }
     try {
-      const saved = await roleTaskApi.create(roleId, taskId)
-      setMappings((curr) => [...curr, saved])
+      await roleTaskApi.create(roleId, taskId)
       setAddOpen(false)
       toast.success('Mapping added')
+      refresh()
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Failed to add mapping')
     }
   }
 
-  const handleEdit = async (mappingId, status) => {
+  const handleEdit = async (mappingId, roleId, taskId, status) => {
     try {
-      const updated = await roleTaskApi.update(mappingId, status)
-      setMappings((curr) => curr.map((m) => m.mappingId === mappingId ? updated : m))
+      await roleTaskApi.update(mappingId, { roleId, taskId, status })
       setEditRow(null)
       toast.success('Mapping updated')
+      refresh()
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Update failed')
     }
@@ -80,9 +97,9 @@ export default function RoleTaskMappingPage() {
     if (!row) return
     try {
       await roleTaskApi.remove(row.mappingId)
-      setMappings((curr) => curr.filter((m) => m.mappingId !== row.mappingId))
       setConfirmDelete(null)
       toast.success('Mapping removed')
+      refresh()
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Delete failed')
     }
@@ -90,32 +107,6 @@ export default function RoleTaskMappingPage() {
 
   const handleEditRow   = useCallback((row) => setEditRow(row), [])
   const handleDeleteRow = useCallback((row) => setConfirmDelete(row), [])
-
-  // ---------------------------------------------------------------- filter
-  const filtered = useMemo(() => mappings.filter((m) => {
-    if (fRole !== 'all' && m.roleId !== fRole) return false
-    if (fTask && !m.taskName?.toLowerCase().includes(fTask.toLowerCase())) return false
-    if (fStatus !== 'all' && (m.status ?? 'ACTIVE') !== fStatus) return false
-    return true
-  }), [mappings, fRole, fTask, fStatus])
-
-  const roleOptions = useMemo(() => {
-    const seen = new Set()
-    const opts = [['all', 'All Roles']]
-    mappings.forEach((m) => {
-      if (!seen.has(m.roleId)) {
-        seen.add(m.roleId)
-        opts.push([m.roleId, m.roleName || m.roleId])
-      }
-    })
-    return opts
-  }, [mappings])
-
-  const paged = useMemo(
-    () => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
-    [filtered, page]
-  )
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
 
   // ---------------------------------------------------------------- render
   return (
@@ -132,8 +123,7 @@ export default function RoleTaskMappingPage() {
               Role → Task Mappings
             </h1>
             <p className="text-xs text-slate-500">
-              {mappings.length} mapping{mappings.length === 1 ? '' : 's'} — defines which tasks
-              each role can execute
+              {total} mapping{total === 1 ? '' : 's'} total — defines which tasks each role can execute
             </p>
           </div>
         </div>
@@ -162,21 +152,17 @@ export default function RoleTaskMappingPage() {
                 <th className="w-32 px-4 py-2.5">Status</th>
                 <th className="w-24 px-4 py-2.5 text-right">Actions</th>
               </tr>
-              {/* Filters */}
               <tr className="border-y border-slate-100 bg-slate-50/40">
                 <th />
                 <th className="px-4 py-2">
-                  <FilterSelect value={fRole} onChange={setFRole} options={roleOptions} />
+                  <FilterInput value={fRole} onChange={setFRole} placeholder="Search role…" icon="search" />
                 </th>
                 <th className="px-4 py-2">
                   <FilterInput value={fTask} onChange={setFTask} placeholder="Search task…" icon="search" />
                 </th>
                 <th className="px-4 py-2">
-                  <FilterSelect
-                    value={fStatus}
-                    onChange={setFStatus}
-                    options={[['all', 'All'], ['ACTIVE', 'Active'], ['INACTIVE', 'Inactive']]}
-                  />
+                  <FilterSelect value={fStatus} onChange={setFStatus}
+                    options={[['all','All'],['ACTIVE','Active'],['INACTIVE','Inactive']]} />
                 </th>
                 <th />
               </tr>
@@ -184,21 +170,19 @@ export default function RoleTaskMappingPage() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr><td colSpan="5" className="px-4 py-12 text-center text-slate-500">Loading…</td></tr>
-              ) : filtered.length === 0 ? (
+              ) : rows.length === 0 ? (
                 <tr><td colSpan="5" className="px-4 py-12 text-center text-slate-500">
-                  {mappings.length === 0
-                    ? 'No mappings yet. Click "Add mapping" to get started.'
-                    : 'No matching records.'}
+                  No matching records.
                 </td></tr>
               ) : (
-                paged.map((row) => (
+                rows.map((row) => (
                   <MappingRow key={row.mappingId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} />
                 ))
               )}
             </tbody>
           </table>
           <div className="border-t border-slate-100 px-4 py-1">
-            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+            <Pagination page={page} totalPages={totalPages} totalElements={total}
               pageSize={PAGE_SIZE} onPageChange={setPage} />
           </div>
         </div>
@@ -206,27 +190,22 @@ export default function RoleTaskMappingPage() {
         {/* Mobile */}
         <div className="block divide-y divide-slate-100 sm:hidden">
           <div className="space-y-2 p-3">
-            <FilterSelect value={fRole} onChange={setFRole} options={roleOptions} />
+            <FilterInput value={fRole} onChange={setFRole} placeholder="Search role…" icon="search" />
             <FilterInput value={fTask} onChange={setFTask} placeholder="Search task…" icon="search" />
-            <FilterSelect
-              value={fStatus}
-              onChange={setFStatus}
-              options={[['all', 'All Statuses'], ['ACTIVE', 'Active'], ['INACTIVE', 'Inactive']]}
-            />
+            <FilterSelect value={fStatus} onChange={setFStatus}
+              options={[['all','All Statuses'],['ACTIVE','Active'],['INACTIVE','Inactive']]} />
           </div>
           {loading ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">Loading…</div>
-          ) : filtered.length === 0 ? (
-            <div className="px-4 py-12 text-center text-sm text-slate-500">
-              {mappings.length === 0 ? 'No mappings yet.' : 'No matching records.'}
-            </div>
+          ) : rows.length === 0 ? (
+            <div className="px-4 py-12 text-center text-sm text-slate-500">No matching records.</div>
           ) : (
-            paged.map((row) => (
+            rows.map((row) => (
               <MappingRow key={row.mappingId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} mobile />
             ))
           )}
           <div className="px-4 py-1">
-            <Pagination page={page} totalPages={totalPages} totalElements={filtered.length}
+            <Pagination page={page} totalPages={totalPages} totalElements={total}
               pageSize={PAGE_SIZE} onPageChange={setPage} />
           </div>
         </div>
@@ -242,6 +221,8 @@ export default function RoleTaskMappingPage() {
 
       <EditMappingModal
         row={editRow}
+        roles={roles}
+        granularTasks={granularTasks}
         onClose={() => setEditRow(null)}
         onSave={handleEdit}
       />
@@ -466,12 +447,26 @@ function AddMappingModal({ open, roles, granularTasks, onClose, onSave }) {
   )
 }
 
-function EditMappingModal({ row, onClose, onSave }) {
+function EditMappingModal({ row, roles, granularTasks, onClose, onSave }) {
+  const [roleId, setRoleId]         = useState('')
+  const [taskId, setTaskId]         = useState('')
   const [status, setStatus]         = useState('ACTIVE')
   const [submitting, setSubmitting] = useState(false)
 
+  const tasksByType = useMemo(() => {
+    const groups = {}
+    granularTasks.forEach((t) => {
+      const key = t.taskTypeName || 'Other'
+      if (!groups[key]) groups[key] = []
+      groups[key].push(t)
+    })
+    return groups
+  }, [granularTasks])
+
   useEffect(() => {
     if (row) {
+      setRoleId(String(row.roleId ?? ''))
+      setTaskId(String(row.taskId ?? ''))
       setStatus(row.status ?? 'ACTIVE')
       setSubmitting(false)
     }
@@ -481,9 +476,15 @@ function EditMappingModal({ row, onClose, onSave }) {
 
   const submit = async (e) => {
     e.preventDefault()
+    if (!roleId || !taskId) return
     setSubmitting(true)
-    try { await onSave(row.mappingId, status) } finally { setSubmitting(false) }
+    try { await onSave(row.mappingId, roleId, taskId, status) } finally { setSubmitting(false) }
   }
+
+  const selectedRoleName = roles.find((r) => String(r.id) === String(roleId))?.name
+    ?? row.roleName ?? roleId
+  const selectedTaskName = granularTasks.find((t) => String(t.taskId) === String(taskId))?.taskName
+    ?? row.taskName ?? taskId
 
   return (
     <Modal
@@ -496,7 +497,7 @@ function EditMappingModal({ row, onClose, onSave }) {
                   className="rounded-md px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">
             Cancel
           </button>
-          <button onClick={submit} disabled={submitting}
+          <button onClick={submit} disabled={submitting || !roleId || !taskId}
                   className="rounded-md bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white
                              shadow-sm transition hover:bg-brand-700 disabled:opacity-60">
             {submitting ? 'Saving…' : 'Save changes'}
@@ -505,22 +506,36 @@ function EditMappingModal({ row, onClose, onSave }) {
       }
     >
       <form onSubmit={submit} className="space-y-4">
-        {/* Read-only info */}
-        <div className="rounded-md border border-slate-100 bg-slate-50 px-3.5 py-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="w-16 shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">Role</span>
-            <RolePill name={row.roleName || row.roleId} />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-16 shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">Task</span>
-            <span className="text-sm font-medium text-slate-800">
-              {row.taskName || row.taskId}
-              <span className="ml-1.5 font-mono text-xs text-slate-400">{row.taskId}</span>
-            </span>
-          </div>
+        {/* Role */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Role</label>
+          <AppSelect
+            value={roleId}
+            onChange={setRoleId}
+            options={roles.map(r => ({ value: String(r.id), label: r.name }))}
+            placeholder="Search & select a role…"
+            isSearchable
+            menuPortal
+          />
         </div>
 
-        {/* Editable: Status */}
+        {/* Granular Task */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Granular Task</label>
+          <AppSelect
+            value={taskId}
+            onChange={setTaskId}
+            options={Object.entries(tasksByType).map(([typeName, tasks]) => ({
+              label: typeName,
+              options: tasks.map(t => ({ value: String(t.taskId), label: t.taskName })),
+            }))}
+            placeholder="Search & select a task…"
+            isSearchable
+            menuPortal
+          />
+        </div>
+
+        {/* Status */}
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
           <AppSelect
@@ -534,6 +549,14 @@ function EditMappingModal({ row, onClose, onSave }) {
             Inactive mappings are hidden from routing but not deleted.
           </p>
         </div>
+
+        {/* Preview */}
+        {roleId && taskId && (
+          <div className="rounded-md border border-brand-100 bg-brand-50 px-3 py-2.5 text-xs text-brand-700">
+            <strong className="font-semibold">Preview: </strong>
+            {selectedRoleName}{' → '}{selectedTaskName}
+          </div>
+        )}
       </form>
     </Modal>
   )

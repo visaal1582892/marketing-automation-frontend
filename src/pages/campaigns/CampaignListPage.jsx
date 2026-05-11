@@ -11,7 +11,7 @@ import tasksApi from '../../api/tasks'
 import api from '../../api/client'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
-import { useDebounce } from '../../hooks/useDebounce'
+import useDebounce from '../../hooks/useDebounce'
 
 // ─── Status / Priority helpers ────────────────────────────────────────────────
 
@@ -375,14 +375,16 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   const [existingTaskAns,    setExistingTaskAns]    = useState({})    // workTaskId → { questionId: value }
   const [loadingExistQs,     setLoadingExistQs]     = useState({})    // granularTaskId → bool
 
-  // Build granularTaskId → workTask lookup once
+  // Work tasks loaded from detail API (list-view campaigns don't carry workTasks)
+  const [detailWorkTasks, setDetailWorkTasks] = useState(campaign.workTasks || [])
+
   const workTaskByGranularId = useMemo(() => {
     const map = {}
-    for (const wt of (campaign.workTasks || [])) {
+    for (const wt of detailWorkTasks) {
       if (wt.granularTaskId && !map[wt.granularTaskId]) map[wt.granularTaskId] = wt
     }
     return map
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [detailWorkTasks])
 
   // Files – existing (with optional remove) + new uploads
   // existingFiles is populated from the detail API on mount (list-view campaign has no fileUrls)
@@ -473,6 +475,9 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
             removed: false,
           }))
         )
+        // Populate work tasks and deliverables from detail (list-view doesn't include them)
+        if (c.workTasks?.length) setDetailWorkTasks(c.workTasks)
+        if (c.deliverables?.length) setLocalDeliverables(c.deliverables)
       }).catch(() => {}),
     ]).catch(() => {}).finally(() => setLoadingMaster(false))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1471,6 +1476,7 @@ function RequestorCampaignView({ onTotalChange }) {
 
   // ── Column filters ──────────────────────────────────────────────────────────
   const [fCampaign,  setFCampaign]  = useState('')
+  const [fTaskType,  setFTaskType]  = useState('')
   const [fPriority,  setFPriority]  = useState('')
   const [fStatus,    setFStatus]    = useState(() => new URLSearchParams(location.search).get('status') || '')
   const [fDateFrom,  setFDateFrom]  = useState(null)
@@ -1482,7 +1488,7 @@ function RequestorCampaignView({ onTotalChange }) {
 
   // ── Reset page when filters/tab change ────────────────────────────────────
   useEffect(() => { setPage(0) },
-    [dCampaign, fPriority, fStatus, fDateFrom, fDateTo, activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
+    [dCampaign, fTaskType, fPriority, fStatus, fDateFrom, fDateTo, activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch data ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1491,6 +1497,7 @@ function RequestorCampaignView({ onTotalChange }) {
     const params = {
       page, size: PAGE_SIZE,
       ...(dCampaign  && { campaignId: dCampaign  }),
+      ...(fTaskType  && { taskType:   fTaskType  }),
       ...(fPriority  && { priority:   fPriority  }),
       ...(fStatus    && { status:     fStatus    }),
       ...(fDateFrom  && { dateFrom:   fDateFrom  }),
@@ -1530,7 +1537,7 @@ function RequestorCampaignView({ onTotalChange }) {
       .catch(() => { if (alive) toast.error?.('Failed to load campaigns') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [dCampaign, fPriority, fStatus, fDateFrom, fDateTo, page, activeTab, refreshSeed, location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dCampaign, fTaskType, fPriority, fStatus, fDateFrom, fDateTo, page, activeTab, refreshSeed, location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Bookmark handling ─────────────────────────────────────────────────────
   const [bookmarkingId, setBookmarkingId] = useState(null)
@@ -1568,9 +1575,9 @@ function RequestorCampaignView({ onTotalChange }) {
 
   const TERMINAL = ['COMPLETED', 'REJECTED', 'CANCELLED']
 
-  const hasFilters = !!(fCampaign || fPriority || fStatus || fDateFrom || fDateTo)
+  const hasFilters = !!(fCampaign || fTaskType || fPriority || fStatus || fDateFrom || fDateTo)
   const clearAll   = () => {
-    setFCampaign(''); setFPriority(''); setFStatus('')
+    setFCampaign(''); setFTaskType(''); setFPriority(''); setFStatus('')
     setFDateFrom(null); setFDateTo(null)
     if (location.search) navigate('/campaigns', { replace: true })
   }
@@ -1651,7 +1658,17 @@ function RequestorCampaignView({ onTotalChange }) {
                   <td className="px-2 pb-2 pt-1">
                     <input value={fCampaign} onChange={e => setFCampaign(e.target.value)} placeholder="Filter…" className={colFilterCls} />
                   </td>
-                  <td className="px-2 pb-2 pt-1" />
+                  <td className="px-2 pb-2 pt-1">
+                    <AppSelect
+                      value={fTaskType}
+                      onChange={setFTaskType}
+                      options={allTaskTypes.map(n => ({ value: n, label: n }))}
+                      placeholder="All"
+                      size="sm"
+                      isSearchable
+                      menuPortal
+                    />
+                  </td>
                   <td className="px-2 pb-2 pt-1">
                     <AppSelect value={fPriority} onChange={setFPriority} options={PRIORITY_OPTS} placeholder="All" size="sm" isSearchable menuPortal />
                   </td>

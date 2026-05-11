@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import managerApi from '../../api/manager'
 import campaignsApi from '../../api/campaigns'
@@ -10,6 +10,7 @@ import AssetPanel from '../../components/AssetPanel'
 import { useAuth } from '../../auth/AuthContext'
 import DateRangePicker from '../../components/DateRangePicker'
 import Pagination from '../../components/Pagination'
+import useDebounce from '../../hooks/useDebounce'
 
 const PAGE_SIZE = 12
 
@@ -19,9 +20,11 @@ export default function QcReviewPage() {
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
   const { user }  = useAuth()
 
-  const [tasks,   setTasks]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [page,    setPage]    = useState(0)
+  const [tasks,         setTasks]        = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages,    setTotalPages]   = useState(0)
+  const [loading,       setLoading]      = useState(true)
+  const [page,          setPage]         = useState(0)
 
   const [reviewing,         setReviewing]         = useState(null)
   const [reviewingCampaign, setReviewingCampaign] = useState(null)
@@ -36,56 +39,34 @@ export default function QcReviewPage() {
   const [fDateFrom, setFDateFrom] = useState(null)
   const [fDateTo,   setFDateTo]   = useState(null)
 
-  const load = () => {
-    setLoading(true)
-    managerApi.pendingTasks()
-      .then(res => setTasks(res.data || []))
-      .catch(() => showToast('Failed to load review queue', 'error'))
-      .finally(() => setLoading(false))
-  }
-  const refresh = () => {
-    managerApi.pendingTasks()
-      .then(res => setTasks(res.data || []))
-      .catch(() => { /* silent */ })
-  }
+  const dSearch = useDebounce(search, 350)
 
-  useEffect(load, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Reset page when filters change
+  useEffect(() => { setPage(0) }, [dSearch, fDateFrom, fDateTo])
 
-  // Reset to page 0 when filters change
-  useEffect(() => { setPage(0) }, [search, fDateFrom, fDateTo])
-
-  // Flat list sorted latest-first by submittedAt
-  const filteredTasks = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return [...tasks]
-      .sort((a, b) => {
-        const ta = a.submittedAt ? new Date(a.submittedAt).getTime() : 0
-        const tb = b.submittedAt ? new Date(b.submittedAt).getTime() : 0
-        return tb - ta
+  const fetchTasks = useCallback((silent = false) => {
+    if (!silent) setLoading(true)
+    const params = {
+      page, size: PAGE_SIZE,
+      ...(dSearch   && { search:   dSearch   }),
+      ...(fDateFrom && { dateFrom: fDateFrom }),
+      ...(fDateTo   && { dateTo:   fDateTo   }),
+    }
+    managerApi.pendingTasks(params)
+      .then(res => {
+        const data = res.data
+        setTasks(data.content || [])
+        setTotalElements(data.totalElements ?? 0)
+        setTotalPages(data.totalPages ?? 0)
       })
-      .filter(t => {
-        if (fDateFrom) {
-          const d = t.submittedAt ? t.submittedAt.slice(0, 10) : null
-          if (!d || d < fDateFrom) return false
-        }
-        if (fDateTo) {
-          const d = t.submittedAt ? t.submittedAt.slice(0, 10) : null
-          if (!d || d > fDateTo) return false
-        }
-        if (!q) return true
-        return [
-          String(t.taskId),
-          String(t.campaignId),
-          t.granularTaskName || '',
-          t.taskTypeName     || '',
-          t.assigneeName     || '',
-          t.requestorName    || '',
-        ].join(' ').toLowerCase().includes(q)
-      })
-  }, [tasks, search, fDateFrom, fDateTo])
+      .catch(() => { if (!silent) showToast('Failed to load review queue', 'error') })
+      .finally(() => { if (!silent) setLoading(false) })
+  }, [page, dSearch, fDateFrom, fDateTo]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalPages = Math.ceil(filteredTasks.length / PAGE_SIZE)
-  const paged      = filteredTasks.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  useEffect(() => { fetchTasks() }, [fetchTasks, location.key])
+
+  const load    = () => fetchTasks()
+  const refresh = () => fetchTasks(true)
 
   const open = (task, act = 'APPROVED') => {
     setReviewing(task)
@@ -174,10 +155,7 @@ export default function QcReviewPage() {
         <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 flex items-center gap-1.5">
           <Icon name="inbox" className="h-3.5 w-3.5 text-purple-600" />
           <span className="text-xs font-semibold text-purple-700">
-            {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}
-            {filteredTasks.length !== tasks.length && (
-              <span className="ml-1 font-normal text-purple-500">of {tasks.length}</span>
-            )}
+            {totalElements} task{totalElements !== 1 ? 's' : ''}
           </span>
         </div>
         {(fDateFrom || fDateTo || search) && (
@@ -193,7 +171,7 @@ export default function QcReviewPage() {
       {/* ── Content ── */}
       {loading ? (
         <p className="text-center text-slate-400 py-12 text-sm">Loading…</p>
-      ) : filteredTasks.length === 0 ? (
+      ) : tasks.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white py-14 text-center">
           <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
           <p className="text-sm text-slate-500">
@@ -208,7 +186,7 @@ export default function QcReviewPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {paged.map(t => (
+          {tasks.map(t => (
             <FlatTaskCard
               key={t.taskId}
               task={t}
@@ -223,7 +201,7 @@ export default function QcReviewPage() {
             <Pagination
               page={page}
               totalPages={totalPages}
-              totalElements={filteredTasks.length}
+              totalElements={totalElements}
               pageSize={PAGE_SIZE}
               onPageChange={setPage}
               loading={loading}
@@ -260,13 +238,7 @@ export default function QcReviewPage() {
         <RequestBriefDrawer
           campaignId={briefCampaignId}
           onClose={() => setBriefCampaignId(null)}
-          onCampaignChanged={(updated) => {
-            setTasks(prev => prev.map(t =>
-              t.campaignId === updated.campaignId
-                ? { ...t, campaignPriority: updated.priority, campaignStatus: updated.status }
-                : t
-            ))
-          }}
+          onCampaignChanged={() => { refresh() }}
         />
       )}
     </div>

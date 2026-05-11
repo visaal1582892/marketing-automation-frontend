@@ -6,7 +6,7 @@ import Modal from '../../components/Modal'
 import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
 import Pagination from '../../components/Pagination'
-import { useDebounce } from '../../hooks/useDebounce'
+import useDebounce from '../../hooks/useDebounce'
 
 const BASE = '/admin/users'
 const SKILL_LEVELS = ['JUNIOR', 'SENIOR']

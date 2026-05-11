@@ -29,8 +29,13 @@ export const findResource = (slug) =>
   MASTER_RESOURCES.find((r) => r.slug === slug)
 
 export const masterApi = {
-  list:   (slug, includeInactive = false) =>
+  /** Full list (no pagination) — used by form dropdowns. */
+  list: (slug, includeInactive = false) =>
     api.get(`/master/${slug}`, { params: { includeInactive } }).then((r) => r.data),
+
+  /** Paged + filtered list for admin management tables. Returns PagedResponse. */
+  listPaged: (slug, { id, name, status, page = 0, size = 20 } = {}) =>
+    api.get(`/master/${slug}`, { params: { id, name, status, page, size } }).then((r) => r.data),
 
   get:    (slug, code)        => api.get(`/master/${slug}/${code}`).then((r) => r.data),
   create: (slug, payload)     => api.post(`/master/${slug}`, payload).then((r) => r.data),
@@ -40,11 +45,19 @@ export const masterApi = {
 
 /** API for Granular Tasks (/api/master/granular-tasks) */
 export const granularTasksApi = {
+  /** Full list (no pagination) — used by form dropdowns. */
   list: (includeInactive = false, taskTypeId = null) => {
     const params = { includeInactive }
     if (taskTypeId) params.taskTypeId = taskTypeId
     return api.get('/master/granular-tasks', { params }).then((r) => r.data)
   },
+
+  /** Paged + filtered list for admin Granular Tasks table. Returns PagedResponse. */
+  listPaged: ({ taskId, taskName, taskTypeName, status, page = 0, size = 20 } = {}) =>
+    api.get('/master/granular-tasks', {
+      params: { taskId, taskName, taskTypeName, status, page, size },
+    }).then((r) => r.data),
+
   /** Dynamic questions mapped to this granular task (new-request form). */
   getQuestions: (id) =>
     api.get(`/master/granular-tasks/${id}/questions`).then((r) => r.data),
@@ -56,11 +69,29 @@ export const granularTasksApi = {
 
 /** API for Role → Task mappings (/api/master/routing/role-task) */
 export const roleTaskApi = {
-  list:        ()              => api.get('/master/routing/role-task').then((r) => r.data),
+  /** Full list (no pagination). */
+  list: ()              => api.get('/master/routing/role-task').then((r) => r.data),
+
+  /** Paged + filtered list for admin Role-Task Mapping table. Returns PagedResponse. */
+  listPaged: ({ roleName, taskName, status, page = 0, size = 20 } = {}) =>
+    api.get('/master/routing/role-task', {
+      params: { roleName, taskName, status, page, size },
+    }).then((r) => r.data),
+
   listByRole:  (roleId)        => api.get(`/master/routing/role-task/${roleId}`).then((r) => r.data),
   create:      (roleId, taskId) =>
     api.post('/master/routing/role-task', { roleId, taskId }).then((r) => r.data),
-  update:      (mappingId, status) =>
-    api.patch(`/master/routing/role-task/${mappingId}`, { status }).then((r) => r.data),
+  update:      (mappingId, { roleId, taskId, status }) =>
+    api.patch(`/master/routing/role-task/${mappingId}`, { roleId, taskId, status }).then((r) => r.data),
   remove:      (mappingId)     => api.delete(`/master/routing/role-task/${mappingId}`).then((r) => r.data),
+}
+
+/** API for Question Library (/api/admin/questions) */
+export const questionApi = {
+  /** Full list (no pagination). */
+  list: () => api.get('/admin/questions').then((r) => r.data),
+
+  /** Paged + filtered list for admin Question Library table. Returns PagedResponse. */
+  listPaged: ({ questionText, page = 0, size = 20 } = {}) =>
+    api.get('/admin/questions', { params: { questionText, page, size } }).then((r) => r.data),
 }

@@ -9,7 +9,7 @@ import DateRangePicker from '../../components/DateRangePicker'
 import Pagination from '../../components/Pagination'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
 import { useAuth } from '../../auth/AuthContext'
-import { useDebounce } from '../../hooks/useDebounce'
+import useDebounce from '../../hooks/useDebounce'
 
 function fmtDate(iso) {
   return iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'

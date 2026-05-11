@@ -6,8 +6,8 @@ const managerApi = {
   // ── All tasks — Marketing Head overview (server-side paged + filtered) ──────
   allTasks: (params = {}) => api.get(`${BASE}/tasks/all`, { params }),
 
-  // ── QC review queue ────────────────────────────────────────────────────────
-  pendingTasks: ()        => api.get(`${BASE}/tasks/review`),
+  // ── QC review queue (server-side paged + filtered) ────────────────────────
+  pendingTasks: (params = {}) => api.get(`${BASE}/tasks/review`, { params }),
   reviewTask:   (id, payload) => api.post(`${BASE}/tasks/${id}/review`, payload),
   taskHistory:  (id)      => api.get(`${BASE}/tasks/${id}/history`),
 
