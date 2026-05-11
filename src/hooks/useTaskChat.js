@@ -16,7 +16,7 @@ const MAX_DELAY    = 30_000  // cap at 30 s
  */
 function buildWsUrl() {
   const raw = (import.meta.env.VITE_API_BASE_URL || 'https://return-atlas-hexagram.ngrok-free.dev/')
-  // const raw = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/')
+   // const raw = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/')
     .trim()
     .replace(/\/+$/, '')
     .replace(/\/api$/, '')
