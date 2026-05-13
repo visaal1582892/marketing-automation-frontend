@@ -253,6 +253,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
               onChange={v => set('departmentId', v)}
               options={departments.map(d => ({ value: String(d.id), label: d.name }))}
               placeholder="— Select department —"
+              menuPortal
             />
           </div>
 
@@ -264,6 +265,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
               onChange={v => set('designationId', v)}
               options={designations.map(d => ({ value: String(d.id), label: d.name }))}
               placeholder="— Select designation —"
+              menuPortal
             />
           </div>
 
@@ -276,6 +278,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
               options={SKILL_LEVELS.map(s => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase() }))}
               placeholder="Select…"
               isClearable={false}
+              menuPortal
             />
           </div>
 
@@ -289,6 +292,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
                 options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}
                 placeholder="Select…"
                 isClearable={false}
+                menuPortal
               />
             </div>
           )}

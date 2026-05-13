@@ -636,7 +636,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
               {requestingContent ? 'Sending…' : 'Content Rework'}
             </button>
           )}
-          {(isAssigned || isInProgress) && !isCancelled && !isLocked && (
+          {(isAssigned || isInProgress) && !isCancelled && (
             <button
               onClick={onComment}
               className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition"
@@ -656,7 +656,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
               {busy ? 'Resuming…' : 'Resume Task'}
             </button>
           )}
-          {!isLocked && (
+          {!closed && (
             <button
               onClick={onView}
               className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1"

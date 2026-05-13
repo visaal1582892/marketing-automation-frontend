@@ -301,6 +301,7 @@ export default function QuestionMasterPage() {
                 options={FIELD_TYPES}
                 placeholder="Select field type…"
                 isClearable={false}
+                menuPortal
               />
             </div>
             <div className="flex items-end pb-1">
