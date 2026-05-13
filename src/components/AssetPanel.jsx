@@ -276,8 +276,64 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
   }
 
   const downloadAll = () => {
-    assets.forEach(a => triggerDownload(task.taskId, a.assetId, displayName(a)))
+    assets.forEach(a => triggerDownload(a.taskId || task.taskId, a.assetId, displayName(a)))
   }
+
+  const linkedTaskId = task.linkedContentTaskId
+  const mainAssets = linkedTaskId
+    ? assets.filter(a => (a.taskId || task.taskId) === task.taskId)
+    : assets
+  const contentAssets = linkedTaskId
+    ? assets.filter(a => a.taskId === linkedTaskId)
+    : []
+
+  const renderAssetRow = (a, i) => (
+    <div key={a.assetId ?? i} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+      {(a.thumbnailUrl || isImage(a.url)) ? (
+        <img src={a.thumbnailUrl || a.url} alt="" className="h-14 w-14 rounded-lg object-cover shrink-0 border border-slate-200" />
+      ) : isVideo(a.url) ? (
+        <div className="h-14 w-14 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
+          <Icon name="play" className="h-5 w-5 text-purple-500" />
+        </div>
+      ) : (
+        <div className="h-14 w-14 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+          <Icon name="fileText" className="h-5 w-5 text-slate-400" />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-slate-800 truncate">{displayName(a)}</p>
+        <p className="text-[10px] text-slate-400 mt-0.5">by {a.userName} · {fmtDate(a.createdAt)}</p>
+        <div className="flex items-center gap-2 mt-1.5">
+          <button
+            onClick={() => triggerDownload(a.taskId || task.taskId, a.assetId, displayName(a))}
+            className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-600 hover:text-brand-800 transition"
+          >
+            <Icon name="download" className="h-3 w-3" />
+            Download
+          </button>
+          <span className="text-slate-200">|</span>
+          <a
+            href={openUrl(a.url, displayName(a))}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 hover:text-slate-700 transition"
+          >
+            <Icon name="externalLink" className="h-3 w-3" />
+            Open
+          </a>
+        </div>
+      </div>
+      {Number(a.userId) === Number(currentUserId) && (
+        <button
+          onClick={() => removeAsset(a.assetId)}
+          title="Remove asset"
+          className="rounded-lg p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0"
+        >
+          <Icon name="trash2" className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  )
 
   const handleDragOver = (e) => { e.preventDefault(); setIsDragOver(true) }
   const handleDragLeave = (e) => { e.preventDefault(); setIsDragOver(false) }
@@ -405,58 +461,26 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
             {!inline && <Icon name="upload" className="mx-auto h-8 w-8 text-slate-200 mb-2" />}
             <p className="text-sm text-slate-400">No assets yet.{canUpload && !inline ? ' Use Add Files above.' : ''}</p>
           </div>
-        ) : assets.map((a, i) => (
-          <div key={a.assetId ?? i} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
-            {/* Preview */}
-            {(a.thumbnailUrl || isImage(a.url)) ? (
-              <img src={a.thumbnailUrl || a.url} alt="" className="h-14 w-14 rounded-lg object-cover shrink-0 border border-slate-200" />
-            ) : isVideo(a.url) ? (
-              <div className="h-14 w-14 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
-                <Icon name="play" className="h-5 w-5 text-purple-500" />
-              </div>
-            ) : (
-              <div className="h-14 w-14 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                <Icon name="fileText" className="h-5 w-5 text-slate-400" />
-              </div>
-            )}
-
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-800 truncate">{displayName(a)}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">by {a.userName} · {fmtDate(a.createdAt)}</p>
-              <div className="flex items-center gap-2 mt-1.5">
-                <button
-                  onClick={() => triggerDownload(task.taskId, a.assetId, displayName(a))}
-                  className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-600 hover:text-brand-800 transition"
-                >
-                  <Icon name="download" className="h-3 w-3" />
-                  Download
-                </button>
-                <span className="text-slate-200">|</span>
-                <a
-                  href={openUrl(a.url, displayName(a))}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 hover:text-slate-700 transition"
-                >
-                  <Icon name="externalLink" className="h-3 w-3" />
-                  Open
-                </a>
+        ) : linkedTaskId ? (
+          <div className="space-y-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Main task assets</p>
+              <div className="space-y-2">
+                {mainAssets.length === 0
+                  ? <p className="text-sm text-slate-400 py-2">No main task assets yet.</p>
+                  : mainAssets.map(renderAssetRow)}
               </div>
             </div>
-
-            {/* Delete — own assets only */}
-            {Number(a.userId) === Number(currentUserId) && (
-              <button
-                onClick={() => removeAsset(a.assetId)}
-                title="Remove asset"
-                className="rounded-lg p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0"
-              >
-                <Icon name="trash2" className="h-3.5 w-3.5" />
-              </button>
-            )}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-violet-500 mb-2">Content writer assets</p>
+              <div className="space-y-2">
+                {contentAssets.length === 0
+                  ? <p className="text-sm text-slate-400 py-2">No content assets yet.</p>
+                  : contentAssets.map(renderAssetRow)}
+              </div>
+            </div>
           </div>
-        ))}
+        ) : assets.map(renderAssetRow)}
       </div>
     </div>
   )

@@ -55,7 +55,7 @@ export function AuthProvider({ children }) {
       roles.some(r => roleNames.some(n => n.toLowerCase() === r.toLowerCase()))
 
     // Roles that cannot be assigned tasks by the routing engine.
-    const NON_WORKER_ROLES = ['requestor', 'admin', 'marketing manager', 'head', 'regional manager']
+    const NON_WORKER_ROLES = ['requestor', 'admin', 'marketing manager', 'procurement manager', 'head', 'regional manager']
     // True when the user holds at least one execution (worker) role, even if they
     // also hold a manager/admin role.  Used to gate My Tasks / Collaborations.
     const isWorker = roles.some(r => !NON_WORKER_ROLES.includes(r.toLowerCase()))
@@ -66,12 +66,13 @@ export function AuthProvider({ children }) {
       loading,
       isAuthenticated: Boolean(token && user),
       // Boolean flags — true when user holds that role (or any of the combined roles)
-      isAdmin:            hasAnyRole('admin'),
-      isRequestor:        hasAnyRole('requestor'),
-      isMarketingManager: hasAnyRole('marketing manager'),
-      isMarketingCreator: hasAnyRole('marketing creator'),
-      isHead:             hasAnyRole('head'),
-      isRegionalManager:  hasAnyRole('regional manager'),
+      isAdmin:               hasAnyRole('admin'),
+      isRequestor:           hasAnyRole('requestor'),
+      isMarketingManager:    hasAnyRole('marketing manager'),
+      isProcurementManager:  hasAnyRole('procurement manager'),
+      isMarketingCreator:    hasAnyRole('marketing creator'),
+      isHead:                hasAnyRole('head'),
+      isRegionalManager:     hasAnyRole('regional manager'),
       /** True if the user holds at least one worker (execution) role. */
       isWorker,
       /** Returns true if the current user holds ANY of the provided role names (case-insensitive). */

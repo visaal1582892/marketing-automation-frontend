@@ -39,11 +39,12 @@ export default function DashboardPage() {
   // Whether to show the "New Request" CTA (same set of roles that can submit)
   const canSubmitRequest = isRequestor || isHead || isRegionalManager
 
-  const [campaigns,      setCampaigns]      = useState([])
-  const [tasks,          setTasks]          = useState([])
-  const [opsQcTasks,     setOpsQcTasks]     = useState([])
-  const [opsCounts,      setOpsCounts]      = useState({ qcReview: 0, rework: 0, inProgress: 0, completed: 0, assigned: 0, held: 0, cancelled: 0 })
-  const [loading,        setLoading]        = useState(true)
+  const [campaigns,            setCampaigns]            = useState([])
+  const [tasks,                setTasks]                = useState([])
+  const [opsQcTasks,           setOpsQcTasks]           = useState([])
+  const [opsCounts,            setOpsCounts]            = useState({ qcReview: 0, rework: 0, inProgress: 0, completed: 0, assigned: 0, held: 0, cancelled: 0 })
+  const [completedTasksCount,  setCompletedTasksCount]  = useState(0)
+  const [loading,              setLoading]              = useState(true)
 
   useEffect(() => {
     let alive = true
@@ -59,6 +60,8 @@ export default function DashboardPage() {
     Promise.all([
       // Requestor: just first page is enough for the array (used for task-level status filters)
       need(showRequestWidgets, () => campaignsApi.list().then(r => r.data)),
+      // Requestor: total completed tasks count (size=1 — only totalElements needed)
+      need(showRequestWidgets, () => campaignsApi.completedTasks({ page: 0, size: 1 }).then(r => r.data?.totalElements ?? 0)),
       // Worker: own task list
       need(showWorkerWidgets,  () => tasksApi.listMy().then(r => r.data)),
       // Ops: QC pending (full list — usually small)
@@ -70,9 +73,10 @@ export default function DashboardPage() {
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'ASSIGNED',    size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'HELD',        size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'CANCELLED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
-    ]).then(([cs, ts, qc, rework, inProgress, completed, assigned, held, cancelled]) => {
+    ]).then(([cs, completedTasks, ts, qc, rework, inProgress, completed, assigned, held, cancelled]) => {
       if (!alive) return
       setCampaigns(toArr(cs))
+      setCompletedTasksCount(completedTasks ?? 0)
       setTasks(toArr(ts))
       const qcArr = toArr(qc)
       setOpsQcTasks(qcArr)
@@ -329,7 +333,7 @@ export default function DashboardPage() {
             tone="emerald"
             icon="check"
             label="Delivered Tasks"
-            value={myRequestCounts.completed}
+            value={completedTasksCount}
             cta="View →"
           />
           <KpiCard

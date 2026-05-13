@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import collaborationApi from '../../api/collaboration'
 import AppSelect from '../../components/AppSelect'
 import useTaskChat from '../../hooks/useTaskChat'
@@ -540,8 +541,8 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh }) {
 
         {/* ── Footer ── */}
         <div className="px-3 py-2 bg-slate-50 border-t border-slate-100 space-y-1.5">
-          {/* Action buttons */}
-          <div className="grid grid-cols-3 gap-1">
+          {/* Action buttons — requestors cannot view assets until approved */}
+          <div className={`grid gap-1 ${role === 'REQUESTOR' ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <button
               title={isInteractionLocked ? 'Chat unavailable' : 'Open chat'}
               onClick={isInteractionLocked ? undefined : onChat}
@@ -555,14 +556,16 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh }) {
               Chat
             </button>
 
-            <button
-              title="Files & assets"
-              onClick={onAssets}
-              className="flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100 transition active:scale-95"
-            >
-              <Icon name="upload" className="h-3 w-3" />
-              Assets
-            </button>
+            {role !== 'REQUESTOR' && (
+              <button
+                title="Files & assets"
+                onClick={onAssets}
+                className="flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100 transition active:scale-95"
+              >
+                <Icon name="upload" className="h-3 w-3" />
+                Assets
+              </button>
+            )}
 
             <button
               title="View campaign brief"
@@ -603,7 +606,11 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh }) {
 const PAGE_SIZE = 12
 
 export default function CollaborationsPage() {
-  const toast     = useToast()
+  const toast          = useToast()
+  const navigate       = useNavigate()
+  const [searchParams] = useSearchParams()
+  const taskIdFilter   = searchParams.get('taskId') // e.g. "WORK-TASK-42" from Collaborate button
+
   const [tasks,         setTasks]        = useState([])
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages,    setTotalPages]   = useState(0)
@@ -614,14 +621,14 @@ export default function CollaborationsPage() {
   const [assetTask,  setAssetTask]  = useState(null)
   const [briefTask,  setBriefTask]  = useState(null)
 
-  // ── Filter state ─────────────────────────────────────────────────────────────
+  // ── Filter state — hidden when taskIdFilter is active ────────────────────────
   const [search,     setSearch]     = useState('')
   const [roleFilter, setRoleFilter] = useState('all') // 'all' | 'mine' | 'involved'
 
   const dSearch = useDebounce(search, 350)
 
   // Reset page when filters change
-  useEffect(() => { setPage(0) }, [dSearch, roleFilter])
+  useEffect(() => { setPage(0) }, [dSearch, roleFilter, taskIdFilter])
 
   const fetchTasks = useCallback((silent = false) => {
     if (!silent) setLoading(true)
@@ -629,6 +636,7 @@ export default function CollaborationsPage() {
       page, size: PAGE_SIZE,
       role: roleFilter,
       ...(dSearch && { search: dSearch }),
+      ...(taskIdFilter && { taskId: taskIdFilter }),
     }
     collaborationApi.getMyCollaborations(params)
       .then(res => {
@@ -639,11 +647,13 @@ export default function CollaborationsPage() {
       })
       .catch(() => { if (!silent) toast.error?.('Failed to load collaborations.') })
       .finally(() => { if (!silent) setLoading(false) })
-  }, [page, dSearch, roleFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, dSearch, roleFilter, taskIdFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchTasks() }, [fetchTasks])
 
   const load = () => fetchTasks()
+
+  const clearTaskFilter = () => navigate('/collaborations')
 
   return (
     <div className="mx-auto max-w-7xl pb-10 space-y-5">
@@ -657,51 +667,73 @@ export default function CollaborationsPage() {
               <Icon name="users" className="h-4.5 w-4.5" />
             </div>
             <div>
-              <h1 className="text-base font-bold text-slate-900 leading-tight">Collaborations</h1>
+              <h1 className="text-base font-bold text-slate-900 leading-tight">
+                Collaborations
+                {taskIdFilter && (
+                  <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700 ring-1 ring-brand-200">
+                    <Icon name="filter" className="h-3 w-3" />
+                    {taskIdFilter}
+                  </span>
+                )}
+              </h1>
               {!loading && (
                 <p className="text-xs text-slate-500">
-                  {totalElements} active collaboration{totalElements !== 1 ? 's' : ''}
+                  {taskIdFilter
+                    ? `Showing task ${taskIdFilter}`
+                    : `${totalElements} active collaboration${totalElements !== 1 ? 's' : ''}`}
                 </p>
               )}
             </div>
           </div>
 
-          {/* Right: role select + search + refresh */}
+          {/* Right: filters (hidden when viewing a specific task) + refresh */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Role type select */}
-            <select
-              value={roleFilter}
-              onChange={e => setRoleFilter(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 cursor-pointer"
-            >
-              <option value="all">All</option>
-              <option value="mine">Created by me</option>
-              <option value="involved">I'm involved</option>
-            </select>
+            {taskIdFilter ? (
+              <button
+                onClick={clearTaskFilter}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 active:scale-95"
+              >
+                <Icon name="arrowLeft" className="h-3.5 w-3.5" />
+                Back to all
+              </button>
+            ) : (
+              <>
+                {/* Role type select */}
+                <select
+                  value={roleFilter}
+                  onChange={e => setRoleFilter(e.target.value)}
+                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 cursor-pointer"
+                >
+                  <option value="all">All</option>
+                  <option value="mine">Created by me</option>
+                  <option value="involved">I'm involved</option>
+                </select>
 
-            {/* Search */}
-            <div className="relative">
-              <Icon name="search" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search…"
-                className="w-48 rounded-lg border border-slate-200 pl-8 pr-7 py-1.5 text-xs text-slate-700
-                  placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 focus:w-64 transition-all"
-              />
-              {search && (
-                <button onClick={() => setSearch('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition">
-                  <Icon name="x" className="h-3 w-3" />
-                </button>
-              )}
-            </div>
+                {/* Search */}
+                <div className="relative">
+                  <Icon name="search" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search…"
+                    className="w-48 rounded-lg border border-slate-200 pl-8 pr-7 py-1.5 text-xs text-slate-700
+                      placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 focus:w-64 transition-all"
+                  />
+                  {search && (
+                    <button onClick={() => setSearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition">
+                      <Icon name="x" className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
 
-            {/* Result count chip */}
-            {!loading && (
-              <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500">
-                {totalElements}
-              </span>
+                {/* Result count chip */}
+                {!loading && (
+                  <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500">
+                    {totalElements}
+                  </span>
+                )}
+              </>
             )}
 
             <button

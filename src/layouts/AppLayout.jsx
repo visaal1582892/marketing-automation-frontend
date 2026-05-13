@@ -135,7 +135,7 @@ const TOP_NAV = [
 ]
 
 export default function AppLayout() {
-  const { user, logout, isAdmin, isHead, isRegionalManager, isMarketingManager, isRequestor, isWorker } = useAuth()
+  const { user, logout, isAdmin, isHead, isRegionalManager, isMarketingManager, isProcurementManager, isRequestor, isWorker } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -146,13 +146,13 @@ export default function AppLayout() {
   const [masterOpen, setMasterOpen]     = useState(true)
   const [managerOpen, setManagerOpen]   = useState(true)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
-  // Admin alone does NOT get Manager Tools — the Marketing Manager role is required.
-  const showManagerTools = isMarketingManager
+  // Admin alone does NOT get Manager Tools — Marketing Manager or Procurement Manager role is required.
+  const showManagerTools = isMarketingManager || isProcurementManager
   // "My Tasks" is for anyone who holds at least one worker (execution) role,
   // even if they also hold a manager/admin role.
   const showMyTasks = isWorker
   // "Collaborations" is visible to workers, requestors, marketing managers, and admins.
-  const showCollaborations = isWorker || isRequestor || isMarketingManager || isAdmin
+  const showCollaborations = isWorker || isRequestor || isMarketingManager || isProcurementManager || isAdmin
   // "Requests" is for anyone who submits briefs. Admin alone does not qualify —
   // assign the Requestor role as well if an admin needs to submit requests.
   const showRequests = isRequestor || isHead || isRegionalManager
@@ -179,6 +179,7 @@ export default function AppLayout() {
     if (location.pathname.startsWith('/admin/granular-tasks'))     return 'Granular Tasks'
     if (location.pathname.startsWith('/admin/role-task-mappings')) return 'Role → Task Mappings'
     if (location.pathname.startsWith('/admin/questions'))           return 'Question Library'
+    if (location.pathname.startsWith('/admin/qc-routing'))          return 'QC Routing'
     if (location.pathname.startsWith('/admin/users'))              return 'User Management'
     if (location.pathname.startsWith('/campaigns/new'))            return 'New Marketing Request'
     if (location.pathname.startsWith('/campaigns/completed'))      return 'Completed Tasks'
@@ -336,6 +337,14 @@ export default function AppLayout() {
                 to="/admin/questions"
                 label="Question Library"
                 icon="clipboard"
+                collapsed={collapsed}
+                nested
+                onNavigate={() => setMobileOpen(false)}
+              />
+              <SidebarLink
+                to="/admin/qc-routing"
+                label="QC Routing"
+                icon="shield"
                 collapsed={collapsed}
                 nested
                 onNavigate={() => setMobileOpen(false)}

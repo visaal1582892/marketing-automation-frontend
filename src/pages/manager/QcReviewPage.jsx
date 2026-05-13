@@ -5,7 +5,6 @@ import campaignsApi from '../../api/campaigns'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
-import AssetPreviewModal from '../../components/AssetPreviewModal'
 import AssetPanel from '../../components/AssetPanel'
 import { useAuth } from '../../auth/AuthContext'
 import DateRangePicker from '../../components/DateRangePicker'
@@ -226,10 +225,8 @@ export default function QcReviewPage() {
       )}
 
       {assetPreviewTask && (
-        <AssetPreviewModal
-          taskId={assetPreviewTask.taskId}
-          taskName={assetPreviewTask.granularTaskName || `Task ${assetPreviewTask.taskId}`}
-          currentUserId={user?.id}
+        <AssetPanel
+          task={assetPreviewTask}
           onClose={() => setAssetPreviewTask(null)}
         />
       )}
@@ -415,8 +412,8 @@ function TaskRow({ task, onApprove, onRework, onReject, onViewAssets }) {
         {/* Left: name + meta tags */}
         <div className="space-y-1 flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold tabular-nums text-slate-500">
-              <span className="font-normal text-slate-400">TASK</span>{task.taskId}
+            <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold tabular-nums text-slate-600">
+              {task.taskId}
             </span>
             <span className="text-sm font-bold text-slate-900 truncate">
               {task.granularTaskName || task.taskTypeName || 'Task'}

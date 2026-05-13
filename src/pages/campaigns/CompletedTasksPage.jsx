@@ -8,6 +8,7 @@ import AppSelect from '../../components/AppSelect'
 import DateRangePicker from '../../components/DateRangePicker'
 import Pagination from '../../components/Pagination'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
+import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import { useAuth } from '../../auth/AuthContext'
 import useDebounce from '../../hooks/useDebounce'
 
@@ -54,6 +55,10 @@ export default function CompletedTasksPage() {
 
   // ── Asset preview modal ─────────────────────────────────────────────────────
   const [assetTask, setAssetTask] = useState(null)
+
+  // ── Brief drawer ─────────────────────────────────────────────────────────────
+  const [briefCampaignId, setBriefCampaignId] = useState(null)
+  const [briefTaskId,     setBriefTaskId]     = useState(null)
 
   // ── Debounced text inputs ───────────────────────────────────────────────────
   const dCampaign     = useDebounce(fCampaign)
@@ -108,6 +113,7 @@ export default function CompletedTasksPage() {
 
   const handleViewAssets = useCallback((t) => setAssetTask(t), [])
   const handleOpenRework = useCallback((t) => { setReworkTask(t); setReworkMsg('') }, [])
+  const handleViewBrief  = useCallback((t) => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }, [])
 
   const submitRework = async () => {
     if (!reworkTask || !reworkMsg.trim()) return
@@ -243,6 +249,7 @@ export default function CompletedTasksPage() {
                     task={t}
                     onViewAssets={handleViewAssets}
                     onRework={handleOpenRework}
+                    onViewBrief={handleViewBrief}
                   />
                 ))}
               </tbody>
@@ -281,12 +288,21 @@ export default function CompletedTasksPage() {
           onConfirm={submitRework}
         />
       )}
+
+      {/* ── Brief drawer ── */}
+      {briefCampaignId && (
+        <RequestBriefDrawer
+          campaignId={briefCampaignId}
+          filterTaskId={briefTaskId}
+          onClose={() => { setBriefCampaignId(null); setBriefTaskId(null) }}
+        />
+      )}
     </div>
   )
 }
 
 // ─── Memoized table row ───────────────────────────────────────────────────────
-const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, onViewAssets, onRework }) {
+const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, onViewAssets, onRework, onViewBrief }) {
   return (
     <tr className="hover:bg-slate-50/70 transition">
       <td className="px-3 py-3">
@@ -311,6 +327,14 @@ const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, onViewAssets,
       <td className="px-3 py-3 text-slate-500">{fmtDate(t.completedAt)}</td>
       <td className="px-3 py-3">
         <div className="flex items-center gap-2 justify-end">
+          <button
+            onClick={() => onViewBrief(t)}
+            className="flex items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 transition"
+            title="View campaign brief"
+          >
+            <Icon name="eye" className="h-3.5 w-3.5" />
+            Brief
+          </button>
           <button
             onClick={() => onViewAssets(t)}
             className="flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition"

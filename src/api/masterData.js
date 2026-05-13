@@ -9,7 +9,6 @@ export const MASTER_RESOURCES = [
   { slug: 'departments',         label: 'Departments',         icon: 'building'  },
   { slug: 'designations',        label: 'Designations',        icon: 'tag'       },
   { slug: 'roles',               label: 'Roles',               icon: 'shield'    },
-  { slug: 'requirement-types',   label: 'Requirement Types',   icon: 'clipboard' },
   { slug: 'task-types',          label: 'Task Types',          icon: 'list'      },
   { slug: 'regions',             label: 'Regions',             icon: 'globe'     },
   // Form field dropdowns — all master-table driven

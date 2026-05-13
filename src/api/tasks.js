@@ -11,6 +11,10 @@ const tasksApi = {
   /** Click "Accept" — starts the timer (status → IN_PROGRESS). */
   accept: (id) => api.patch(`${BASE}/${id}/accept`),
 
+  requestContent: (id) => api.post(`${BASE}/${id}/request-content`),
+
+  getContentDeliverables: (id) => api.get(`${BASE}/${id}/content-deliverables`),
+
   /**
    * Submit work for QC review.
    * payload: { submissionNotes, assetUrls: string[] }

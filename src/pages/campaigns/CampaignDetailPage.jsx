@@ -350,9 +350,9 @@ export default function CampaignDetailPage() {
                                 bg-slate-50/70 px-4 py-3 border-b border-slate-100">
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5
-                                       text-[10px] font-bold tabular-nums text-slate-500">
-                        <span className="font-normal text-slate-400">TASK</span>{t.taskId}
+                      <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5
+                                       text-[10px] font-bold tabular-nums text-slate-600">
+                        {t.taskId}
                       </span>
                       <span className="text-sm font-bold text-slate-900">
                         {t.granularTaskName || 'Task'}

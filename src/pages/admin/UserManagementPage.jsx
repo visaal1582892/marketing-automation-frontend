@@ -430,18 +430,28 @@ export default function UserManagementPage() {
   }, [dName, dEmail, fRole, fDept, fDesignation, fSkill, fStatus, page, refreshSeed]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load master data for dropdowns once ──────────────────────────────────
+  // Uses allSettled so a failure in one endpoint doesn't wipe the other two.
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       masterApi.list('roles', false),
       masterApi.list('departments', false),
       masterApi.list('designations', false),
-    ])
-      .then(([r, d, dsg]) => {
-        setRoles(r.map(x => ({ id: x.id, name: x.name })))
-        setDepartments(d.map(x => ({ id: x.id, name: x.name })))
-        setDesignations(dsg.map(x => ({ id: x.id, name: x.name })))
-      })
-      .catch(() => toast.error('Failed to load master data.'))
+    ]).then(([rRes, dRes, dsgRes]) => {
+      if (rRes.status === 'fulfilled')
+        setRoles(rRes.value.map(x => ({ id: x.id, name: x.name })))
+      else
+        toast.error('Failed to load roles.')
+
+      if (dRes.status === 'fulfilled')
+        setDepartments(dRes.value.map(x => ({ id: x.id, name: x.name })))
+      else
+        toast.error('Failed to load departments.')
+
+      if (dsgRes.status === 'fulfilled')
+        setDesignations(dsgRes.value.map(x => ({ id: x.id, name: x.name })))
+      else
+        toast.error('Failed to load designations.')
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

@@ -116,7 +116,9 @@ const PATHS = {
       <path d="M21 21l-4-4" />
     </>
   ),
-  chevron: <path d="M9 6l6 6-6 6" />,
+  chevron:   <path d="M9 6l6 6-6 6" />,
+  arrowLeft: <path d="M19 12H5m0 0l7 7m-7-7l7-7" />,
+  filter:    <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />,
   check: <path d="M5 12l5 5L20 7" />,
   inbox: (
     <>

@@ -10,6 +10,7 @@ import GranularTaskPage from './pages/admin/GranularTaskPage'
 import RoleTaskMappingPage from './pages/admin/RoleTaskMappingPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
 import QuestionMasterPage from './pages/admin/QuestionMasterPage'
+import QcRoutingPage from './pages/admin/QcRoutingPage'
 import CampaignFormPage from './pages/campaigns/CampaignFormPage'
 import CampaignListPage from './pages/campaigns/CampaignListPage'
 import CampaignDetailPage from './pages/campaigns/CampaignDetailPage'
@@ -106,7 +107,7 @@ export default function App() {
               <Route
                 path="/manager/task-management"
                 element={
-                  <ProtectedRoute requireRole={['Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Marketing Manager', 'Procurement Manager']}>
                     <TaskManagementPage />
                   </ProtectedRoute>
                 }
@@ -114,7 +115,7 @@ export default function App() {
               <Route
                 path="/manager/qc-review"
                 element={
-                  <ProtectedRoute requireRole={['Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Marketing Manager', 'Procurement Manager']}>
                     <QcReviewPage />
                   </ProtectedRoute>
                 }
@@ -122,7 +123,7 @@ export default function App() {
               <Route
                 path="/manager/reports"
                 element={
-                  <ProtectedRoute requireRole={['Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Marketing Manager', 'Procurement Manager']}>
                     <TimeReportPage />
                   </ProtectedRoute>
                 }
@@ -131,7 +132,7 @@ export default function App() {
               <Route
                 path="/manager/analytics"
                 element={
-                  <ProtectedRoute requireRole={['Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Marketing Manager', 'Procurement Manager']}>
                     <AnalyticsPage />
                   </ProtectedRoute>
                 }
@@ -183,6 +184,14 @@ export default function App() {
                 element={
                   <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
                     <QuestionMasterPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/qc-routing"
+                element={
+                  <ProtectedRoute requireRole={['Admin']}>
+                    <QcRoutingPage />
                   </ProtectedRoute>
                 }
               />
