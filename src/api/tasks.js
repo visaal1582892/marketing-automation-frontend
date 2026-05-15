@@ -64,6 +64,22 @@ const tasksApi = {
    */
   markCommentAnswered: (taskId, commentId) =>
     api.patch(`${BASE}/${taskId}/comments/${commentId}/answer`),
+
+  // ── Per-task reference files (uploaded by the campaign requestor) ──────────
+
+  /**
+   * Add one or more reference files to a specific work task.
+   * payload: { campaignId: int, fileUrls: string[], fileOriginalNames: string[] }
+   */
+  addTaskFiles: (taskId, campaignId, fileUrls, fileOriginalNames) =>
+    api.post(`${BASE}/${taskId}/files`, { campaignId, fileUrls, fileOriginalNames }),
+
+  /**
+   * Remove a single reference file from a specific work task.
+   * payload: { fileUrl: string }
+   */
+  removeTaskFile: (taskId, fileUrl) =>
+    api.delete(`${BASE}/${taskId}/files`, { data: { fileUrl } }),
 }
 
 export default tasksApi

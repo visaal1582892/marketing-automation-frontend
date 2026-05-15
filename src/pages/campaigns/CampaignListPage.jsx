@@ -17,7 +17,8 @@ import useDebounce from '../../hooks/useDebounce'
 
 const CAMPAIGN_STATUS_STYLES = {
   IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
-  QC_REVIEW:                  'bg-purple-50 text-purple-700 ring-purple-200',
+  MANAGER_QC_REVIEW:          'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_QC_REVIEW:        'bg-violet-50 text-violet-700 ring-violet-200',
   COMPLETED:                  'bg-green-50 text-green-700 ring-green-200',
   REJECTED:                   'bg-red-50 text-red-700 ring-red-200',
   CANCELLED:                  'bg-slate-100 text-slate-500 ring-slate-200',
@@ -25,7 +26,8 @@ const CAMPAIGN_STATUS_STYLES = {
 
 const CAMPAIGN_STATUS_LABELS = {
   IN_PROGRESS:                'In Progress',
-  QC_REVIEW:                  'QC Review',
+  MANAGER_QC_REVIEW:          'Manager QC Review',
+  REQUESTOR_QC_REVIEW:        'Requestor QC Review',
   COMPLETED:                  'Completed',
   REJECTED:                   'Rejected',
   CANCELLED:                  'Cancelled',
@@ -69,6 +71,296 @@ function friendlyFileName(url, index) {
   return type ? `${type} ${index + 1}` : `Attachment ${index + 1}`
 }
 
+// ─── Per-task file row used inside the edit-modal "Task Files" section ────────
+// Renders the file management panel for a single work task.
+// Designed to be embedded inside a task's expanded panel — no outer wrapper or header.
+/**
+ * Lightweight per-task file upload for the "Add More Tasks" panel in the edit modal.
+ * Stores staged file entries (id, name, url, uploading, error) in parent state via callbacks,
+ * handles sequential uploads, per-file progress, and retry.
+ */
+function NewTaskFileUpload({ taskId, stagedFiles = [], onFilesAdd, onFileRemove }) {
+  const [dragOver, setDragOver] = useState(false)
+  const fileRef = useRef(null)
+  const toast   = useToast()
+
+  const uploadOne = async (file) => {
+    try {
+      const fd = new FormData(); fd.append('files', file)
+      const res = await api.post('/upload/asset', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const url = res.data?.urls?.[0]
+      if (!url) throw new Error(res.data?.errors?.[0] || 'Upload failed')
+      return url
+    } catch (err) {
+      throw new Error((err?.response?.data?.message || err?.message || 'Upload failed').slice(0, 60))
+    }
+  }
+
+  const handleFiles = async (files) => {
+    if (!files?.length) return
+    const entries = Array.from(files).map(f => ({
+      id: Math.random().toString(36).slice(2), name: f.name, url: null, uploading: true, error: null, file: f,
+    }))
+    onFilesAdd(taskId, entries)
+    for (const entry of entries) {
+      try {
+        const url = await uploadOne(entry.file)
+        onFilesAdd(taskId, [{ ...entry, url, uploading: false, error: null }], true)
+      } catch (err) {
+        onFilesAdd(taskId, [{ ...entry, uploading: false, error: err.message }], true)
+      }
+    }
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  const retry = async (entry) => {
+    onFilesAdd(taskId, [{ ...entry, uploading: true, error: null }], true)
+    try {
+      const url = await uploadOne(entry.file)
+      onFilesAdd(taskId, [{ ...entry, url, uploading: false, error: null }], true)
+    } catch (err) {
+      onFilesAdd(taskId, [{ ...entry, uploading: false, error: err.message }], true)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(Array.from(e.dataTransfer.files)) }}
+        onClick={() => fileRef.current?.click()}
+        className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed
+          cursor-pointer py-4 transition select-none
+          ${dragOver ? 'border-brand-400 bg-brand-50' : 'border-slate-200 bg-slate-50/50 hover:border-brand-300 hover:bg-brand-50/30'}`}>
+        <Icon name="upload" className={`h-5 w-5 ${dragOver ? 'text-brand-500' : 'text-slate-400'}`} />
+        <p className={`text-xs font-medium ${dragOver ? 'text-brand-600' : 'text-slate-500'}`}>Click or drag files here</p>
+        <p className="text-[10px] text-slate-400">Images, PDFs, documents</p>
+        <input ref={fileRef} type="file" multiple className="hidden"
+          onChange={e => { handleFiles(Array.from(e.target.files)); e.target.value = '' }} />
+      </div>
+
+      {stagedFiles.length > 0 && (
+        <ul className="space-y-1">
+          {stagedFiles.map(f => (
+            <li key={f.id} className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs
+              ${f.error ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
+              {f.uploading ? (
+                <svg className="h-3.5 w-3.5 shrink-0 animate-spin text-brand-400" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+              ) : f.error ? (
+                <Icon name="alertCircle" className="h-3.5 w-3.5 shrink-0 text-red-400" />
+              ) : (
+                <Icon name="fileText" className="h-3.5 w-3.5 shrink-0 text-brand-400" />
+              )}
+              <span className={`flex-1 truncate ${f.error ? 'text-red-600' : 'text-slate-700'}`}>
+                {f.error ? `${f.name} — ${f.error}` : f.name}
+              </span>
+              {f.uploading && <span className="shrink-0 text-[10px] text-slate-400">Uploading…</span>}
+              {f.error && f.file && (
+                <button type="button" onClick={() => retry(f)}
+                  className="shrink-0 text-xs font-medium text-brand-600 hover:underline">Retry</button>
+              )}
+              {f.url && !f.uploading && (
+                <a href={f.url} target="_blank" rel="noopener noreferrer"
+                  className="shrink-0 text-[10px] font-medium text-brand-600 hover:underline">View</a>
+              )}
+              {!f.uploading && (
+                <button type="button" onClick={() => onFileRemove(taskId, f.url || f.id)}
+                  className="shrink-0 rounded-full p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition">
+                  <Icon name="x" className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function TaskFilesPanel({ workTask, campaign, onChanged, markedUrls = [], onToggleRemoval, readOnly = false }) {
+  // pendingUploads: per-file in-progress / failed entries { id, name, uploading, error, file }
+  const [pendingUploads, setPendingUploads] = useState([])
+  const [dragOver,  setDragOver]  = useState(false)
+  const fileInputRef = useRef(null)
+  const toast = useToast()
+
+  const savedFiles = workTask.fileUrls || []
+  const savedNames = workTask.fileOriginalNames || []
+  const markedSet  = new Set(markedUrls)
+  const markedCount = markedUrls.length
+
+  const uploadOne = async (file, id) => {
+    try {
+      const fd = new FormData(); fd.append('files', file)
+      const res = await api.post('/upload/asset', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const url = res.data?.urls?.[0]
+      if (!url) throw new Error(res.data?.errors?.[0] || 'Upload failed')
+      return { url, name: file.name }
+    } catch (err) {
+      const raw = err?.response?.data?.message || err?.message || 'Upload failed'
+      throw new Error(raw.length > 60 ? 'Upload failed' : raw)
+    }
+  }
+
+  const handleAdd = async (selectedFiles) => {
+    if (!selectedFiles?.length) return
+    const entries = Array.from(selectedFiles).map(file => ({
+      id: Math.random().toString(36).slice(2), name: file.name, uploading: true, error: null, file,
+    }))
+    setPendingUploads(prev => [...prev, ...entries])
+
+    const succeeded = []
+    for (const entry of entries) {
+      try {
+        const result = await uploadOne(entry.file, entry.id)
+        succeeded.push(result)
+        setPendingUploads(prev => prev.filter(p => p.id !== entry.id)) // remove on success
+      } catch (err) {
+        setPendingUploads(prev => prev.map(p => p.id === entry.id
+          ? { ...p, uploading: false, error: err.message }
+          : p))
+      }
+    }
+
+    if (succeeded.length > 0) {
+      try {
+        await tasksApi.addTaskFiles(workTask.taskId, campaign.campaignId,
+          succeeded.map(f => f.url), succeeded.map(f => f.name))
+        await onChanged()
+        toast.success(`${succeeded.length} file${succeeded.length !== 1 ? 's' : ''} added.`)
+      } catch {
+        toast.error('Files uploaded but could not be saved. Please try again.')
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const retryUpload = async (id) => {
+    const entry = pendingUploads.find(p => p.id === id)
+    if (!entry?.file) return
+    setPendingUploads(prev => prev.map(p => p.id === id ? { ...p, uploading: true, error: null } : p))
+    try {
+      const result = await uploadOne(entry.file, id)
+      setPendingUploads(prev => prev.filter(p => p.id !== id))
+      await tasksApi.addTaskFiles(workTask.taskId, campaign.campaignId, [result.url], [result.name])
+      await onChanged()
+      toast.success('File added.')
+    } catch (err) {
+      setPendingUploads(prev => prev.map(p => p.id === id
+        ? { ...p, uploading: false, error: err.message || 'Upload failed' }
+        : p))
+    }
+  }
+
+  const dismissPending = (id) => setPendingUploads(prev => prev.filter(p => p.id !== id))
+
+  const anyUploading = pendingUploads.some(p => p.uploading)
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+        Reference Files
+        {savedFiles.length > 0 && (
+          <span className="ml-1.5 normal-case font-medium text-violet-600">({savedFiles.length})</span>
+        )}
+        {markedCount > 0 && (
+          <span className="ml-2 text-red-500 normal-case font-medium">({markedCount} marked for removal)</span>
+        )}
+      </p>
+
+      {/* Saved files */}
+      {savedFiles.length > 0 && (
+        <ul className="space-y-1">
+          {savedFiles.map((url, i) => {
+            const name = savedNames[i] || friendlyFileName(url, i)
+            const isMarked = markedSet.has(url)
+            return (
+              <li key={url} className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition
+                ${isMarked ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
+                <Icon name="fileText" className={`h-3.5 w-3.5 shrink-0 ${isMarked ? 'text-red-400' : 'text-red-400'}`} />
+                <span className={`flex-1 truncate ${isMarked ? 'line-through text-slate-400' : 'text-slate-700'}`}>{name}</span>
+                {!isMarked && (
+                  <a href={url} target="_blank" rel="noopener noreferrer"
+                    className="shrink-0 text-brand-600 hover:underline font-medium">View</a>
+                )}
+                {!readOnly && (
+                  <button type="button" onClick={() => onToggleRemoval?.(url)}
+                    title={isMarked ? 'Undo remove' : 'Remove file'}
+                    className={`shrink-0 rounded-full p-0.5 transition
+                      ${isMarked
+                        ? 'bg-red-100 text-red-500 hover:bg-red-200'
+                        : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}>
+                    {isMarked
+                      ? <Icon name="undo" className="h-3.5 w-3.5" />
+                      : <Icon name="trash" className="h-3.5 w-3.5" />}
+                  </button>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {/* In-progress / failed pending uploads (hidden in read-only) */}
+      {!readOnly && pendingUploads.length > 0 && (
+        <ul className="space-y-1">
+          {pendingUploads.map(p => (
+            <li key={p.id} className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs
+              ${p.error ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
+              {p.uploading ? (
+                <svg className="h-3.5 w-3.5 animate-spin text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+              ) : (
+                <Icon name="alertCircle" className="h-3.5 w-3.5 text-red-400 shrink-0" />
+              )}
+              <span className={`flex-1 truncate ${p.error ? 'text-red-600' : 'text-slate-600'}`}>
+                {p.error ? `${p.name} — ${p.error}` : p.name}
+              </span>
+              {p.uploading && <span className="shrink-0 text-slate-400">Uploading…</span>}
+              {p.error && (
+                <button type="button" onClick={() => retryUpload(p.id)}
+                  className="shrink-0 text-xs font-medium text-brand-600 hover:underline">Retry</button>
+              )}
+              {!p.uploading && (
+                <button type="button" onClick={() => dismissPending(p.id)}
+                  className="shrink-0 rounded-full p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition">
+                  <Icon name="x" className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Drop zone (hidden in read-only) */}
+      {!readOnly && (
+        <div
+          onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={e => { e.preventDefault(); setDragOver(false); handleAdd(Array.from(e.dataTransfer.files)) }}
+          onClick={() => !anyUploading && fileInputRef.current?.click()}
+          className={`relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed
+            cursor-pointer py-5 transition select-none
+            ${dragOver ? 'border-brand-400 bg-brand-50' : 'border-slate-200 bg-white hover:border-brand-300 hover:bg-brand-50/30'}`}>
+          <Icon name="upload" className={`h-5 w-5 ${dragOver ? 'text-brand-500' : 'text-slate-400'}`} />
+          <p className={`text-xs font-medium ${dragOver ? 'text-brand-600' : 'text-slate-500'}`}>Click or drag files here</p>
+          <input ref={fileInputRef} type="file" multiple className="hidden"
+            onChange={e => { handleAdd(Array.from(e.target.files)); e.target.value = '' }} />
+        </div>
+      )}
+      {readOnly && savedFiles.length === 0 && (
+        <p className="text-xs text-slate-400 italic">No reference files uploaded.</p>
+      )}
+    </div>
+  )
+}
+
 // ─── Shared helpers for Edit Campaign modal ───────────────────────────────────
 
 function parseOpts(raw) {
@@ -83,11 +375,29 @@ function parseJsonArr(s) {
   return []
 }
 
-function TaskQuestion({ q, answer, onChange }) {
+function TaskQuestion({ q, answer, onChange, readOnly = false }) {
   const req = q.required ?? q.isRequired
   const getMulti = () => { try { return JSON.parse(answer || '[]') } catch { return [] } }
-  const cls = `w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm
-    focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500 transition`
+  const cls = `w-full rounded-lg border px-3 py-2 text-sm transition
+    ${readOnly
+      ? 'border-slate-200 bg-slate-50 text-slate-600 cursor-default'
+      : 'border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500'}`
+  if (readOnly) {
+    const display = (() => {
+      if (!answer && answer !== 0) return <span className="text-slate-400 italic">—</span>
+      if (q.fieldType === 'MULTISELECT') {
+        const vals = getMulti()
+        return vals.length ? <span className="flex flex-wrap gap-1">{vals.map(v => <span key={v} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{v}</span>)}</span> : <span className="text-slate-400 italic">—</span>
+      }
+      return <span>{String(answer)}</span>
+    })()
+    return (
+      <div>
+        <p className="text-xs font-medium text-slate-700 mb-1">{q.questionText}</p>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 min-h-[36px]">{display}</div>
+      </div>
+    )
+  }
   return (
     <div>
       <label className="block text-xs font-medium text-slate-700 mb-1.5">
@@ -368,6 +678,9 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   const [newTaskSelections, setNewTaskSelections] = useState({})
   const [taskQuestions,     setTaskQuestions]      = useState({})
   const [loadingQs,         setLoadingQs]          = useState({})
+  const [newTaskDropOpen,   setNewTaskDropOpen]    = useState(false)
+  const [newTaskSearch,     setNewTaskSearch]      = useState('')
+  const newTaskDropRef = useRef(null)
 
   // Existing task question editing
   const [expandedTask,       setExpandedTask]       = useState(null)  // granularTaskId
@@ -397,6 +710,16 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   const [saving, setSaving] = useState(false)
 
   // Deletion state — tasks
+  const [taskFileRemovals,   setTaskFileRemovals]   = useState({})   // { workTaskId: Set<url> }
+
+  const toggleTaskFileRemoval = (workTaskId, url) => {
+    setTaskFileRemovals(prev => {
+      const current = new Set(prev[workTaskId] || [])
+      if (current.has(url)) { current.delete(url) } else { current.add(url) }
+      return { ...prev, [workTaskId]: current }
+    })
+  }
+
   const [confirmDeleteTask,  setConfirmDeleteTask]  = useState(null) // { specId, name }
   const [deletingTaskSpecId, setDeletingTaskSpecId] = useState(null)
   // Local copy so we can remove tasks from UI without a round-trip
@@ -543,6 +866,16 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  // Close Add-Tasks dropdown on outside click
+  useEffect(() => {
+    const h = (e) => {
+      if (newTaskDropRef.current && !newTaskDropRef.current.contains(e.target))
+        setNewTaskDropOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
   const setField    = (name, value) => setForm(prev => ({ ...prev, [name]: value }))
   const toggleMulti = (name, val)   => setForm(prev => {
     const arr = prev[name] || []
@@ -591,7 +924,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   const toggleNewTask = (taskId) => {
     setNewTaskSelections(prev => {
       if (prev[taskId]) { const n = { ...prev }; delete n[taskId]; return n }
-      return { ...prev, [taskId]: { granularTaskId: taskId, questionnaire: {} } }
+      return { ...prev, [taskId]: { granularTaskId: taskId, questionnaire: {}, stagedFiles: [] } }
     })
     if (!taskQuestions[taskId]) {
       setLoadingQs(prev => ({ ...prev, [taskId]: true }))
@@ -607,41 +940,76 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
       [taskId]: { ...prev[taskId], questionnaire: { ...prev[taskId]?.questionnaire, [questionId]: value } }
     }))
 
+  /**
+   * @param {string} taskId
+   * @param {Array} files  - file entry objects { id, name, url, uploading, error, file? }
+   * @param {boolean} patch - if true, update existing entries by id instead of appending
+   */
+  const addNewTaskStagedFiles = (taskId, files, patch = false) =>
+    setNewTaskSelections(prev => {
+      const existing = prev[taskId]?.stagedFiles || []
+      const updated = patch
+        ? existing.map(e => { const upd = files.find(f => f.id === e.id); return upd ? { ...e, ...upd } : e })
+        : [...existing, ...files]
+      return { ...prev, [taskId]: { ...prev[taskId], stagedFiles: updated } }
+    })
+
+  const removeNewTaskStagedFile = (taskId, urlOrId) =>
+    setNewTaskSelections(prev => ({
+      ...prev,
+      [taskId]: {
+        ...prev[taskId],
+        stagedFiles: (prev[taskId]?.stagedFiles || []).filter(f => f.url !== urlOrId && f.id !== urlOrId),
+      }
+    }))
+
   // File helpers
   const uploadFiles = async (files) => {
     if (!files.length) return
-    const placeholders = files.map(f => ({ name: f.name, url: null, uploading: true, error: null }))
-    setNewFiles(prev => [...prev, ...placeholders])
+    // Add per-file placeholder entries immediately
+    const entries = Array.from(files).map(f => ({
+      id: Math.random().toString(36).slice(2), name: f.name, url: null, uploading: true, error: null, file: f,
+    }))
+    setNewFiles(prev => [...prev, ...entries])
     setUploadingFiles(true)
+    // Upload ONE AT A TIME — sequential to avoid overwhelming the image server
+    for (const entry of entries) {
+      let url = null; let errorMsg = null
+      try {
+        const fd = new FormData(); fd.append('files', entry.file)
+        const res = await api.post('/upload/asset', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+        url = res.data?.urls?.[0] || null
+        if (!url) errorMsg = res.data?.errors?.[0] || 'Upload failed'
+      } catch (err) {
+        const raw = err?.response?.data?.message || err?.message || 'Upload failed'
+        errorMsg = raw.length > 60 ? 'Upload failed' : raw
+      }
+      setNewFiles(prev => prev.map(f => f.id === entry.id
+        ? { ...f, url, uploading: false, error: errorMsg }
+        : f))
+    }
+    setUploadingFiles(false)
+  }
+  const retryNewFile = async (id) => {
+    const entry = newFiles.find(f => f.id === id)
+    if (!entry?.file) return
+    setNewFiles(prev => prev.map(f => f.id === id ? { ...f, uploading: true, error: null } : f))
+    setUploadingFiles(true)
+    let url = null; let errorMsg = null
     try {
-      const fd = new FormData()
-      files.forEach(f => fd.append('files', f))
-      const res  = await api.post('/upload/asset', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-      const urls = res.data?.urls || []
-      setNewFiles(prev => {
-        const n = [...prev]; let ui = 0
-        for (let i = 0; i < n.length; i++) {
-          if (n[i].uploading && n[i].error === null) {
-            n[i] = { ...n[i], url: urls[ui] || null, uploading: false }
-            ui++
-            if (ui >= urls.length) break
-          }
-        }
-        return n
-      })
-    } catch {
-      setNewFiles(prev => prev.map(f => f.uploading ? { ...f, uploading: false, error: 'Upload failed' } : f))
-    } finally { setUploadingFiles(false) }
+      const fd = new FormData(); fd.append('files', entry.file)
+      const res = await api.post('/upload/asset', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      url = res.data?.urls?.[0] || null
+      if (!url) errorMsg = res.data?.errors?.[0] || 'Upload failed'
+    } catch (err) {
+      const raw = err?.response?.data?.message || err?.message || 'Upload failed'
+      errorMsg = raw.length > 60 ? 'Upload failed' : raw
+    }
+    setNewFiles(prev => prev.map(f => f.id === id ? { ...f, url, uploading: false, error: errorMsg } : f))
+    setUploadingFiles(false)
   }
-  const handleFileSelect = (e) => {
-    const selected = Array.from(e.target.files)
-    e.target.value = ''
-    uploadFiles(selected)
-  }
-  const handleDrop = (e) => {
-    e.preventDefault(); setDragOver(false)
-    uploadFiles(Array.from(e.dataTransfer.files))
-  }
+  const handleFileSelect = (e) => { const s = Array.from(e.target.files); e.target.value = ''; uploadFiles(s) }
+  const handleDrop = (e) => { e.preventDefault(); setDragOver(false); uploadFiles(Array.from(e.dataTransfer.files)) }
 
   const toggleRemoveExisting = (url) =>
     setExistingFiles(prev => prev.map(f => f.url === url ? { ...f, removed: !f.removed } : f))
@@ -676,7 +1044,14 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
         const answers = Object.entries(qn)
           .filter(([, v]) => v != null && String(v).trim() !== '')
           .map(([questionId, answerValue]) => ({ questionId, answerValue }))
-        return { granularTaskId: taskId, questionnaireAnswers: answers }
+        const staged    = (newTaskSelections[taskId]?.stagedFiles || []).filter(f => f.url)
+        const fileUrls  = staged.map(f => f.url)
+        const fileNames = staged.map(f => f.name || f.url.split('/').pop())
+        return {
+          granularTaskId: taskId,
+          questionnaireAnswers: answers,
+          ...(fileUrls.length > 0 && { fileUrls, fileOriginalNames: fileNames }),
+        }
       })
       // Derive task types from actual deliverables (existing + newly added), not from the filter.
       // Normalize taskId comparisons to strings — object keys are always strings, t.taskId may be a number.
@@ -713,6 +1088,16 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
         removedFileUrls:      existingFiles.filter(f => f.removed).map(f => f.url),
       }
       await campaignsApi.requestorEdit(campaign.campaignId, payload)
+
+      // Process task file removals (marked for removal in task panels)
+      for (const [taskId, urlSet] of Object.entries(taskFileRemovals)) {
+        for (const url of urlSet) {
+          try { await tasksApi.removeTaskFile(taskId, url) } catch { /* continue on error */ }
+        }
+      }
+      if (Object.values(taskFileRemovals).some(s => s.size > 0)) {
+        setTaskFileRemovals({})
+      }
 
       // Persist any edited questionnaire answers for existing tasks
       const answerSaves = Object.entries(existingTaskAns).map(async ([workTaskId, ansMap]) => {
@@ -765,6 +1150,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   //    to strings — form values may be numbers or strings depending on how they were loaded)
   const selectedTypeStrs = form.taskTypeId.map(String)
   const newTasks = availableTasks
+    .filter(t => t.taskId !== 'TASK-AUTO-CONTENT')
     .filter(t => !existingIds.has(String(t.taskId)))
     .filter(t => selectedTypeStrs.length === 0 || selectedTypeStrs.includes(String(t.taskTypeId)))
   const inputCls   = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500 transition'
@@ -1014,14 +1400,15 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                         const loadingQ       = loadingExistQs[d.granularTaskId]
 
                         const statusColors = {
-                          ASSIGNED:    'text-blue-600 bg-blue-50',
-                          HELD:        'text-amber-600 bg-amber-50',
-                          ACCEPTED:    'text-indigo-600 bg-indigo-50',
-                          IN_PROGRESS: 'text-emerald-600 bg-emerald-50',
-                          QC_REVIEW:   'text-purple-600 bg-purple-50',
-                          REWORK:      'text-orange-600 bg-orange-50',
-                          COMPLETED:   'text-green-600 bg-green-50',
-                          CANCELLED:   'text-slate-500 bg-slate-100',
+                          ASSIGNED:             'text-blue-600 bg-blue-50',
+                          HELD:                 'text-amber-600 bg-amber-50',
+                          ACCEPTED:             'text-indigo-600 bg-indigo-50',
+                          IN_PROGRESS:          'text-emerald-600 bg-emerald-50',
+                          MANAGER_QC_REVIEW:    'text-purple-600 bg-purple-50',
+                          REQUESTOR_QC_REVIEW:  'text-violet-600 bg-violet-50',
+                          REWORK:               'text-orange-600 bg-orange-50',
+                          COMPLETED:            'text-green-600 bg-green-50',
+                          CANCELLED:            'text-slate-500 bg-slate-100',
                         }
                         const statusCls = statusColors[d.workTaskStatus] || 'text-slate-500 bg-slate-100'
 
@@ -1079,37 +1466,71 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                               )}
                             </div>
 
-                            {/* Expandable questionnaire panel */}
-                            {isExpanded && (
-                              <div className="border-t border-sky-200 px-4 pb-4 pt-3 space-y-3 bg-sky-50/20">
-                                {loadingQ ? (
-                                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                                    <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                                    </svg>
-                                    Loading questions…
+                            {/* Expandable questionnaire + files panel */}
+                            {isExpanded && (() => {
+                              const READONLY_STATUSES = new Set(['COMPLETED','IN_PROGRESS','MANAGER_QC_REVIEW','REQUESTOR_QC_REVIEW','REWORK','ACCEPTED'])
+                              const isReadOnly = wt && READONLY_STATUSES.has(wt.status)
+                              return (
+                                <div className="border-t border-sky-200 px-4 pb-4 pt-3 space-y-4 bg-sky-50/20">
+                                  {isReadOnly && (
+                                    <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                                      <Icon name="lock" className="h-3.5 w-3.5 shrink-0" />
+                                      Read-only — task is {d.workTaskStatus?.replace(/_/g,' ')}. Editing not allowed.
+                                    </div>
+                                  )}
+
+                                  {/* Questions section */}
+                                  <div className="space-y-3">
+                                    {loadingQ ? (
+                                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                                        <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                                        </svg>
+                                        Loading questions…
+                                      </div>
+                                    ) : qs.length === 0 ? (
+                                      <p className="text-xs text-slate-400 italic">No task-specific questions for this task type.</p>
+                                    ) : (
+                                      <>
+                                        <p className="text-xs text-sky-700 font-medium">
+                                          Task-specific answers
+                                          {wt ? '' : <span className="text-slate-400 font-normal"> (work task not yet assigned)</span>}
+                                        </p>
+                                        {qs.map(q => (
+                                          <TaskQuestion
+                                            key={q.questionId}
+                                            q={q}
+                                            answer={wt ? ans[q.questionId] : ''}
+                                            onChange={isReadOnly ? undefined : (v => wt && updateExistingTaskAnswer(wt.taskId, q.questionId, v))}
+                                            readOnly={isReadOnly}
+                                          />
+                                        ))}
+                                      </>
+                                    )}
                                   </div>
-                                ) : qs.length === 0 ? (
-                                  <p className="text-xs text-slate-400 italic">No task-specific questions for this task type.</p>
-                                ) : (
-                                  <>
-                                    <p className="text-xs text-sky-700 font-medium">
-                                      Task-specific answers
-                                      {wt ? '' : <span className="text-slate-400 font-normal"> (work task not yet assigned)</span>}
-                                    </p>
-                                    {qs.map(q => (
-                                      <TaskQuestion
-                                        key={q.questionId}
-                                        q={q}
-                                        answer={wt ? ans[q.questionId] : ''}
-                                        onChange={v => wt && updateExistingTaskAnswer(wt.taskId, q.questionId, v)}
+
+                                  {/* Task-level reference files */}
+                                  {wt && (
+                                    <div className="pt-3 border-t border-sky-200">
+                                      <TaskFilesPanel
+                                        workTask={wt}
+                                        campaign={campaign}
+                                        readOnly={isReadOnly}
+                                        onChanged={async () => {
+                                          try {
+                                            const res = await campaignsApi.getById(campaign.campaignId)
+                                            if (res.data?.workTasks) setDetailWorkTasks(res.data.workTasks)
+                                          } catch { /* ignore */ }
+                                        }}
+                                        markedUrls={isReadOnly ? [] : [...(taskFileRemovals[wt.taskId] || [])]}
+                                        onToggleRemoval={isReadOnly ? undefined : ((url) => toggleTaskFileRemoval(wt.taskId, url))}
                                       />
-                                    ))}
-                                  </>
-                                )}
-                              </div>
-                            )}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </div>
                         )
                       })}
@@ -1117,7 +1538,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                   </div>
                 )}
 
-                {/* Add new tasks */}
+                {/* Add new tasks — multi-search-select + per-task question/file cards */}
                 <div>
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                     Add More Tasks
@@ -1130,43 +1551,141 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                   {newTasks.length === 0 ? (
                     <p className="text-xs text-slate-400 italic">All available tasks are already in this campaign.</p>
                   ) : (
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                      {newTasks.map(t => {
-                        const isSel  = Boolean(newTaskSelections[t.taskId])
-                        const qs     = taskQuestions[t.taskId] || []
-                        const loadQs = loadingQs[t.taskId]
-                        return (
-                          <div key={t.taskId}
-                            className={`rounded-xl border-2 transition ${isSel ? 'border-brand-400 bg-brand-50/50' : 'border-slate-200 bg-white hover:border-brand-200'}`}>
-                            <button type="button" onClick={() => toggleNewTask(t.taskId)}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left">
-                              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition ${isSel ? 'border-brand-500 bg-brand-500' : 'border-slate-300 bg-white'}`}>
-                                {isSel && <Icon name="check" className="h-3 w-3 text-white" />}
-                              </span>
-                              <span className="text-sm font-medium text-slate-800 flex-1">{t.taskName}</span>
-                              {t.taskTypeName && (
-                                <span className="text-xs text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5 shrink-0">{t.taskTypeName}</span>
+                    <div className="space-y-3">
+                      {/* Multi-search-select dropdown */}
+                      <div ref={newTaskDropRef} className="relative">
+                        {/* Trigger chip row */}
+                        <div
+                          onClick={() => setNewTaskDropOpen(o => !o)}
+                          className="min-h-[38px] flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 cursor-pointer hover:border-brand-400 transition">
+                          {Object.keys(newTaskSelections).length === 0 ? (
+                            <span className="text-sm text-slate-400 select-none">Search and select tasks to add…</span>
+                          ) : (
+                            Object.keys(newTaskSelections).map(tid => {
+                              const t = newTasks.find(x => String(x.taskId) === String(tid))
+                              return (
+                                <span key={tid} className="inline-flex items-center gap-1 rounded-full bg-brand-100 text-brand-800 text-xs font-medium px-2 py-0.5">
+                                  {t?.taskName || tid}
+                                  <button type="button" onClick={e => { e.stopPropagation(); toggleNewTask(tid) }}
+                                    className="ml-0.5 rounded-full hover:bg-brand-200 p-0.5 transition">
+                                    <Icon name="x" className="h-2.5 w-2.5" />
+                                  </button>
+                                </span>
+                              )
+                            })
+                          )}
+                          <Icon name="chevron"
+                            className={`ml-auto h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform ${newTaskDropOpen ? 'rotate-90' : ''}`} />
+                        </div>
+
+                        {/* Dropdown panel */}
+                        {newTaskDropOpen && (
+                          <div className="absolute z-30 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+                            <div className="px-3 py-2 border-b border-slate-100">
+                              <input autoFocus type="text" value={newTaskSearch}
+                                onChange={e => setNewTaskSearch(e.target.value)}
+                                placeholder="Search tasks…"
+                                className="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5
+                                  focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition"
+                                onClick={e => e.stopPropagation()} />
+                            </div>
+                            <ul className="max-h-52 overflow-y-auto">
+                              {newTasks
+                                .filter(t => !newTaskSearch || t.taskName.toLowerCase().includes(newTaskSearch.toLowerCase()))
+                                .map(t => {
+                                  const isSel = Boolean(newTaskSelections[String(t.taskId)])
+                                  return (
+                                    <li key={t.taskId}>
+                                      <button type="button"
+                                        onClick={() => { toggleNewTask(String(t.taskId)); setNewTaskSearch('') }}
+                                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition
+                                          ${isSel ? 'bg-brand-50 text-brand-800' : 'text-slate-700 hover:bg-slate-50'}`}>
+                                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition
+                                          ${isSel ? 'border-brand-500 bg-brand-500' : 'border-slate-300 bg-white'}`}>
+                                          {isSel && <Icon name="check" className="h-2.5 w-2.5 text-white" />}
+                                        </span>
+                                        <span className="flex-1">{t.taskName}</span>
+                                        {t.taskTypeName && (
+                                          <span className="text-xs text-slate-400 bg-slate-100 rounded-full px-2 py-0.5 shrink-0">{t.taskTypeName}</span>
+                                        )}
+                                      </button>
+                                    </li>
+                                  )
+                                })}
+                              {newTasks.filter(t => !newTaskSearch || t.taskName.toLowerCase().includes(newTaskSearch.toLowerCase())).length === 0 && (
+                                <li className="px-4 py-3 text-xs text-slate-400 italic">No tasks match.</li>
                               )}
-                            </button>
-                            {isSel && (
-                              <div className="px-4 pb-4 pt-3 border-t border-brand-100 space-y-3 bg-brand-50/30">
-                                {loadQs ? (
-                                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                                    <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
-                                    Loading questions…
-                                  </div>
-                                ) : qs.length === 0 ? (
-                                  <p className="text-xs text-slate-400 italic">No task-specific questions.</p>
-                                ) : qs.map(q => (
-                                  <TaskQuestion key={q.questionId} q={q}
-                                    answer={newTaskSelections[t.taskId]?.questionnaire?.[q.questionId]}
-                                    onChange={v => updateTaskAnswer(t.taskId, q.questionId, v)} />
-                                ))}
-                              </div>
-                            )}
+                            </ul>
                           </div>
-                        )
-                      })}
+                        )}
+                      </div>
+
+                      {/* Per-task cards */}
+                      {Object.keys(newTaskSelections).length > 0 && (
+                        <div className="space-y-3">
+                          {Object.keys(newTaskSelections).map(tid => {
+                            const t       = newTasks.find(x => String(x.taskId) === String(tid))
+                            const qs      = taskQuestions[tid] || []
+                            const loadQs  = loadingQs[tid]
+                            const staged  = newTaskSelections[tid]?.stagedFiles || []
+                            return (
+                              <div key={tid} className="rounded-xl border-2 border-brand-200 bg-brand-50/30">
+                                {/* Card header */}
+                                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-brand-100">
+                                  <span className="text-sm font-semibold text-slate-800 flex-1">{t?.taskName || tid}</span>
+                                  {t?.taskTypeName && (
+                                    <span className="text-xs text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{t.taskTypeName}</span>
+                                  )}
+                                  <button type="button" onClick={() => toggleNewTask(tid)}
+                                    className="shrink-0 rounded-full p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 transition"
+                                    title="Remove this task">
+                                    <Icon name="x" className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+
+                                {/* Questions */}
+                                <div className="px-4 pt-3 pb-4 space-y-3">
+                                  {loadQs ? (
+                                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                                      <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                                      </svg>
+                                      Loading questions…
+                                    </div>
+                                  ) : qs.length === 0 ? (
+                                    <p className="text-xs text-slate-400 italic">No task-specific questions.</p>
+                                  ) : (
+                                    qs.map(q => (
+                                      <TaskQuestion key={q.questionId} q={q}
+                                        answer={newTaskSelections[tid]?.questionnaire?.[q.questionId]}
+                                        onChange={v => updateTaskAnswer(tid, q.questionId, v)} />
+                                    ))
+                                  )}
+
+                                  {/* Per-task file upload */}
+                                  <div className="pt-3 border-t border-brand-100">
+                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                      Reference Files
+                                      {staged.filter(f => f.url).length > 0 && (
+                                        <span className="ml-1.5 normal-case font-medium text-brand-600">
+                                          ({staged.filter(f => f.url).length})
+                                        </span>
+                                      )}
+                                    </p>
+                                    <NewTaskFileUpload
+                                      taskId={tid}
+                                      stagedFiles={staged}
+                                      onFilesAdd={addNewTaskStagedFiles}
+                                      onFileRemove={removeNewTaskStagedFile}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1236,33 +1755,45 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
 
                   {/* Newly added files list */}
                   {newFiles.length > 0 && (
-                    <ul className="mt-3 space-y-1.5">
-                      {newFiles.map((f, i) => (
-                        <li key={i} className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition
-                          ${f.error ? 'border-red-200 bg-red-50' : f.url ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+                    <ul className="mt-3 space-y-1">
+                      {newFiles.map(f => (
+                        <li key={f.id} className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs
+                          ${f.error ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
                           {f.uploading ? (
-                            <svg className="h-4 w-4 shrink-0 animate-spin text-brand-400" fill="none" viewBox="0 0 24 24">
+                            <svg className="h-3.5 w-3.5 shrink-0 animate-spin text-brand-400" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                             </svg>
                           ) : f.error ? (
-                            <Icon name="alertCircle" className="h-4 w-4 shrink-0 text-red-400" />
+                            <Icon name="alertCircle" className="h-3.5 w-3.5 shrink-0 text-red-400" />
                           ) : (
-                            <Icon name="checkCircle" className="h-4 w-4 shrink-0 text-emerald-500" />
+                            <Icon name="fileText" className="h-3.5 w-3.5 shrink-0 text-red-400" />
                           )}
-                          <span className={`flex-1 text-sm truncate ${f.error ? 'text-red-600' : 'text-slate-700'}`}>
+                          <span className={`flex-1 truncate ${f.error ? 'text-red-600' : 'text-slate-700'}`}>
                             {f.error ? `${f.name} — ${f.error}` : f.name}
                           </span>
-                          <button type="button" onClick={() => setNewFiles(p => p.filter((_, j) => j !== i))}
-                            className="shrink-0 rounded-full p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 transition">
-                            <Icon name="x" className="h-3.5 w-3.5" />
-                          </button>
+                          {f.uploading && <span className="shrink-0 text-slate-400">Uploading…</span>}
+                          {f.error && f.file && (
+                            <button type="button" onClick={() => retryNewFile(f.id)}
+                              className="shrink-0 text-xs font-medium text-brand-600 hover:underline">Retry</button>
+                          )}
+                          {f.url && !f.uploading && (
+                            <a href={f.url} target="_blank" rel="noopener noreferrer"
+                              className="shrink-0 font-medium text-brand-600 hover:underline">View</a>
+                          )}
+                          {!f.uploading && (
+                            <button type="button" onClick={() => setNewFiles(p => p.filter(x => x.id !== f.id))}
+                              className="shrink-0 rounded-full p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition">
+                              <Icon name="x" className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </li>
                       ))}
                     </ul>
                   )}
                 </div>
               </SectionCard>
+
 
             </div>{/* end scrollable content */}
           </div>
@@ -1313,6 +1844,15 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                   file{removedCount !== 1 ? 's' : ''} to remove
                 </span>
               )}
+              {(() => {
+                const taskRemovedCount = Object.values(taskFileRemovals).reduce((sum, s) => sum + s.size, 0)
+                return taskRemovedCount > 0 ? (
+                  <span className="flex items-center gap-1.5 text-red-500">
+                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">{taskRemovedCount}</span>
+                    task file{taskRemovedCount !== 1 ? 's' : ''} to remove
+                  </span>
+                ) : null
+              })()}
             </div>
             <div className="flex items-center gap-3">
               {/* Delete campaign button — only when no tasks have started */}
@@ -1370,7 +1910,7 @@ const CampaignRow = memo(function CampaignRow({
   const taskCount   = c.taskCount ?? (c.workTasks || []).length
   const doneCount   = c.completedTaskCount ?? (c.workTasks || []).filter(t => t.status === 'COMPLETED').length
   const hasRework   = c.hasRework   ?? (c.workTasks || []).some(t => t.status === 'REWORK')
-  const hasQcReview = c.hasQcReview ?? (c.workTasks || []).some(t => t.status === 'QC_REVIEW')
+  const hasQcReview = c.hasQcReview ?? (c.workTasks || []).some(t => t.status === 'MANAGER_QC_REVIEW' || t.status === 'REQUESTOR_QC_REVIEW')
   const canEdit     = !ROW_TERMINAL.includes(c.status)
   const isBookmarked = !!c.bookmarked
 

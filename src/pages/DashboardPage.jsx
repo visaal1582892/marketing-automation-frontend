@@ -98,7 +98,7 @@ export default function DashboardPage() {
   const taskCounts = useMemo(() => ({
     open:     tasks.filter(t => ['ASSIGNED','IN_PROGRESS','REWORK'].includes(t.status)).length,
     inFlight: tasks.filter(t => t.status === 'IN_PROGRESS').length,
-    qc:       tasks.filter(t => t.status === 'QC_REVIEW').length,
+    qc:       tasks.filter(t => t.status === 'MANAGER_QC_REVIEW').length,
     done:     tasks.filter(t => t.status === 'COMPLETED').length,
   }), [tasks])
 
@@ -144,7 +144,7 @@ export default function DashboardPage() {
                          px-3 py-1.5 text-xs font-semibold text-slate-600
                          transition hover:bg-slate-50"
             >
-              <Icon name="send" className="h-3 w-3" /> QC Review Queue
+              <Icon name="send" className="h-3 w-3" /> Manager QC Review
             </Link>
           )}
           
@@ -450,12 +450,13 @@ function TaskBadge({ status }) {
     ASSIGNED:    'bg-blue-50 text-blue-700 ring-blue-200',
     IN_PROGRESS: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
     REWORK:      'bg-amber-50 text-amber-700 ring-amber-200',
-    QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
-    COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
+    MANAGER_QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
+    REQUESTOR_QC_REVIEW: 'bg-violet-50 text-violet-700 ring-violet-200',
+    COMPLETED:           'bg-green-50 text-green-700 ring-green-200',
   }
   const labels = {
     ASSIGNED: 'New', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
-    QC_REVIEW: 'In QC', COMPLETED: 'Done',
+    MANAGER_QC_REVIEW: 'Mgr QC', REQUESTOR_QC_REVIEW: 'Req QC', COMPLETED: 'Done',
   }
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[status] || 'bg-slate-100 text-slate-600'}`}>{labels[status] || status}</span>
 }

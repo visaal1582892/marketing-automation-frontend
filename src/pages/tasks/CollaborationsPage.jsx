@@ -41,14 +41,16 @@ const STATUS_STYLES = {
   ASSIGNED:    { badge: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',     stripe: 'bg-blue-400',    dot: 'bg-blue-400'    },
   IN_PROGRESS: { badge: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', stripe: 'bg-emerald-400', dot: 'bg-emerald-400' },
   REWORK:      { badge: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',  stripe: 'bg-amber-400',   dot: 'bg-amber-400'   },
-  QC_REVIEW:   { badge: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200', stripe: 'bg-purple-400', dot: 'bg-purple-400'  },
+  MANAGER_QC_REVIEW:   { badge: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200', stripe: 'bg-purple-400', dot: 'bg-purple-400'  },
+  REQUESTOR_QC_REVIEW: { badge: 'bg-violet-50 text-violet-700 ring-1 ring-violet-200', stripe: 'bg-violet-400', dot: 'bg-violet-400'  },
   COMPLETED:   { badge: 'bg-green-50 text-green-700 ring-1 ring-green-200',  stripe: 'bg-green-500',   dot: 'bg-green-500'   },
   CANCELLED:   { badge: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',     stripe: 'bg-rose-400',    dot: 'bg-rose-400'    },
   HELD:        { badge: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',  stripe: 'bg-amber-400',   dot: 'bg-amber-400'   },
 }
 const STATUS_LABELS = {
   ASSIGNED: 'New', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
-  QC_REVIEW: 'In QC', COMPLETED: 'Completed', CANCELLED: 'Cancelled', HELD: 'On Hold',
+  MANAGER_QC_REVIEW: 'Mgr QC', REQUESTOR_QC_REVIEW: 'Req QC',
+  COMPLETED: 'Completed', CANCELLED: 'Cancelled', HELD: 'On Hold',
 }
 const getStatus = (s) => STATUS_STYLES[s] || { badge: 'bg-slate-100 text-slate-600', stripe: 'bg-slate-300', dot: 'bg-slate-300' }
 
@@ -97,7 +99,7 @@ function Avatar({ name, size = 'md' }) {
 
 // ─── Chat Panel ───────────────────────────────────────────────────────────────
 
-const CARD_BLOCKED_STATUSES = ['HELD', 'QC_REVIEW', 'CANCELLED', 'COMPLETED']
+const CARD_BLOCKED_STATUSES = ['HELD', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW', 'CANCELLED', 'COMPLETED']
 
 function TypingDots() {
   return (
@@ -128,7 +130,8 @@ function ChatPanel({ task, onClose }) {
 
   const cardBlockReason = {
     HELD:      'Task is on hold — chat and assets are paused.',
-    QC_REVIEW: 'Task is in QC review — chat and assets are locked.',
+    MANAGER_QC_REVIEW: 'Task is in Manager QC review — chat and assets are locked.',
+    REQUESTOR_QC_REVIEW: 'Task is in Requestor QC review — chat and assets are locked.',
     COMPLETED: 'Task completed — chat and assets are locked.',
     CANCELLED: 'Task has been cancelled.',
   }[task.status]

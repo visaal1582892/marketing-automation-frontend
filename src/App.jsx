@@ -17,7 +17,8 @@ import CampaignDetailPage from './pages/campaigns/CampaignDetailPage'
 import CompletedTasksPage from './pages/campaigns/CompletedTasksPage'
 import MyTasksPage from './pages/tasks/MyTasksPage'
 import CollaborationsPage from './pages/tasks/CollaborationsPage'
-import QcReviewPage from './pages/manager/QcReviewPage'
+import ManagerQcReviewPage from './pages/manager/ManagerQcReviewPage'
+import RequestorQcReviewPage from './pages/campaigns/RequestorQcReviewPage'
 import TimeReportPage from './pages/manager/TimeReportPage'
 import TaskManagementPage from './pages/manager/TaskManagementPage'
 import AnalyticsPage from './pages/manager/AnalyticsPage'
@@ -116,7 +117,15 @@ export default function App() {
                 path="/manager/qc-review"
                 element={
                   <ProtectedRoute requireRole={['Marketing Manager', 'Procurement Manager']}>
-                    <QcReviewPage />
+                    <ManagerQcReviewPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/requestor-qc-review"
+                element={
+                  <ProtectedRoute>
+                    <RequestorQcReviewPage />
                   </ProtectedRoute>
                 }
               />

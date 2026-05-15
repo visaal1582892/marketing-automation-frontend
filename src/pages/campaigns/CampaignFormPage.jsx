@@ -407,8 +407,58 @@ function DeliverableCard({
   questions = [],
   onQuestionnaireChange,
   questionnaireFieldErrors = {},
+  stagedFiles = [],
+  fileUploading = false,
+  onFilesAdd,
+  onFileRemove,
+  onFileUploadStateChange,
 }) {
-  const answers = spec.questionnaire || {}
+  const answers        = spec.questionnaire || {}
+  const fileInputRef   = useRef(null)
+  const [dragOver,     setDragOver]     = useState(false)
+  // Local per-file upload tracking: { id, name, uploading, error, file }
+  const [pendingUploads, setPendingUploads] = useState([])
+
+  const uploadOne = async (file, id) => {
+    setPendingUploads(prev => prev.map(p => p.id === id ? { ...p, uploading: true, error: null } : p))
+    try {
+      const fd = new FormData()
+      fd.append('files', file)
+      const res = await api.post('/upload/asset', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const url = res.data?.urls?.[0]
+      if (!url) throw new Error(res.data?.errors?.[0] || 'Upload failed')
+      onFilesAdd?.([{ url, name: file.name }])
+      setPendingUploads(prev => prev.filter(p => p.id !== id)) // remove on success
+    } catch (err) {
+      const raw = err?.response?.data?.message || err?.message || 'Upload failed'
+      setPendingUploads(prev => prev.map(p => p.id === id
+        ? { ...p, uploading: false, error: raw.length > 60 ? 'Upload failed' : raw }
+        : p))
+    }
+  }
+
+  const startUploads = async (selectedFiles) => {
+    if (!selectedFiles?.length) return
+    const entries = Array.from(selectedFiles).map(file => ({
+      id: Math.random().toString(36).slice(2), name: file.name, uploading: true, error: null, file,
+    }))
+    setPendingUploads(prev => [...prev, ...entries])
+    onFileUploadStateChange?.(true)
+    for (const entry of entries) {
+      await uploadOne(entry.file, entry.id)
+    }
+    onFileUploadStateChange?.(false)
+  }
+
+  const retryUpload = (id) => {
+    const entry = pendingUploads.find(p => p.id === id)
+    if (entry?.file) uploadOne(entry.file, id)
+  }
+
+  const dismissUpload = (id) => setPendingUploads(prev => prev.filter(p => p.id !== id))
+
+  const handleFileSelect = (e) => { startUploads(Array.from(e.target.files)); e.target.value = '' }
+  const handleDrop = (e) => { e.preventDefault(); setDragOver(false); startUploads(Array.from(e.dataTransfer.files)) }
 
   const getMultiValues = (qid) => {
     const v = answers[qid]
@@ -544,6 +594,78 @@ function DeliverableCard({
             })}
           </div>
         )}
+
+        {/* ── Per-task reference files ── */}
+        <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            Task Reference Files
+            {stagedFiles.length > 0 && (
+              <span className="ml-1.5 normal-case font-medium text-violet-600">({stagedFiles.length} staged)</span>
+            )}
+          </p>
+
+          {/* Drop zone */}
+          <div
+            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => !fileUploading && fileInputRef.current?.click()}
+            className={`relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed
+              cursor-pointer py-6 transition select-none
+              ${dragOver ? 'border-brand-400 bg-brand-50' : 'border-slate-200 bg-slate-50/50 hover:border-brand-300 hover:bg-brand-50/30'}`}>
+            <Icon name="upload" className={`h-6 w-6 ${dragOver ? 'text-brand-500' : 'text-slate-400'}`} />
+            <p className={`text-sm font-medium ${dragOver ? 'text-brand-600' : 'text-slate-500'}`}>Click or drag files here</p>
+            <p className="text-xs text-slate-400">Supports images, PDFs, documents</p>
+            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
+          </div>
+
+          {/* In-progress / failed uploads */}
+          {pendingUploads.length > 0 && (
+            <ul className="space-y-1">
+              {pendingUploads.map(p => (
+                <li key={p.id} className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs
+                  ${p.error ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
+                  {p.uploading ? (
+                    <svg className="h-3.5 w-3.5 animate-spin text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                  ) : (
+                    <Icon name="alertCircle" className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                  )}
+                  <span className={`flex-1 truncate ${p.error ? 'text-red-600' : 'text-slate-600'}`}>
+                    {p.error ? `${p.name} — ${p.error}` : p.name}
+                  </span>
+                  {p.uploading && <span className="shrink-0 text-slate-400">Uploading…</span>}
+                  {p.error && <button type="button" onClick={() => retryUpload(p.id)}
+                    className="shrink-0 text-xs font-medium text-brand-600 hover:underline">Retry</button>}
+                  {!p.uploading && <button type="button" onClick={() => dismissUpload(p.id)}
+                    className="shrink-0 text-slate-400 hover:text-red-500 transition">
+                    <Icon name="x" className="h-3.5 w-3.5" />
+                  </button>}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Successfully staged files */}
+          {stagedFiles.length > 0 && (
+            <ul className="space-y-1">
+              {stagedFiles.map((f) => (
+                <li key={f.url} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs">
+                  <Icon name="fileText" className="h-3.5 w-3.5 shrink-0 text-red-400" />
+                  <span className="flex-1 truncate text-slate-700">{f.name}</span>
+                  <a href={f.url} target="_blank" rel="noopener noreferrer"
+                    className="shrink-0 text-brand-600 hover:underline font-medium">View</a>
+                  <button type="button" onClick={() => onFileRemove?.(f.url)} title="Remove"
+                    className="shrink-0 text-slate-400 hover:text-red-500 transition">
+                    <Icon name="x" className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -553,96 +675,94 @@ function DeliverableCard({
 
 function CampaignFilesSection({ files, onFilesChange, uploading, setUploading }) {
   const fileInputRef = useRef(null)
+  const [dragOver, setDragOver] = useState(false)
+
+  const uploadOne = async (file, id) => {
+    const fd = new FormData()
+    fd.append('files', file)
+    const res = await tasksApi.uploadAssets(fd)
+    const url = res.data?.urls?.[0] || null
+    if (!url) throw new Error(res.data?.errors?.[0] || 'Upload failed')
+    return url
+  }
+
+  const runUpload = async (file, id) => {
+    try {
+      const url = await uploadOne(file, id)
+      onFilesChange(prev => prev.map(f => f.id === id ? { ...f, url, uploading: false } : f))
+    } catch (err) {
+      const raw = err?.response?.data?.message || err?.message || 'Upload failed'
+      const msg = raw.length > 60 ? 'Upload failed' : raw
+      onFilesChange(prev => prev.map(f => f.id === id ? { ...f, uploading: false, error: msg } : f))
+    }
+  }
+
+  const retryFile = async (id) => {
+    const entry = files.find(f => f.id === id)
+    if (!entry?.file) return
+    onFilesChange(prev => prev.map(f => f.id === id ? { ...f, uploading: true, error: null } : f))
+    setUploading(true)
+    await runUpload(entry.file, id)
+    setUploading(false)
+  }
 
   const handleFileSelect = async (e) => {
     const selected = Array.from(e.target.files || [])
     if (!selected.length) return
     e.target.value = ''
 
-    // Client-side: block doc/docx
     const blocked = selected.filter(f => /\.(docx?)$/i.test(f.name))
-    if (blocked.length) {
-      blocked.forEach(f => {
-        onFilesChange(prev => [...prev, { name: f.name, url: null, uploading: false, error: 'DOC/DOCX not allowed — convert to PDF' }])
-      })
-    }
+    blocked.forEach(f => {
+      const id = Math.random().toString(36).slice(2)
+      onFilesChange(prev => [...prev, { id, name: f.name, url: null, uploading: false, error: 'DOC/DOCX not allowed — convert to PDF', file: f }])
+    })
     const allowed = selected.filter(f => !/\.(docx?)$/i.test(f.name))
     if (!allowed.length) return
 
-    // Add uploading placeholders immediately (one per file)
-    onFilesChange(prev => [
-      ...prev,
-      ...allowed.map(f => ({ name: f.name, url: null, uploading: true, error: null })),
-    ])
+    // Add a placeholder per file immediately so the user sees all of them
+    const entries = allowed.map(f => ({ id: Math.random().toString(36).slice(2), name: f.name, url: null, uploading: true, error: null, file: f }))
+    onFilesChange(prev => [...prev, ...entries])
     setUploading(true)
 
-    // Upload each file independently with a 120 s timeout (via tasksApi.uploadAssets)
-    // so a single failure doesn't kill the whole batch.
-    const results = await Promise.allSettled(
-      allowed.map(async (file) => {
-        const fd = new FormData()
-        fd.append('files', file)
-        const res = await tasksApi.uploadAssets(fd)
-        return {
-          name: file.name,
-          url:              res.data?.urls?.[0]              || null,
-          thumbnailUrl:     res.data?.thumbnailUrls?.[0]     || null,
-          originalFilename: res.data?.originalFilenames?.[0] || file.name,
-        }
-      })
-    )
-
-    // Update each placeholder in order
-    onFilesChange(prev => {
-      const next  = [...prev]
-      let pending = 0   // index into results
-      for (let i = 0; i < next.length; i++) {
-        if (next[i].uploading && next[i].error === null && pending < results.length) {
-          const result = results[pending++]
-          if (result.status === 'fulfilled') {
-            next[i] = { ...next[i], url: result.value.url, uploading: false }
-          } else {
-            const msg = result.reason?.response?.data?.message || result.reason?.message || 'Upload failed'
-            next[i] = { ...next[i], uploading: false, error: msg.length > 60 ? 'Upload failed' : msg }
-          }
-        }
-      }
-      return next
-    })
-
+    // Upload ONE AT A TIME — concurrent uploads overwhelm the external image server
+    for (const entry of entries) {
+      await runUpload(entry.file, entry.id)
+    }
     setUploading(false)
   }
 
-  const removeFile = (idx) => {
-    onFilesChange(prev => prev.filter((_, i) => i !== idx))
+  const removeFile = (id) => onFilesChange(prev => prev.filter(f => f.id !== id))
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setDragOver(false)
+    handleFileSelect({ target: { files: Array.from(e.dataTransfer.files) } })
   }
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 flex-wrap">
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition"
-        >
-          <Icon name="upload" className="h-3.5 w-3.5" />
-          {uploading ? 'Uploading…' : 'Upload Files'}
-        </button>
-        <span className="text-xs text-slate-400">Multiple files allowed (images, PDFs, excels, ZIPs…)</span>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
+      <div
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        className={`relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed
+          cursor-pointer py-6 transition select-none
+          ${dragOver ? 'border-brand-400 bg-brand-50' : 'border-slate-200 bg-slate-50/50 hover:border-brand-300 hover:bg-brand-50/30'}`}>
+        <Icon name="upload" className={`h-6 w-6 ${dragOver ? 'text-brand-500' : 'text-slate-400'}`} />
+        <p className={`text-sm font-medium ${dragOver ? 'text-brand-600' : 'text-slate-500'}`}>Click or drag files here</p>
+        <p className="text-xs text-slate-400">Images, PDFs, excels, ZIPs and more</p>
+        <input ref={fileInputRef} type="file" multiple className="hidden"
           accept="image/*,video/*,.pdf,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.doc,.docx,.zip"
-          onChange={handleFileSelect}
-        />
+          onChange={handleFileSelect} />
       </div>
       {files.length > 0 && (
-        <ul className="space-y-1.5">
-          {files.map((f, idx) => (
-            <li key={idx} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs">
+        <ul className="space-y-1">
+          {files.map(f => (
+            <li key={f.id || f.url} className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs
+              ${f.uploading ? 'border-slate-200 bg-white'
+                : f.error   ? 'border-red-200 bg-red-50'
+                : 'border-slate-200 bg-white'}`}>
               {f.uploading ? (
                 <svg className="h-3.5 w-3.5 animate-spin text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
@@ -651,19 +771,26 @@ function CampaignFilesSection({ files, onFilesChange, uploading, setUploading })
               ) : f.error ? (
                 <Icon name="alertCircle" className="h-3.5 w-3.5 text-red-400 shrink-0" />
               ) : (
-                <Icon name="fileText" className="h-3.5 w-3.5 text-brand-500 shrink-0" />
+                <Icon name="fileText" className="h-3.5 w-3.5 text-red-400 shrink-0" />
               )}
-              <span className={`flex-1 truncate ${f.error ? 'text-red-500' : 'text-slate-700'}`}>
-                {f.error ? `${f.name} — ${f.error}` : f.name}
+              <span className={`flex-1 truncate ${f.error ? 'text-red-600' : 'text-slate-700'}`}>
+                {f.uploading ? f.name : f.error ? `${f.name} — ${f.error}` : f.name}
               </span>
-              {f.url && (
-                <a href={f.url} target="_blank" rel="noopener noreferrer"
-                  className="text-brand-600 hover:underline text-xs shrink-0">View</a>
+              {f.uploading && <span className="shrink-0 text-slate-400">Uploading…</span>}
+              {f.error && f.file && (
+                <button type="button" onClick={() => retryFile(f.id)}
+                  className="shrink-0 text-xs font-medium text-brand-600 hover:underline">Retry</button>
               )}
-              <button type="button" onClick={() => removeFile(idx)}
-                className="text-slate-400 hover:text-red-500 transition shrink-0">
-                <Icon name="x" className="h-3.5 w-3.5" />
-              </button>
+              {f.url && !f.uploading && (
+                <a href={f.url} target="_blank" rel="noopener noreferrer"
+                  className="shrink-0 font-medium text-brand-600 hover:underline">View</a>
+              )}
+              {!f.uploading && (
+                <button type="button" onClick={() => removeFile(f.id)}
+                  className="shrink-0 text-slate-400 hover:text-red-500 transition">
+                  <Icon name="x" className="h-3.5 w-3.5" />
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -896,6 +1023,24 @@ export default function CampaignFormPage() {
   const [campaignFiles,     setCampaignFiles]     = useState([]) // [{ name, url, uploading, error }]
   const [uploadingFiles,    setUploadingFiles]     = useState(false)
 
+  // Per-task staged files — uploaded immediately on select, linked to work tasks after campaign creation
+  // { [granularTaskId]: [{ url: string, name: string }] }
+  const [taskStagedFiles,   setTaskStagedFiles]   = useState({})
+  // { [granularTaskId]: boolean }
+  const [taskFileUploading, setTaskFileUploading] = useState({})
+
+  const addStagedFiles = (granularTaskId, newFiles) =>
+    setTaskStagedFiles(prev => ({
+      ...prev,
+      [granularTaskId]: [...(prev[granularTaskId] || []), ...newFiles],
+    }))
+
+  const removeStagedFile = (granularTaskId, url) =>
+    setTaskStagedFiles(prev => ({
+      ...prev,
+      [granularTaskId]: (prev[granularTaskId] || []).filter(f => f.url !== url),
+    }))
+
   // Validation errors
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
@@ -928,9 +1073,10 @@ export default function CampaignFormPage() {
   // Normalize both sides to strings — master-data IDs arrive as numbers from the API but the
   // select stores the raw JS value, causing strict-equality mismatches without this coercion.
   const selectedTypeIdStrs = form.taskTypeId.map(String)
-  const availableTasks = selectedTypeIdStrs.length > 0
+  const availableTasks = (selectedTypeIdStrs.length > 0
     ? allAvailableTasks.filter(t => selectedTypeIdStrs.includes(String(t.taskTypeId)))
     : allAvailableTasks
+  ).filter(t => t.taskId !== 'TASK-AUTO-CONTENT')
 
   // Pre-populate form when cloning a campaign (query param ?cloneFrom=<id>)
   const [cloneLoading, setCloneLoading] = useState(!!cloneSourceId)
@@ -1277,6 +1423,47 @@ export default function CampaignFormPage() {
       console.log('[Form] Payload:', payload)
       const result = await campaignsApi.create(payload)
       console.log('[Form] Success:', result)
+
+      // Link any per-task staged files to the newly created work tasks.
+      // Use allSettled so one failure doesn't prevent the others from being saved.
+      const newCampaignId = result.data?.campaignId
+      const hasStagedFiles = newCampaignId &&
+        Object.values(taskStagedFiles).some(arr => arr.filter(f => f.url).length > 0)
+      if (hasStagedFiles) {
+        const detail    = await campaignsApi.getById(newCampaignId).catch(() => null)
+        const workTasks = detail?.data?.workTasks || []
+
+        const linkJobs = workTasks
+          .map(wt => {
+            const gid   = String(wt.granularTaskId)
+            const files = (taskStagedFiles[gid] || []).filter(f => f.url)
+            if (!files.length) return null
+            return { wt, files }
+          })
+          .filter(Boolean)
+
+        if (linkJobs.length) {
+          const outcomes = await Promise.allSettled(
+            linkJobs.map(({ wt, files }) =>
+              tasksApi.addTaskFiles(
+                wt.taskId,
+                newCampaignId,
+                files.map(f => f.url),
+                files.map(f => f.name),
+              )
+            )
+          )
+          const failCount = outcomes.filter(o => o.status === 'rejected').length
+          if (failCount > 0) {
+            console.warn('[Form] Some task file links failed:', outcomes)
+            showToast(
+              `Campaign submitted, but files for ${failCount} task${failCount > 1 ? 's' : ''} could not be linked. You can add them via Edit.`,
+              'info'
+            )
+          }
+        }
+      }
+
       showToast('Request submitted successfully!', 'success')
       setTimeout(() => navigate('/campaigns', { state: { justSubmitted: true } }), 1000)
     } catch (err) {
@@ -1522,6 +1709,13 @@ export default function CampaignFormPage() {
                     questions={taskQuestions[taskId] || []}
                     onQuestionnaireChange={(qid, val) => updateDeliverableQuestionnaire(taskId, qid, val)}
                     questionnaireFieldErrors={errors.taskQa?.[taskId] || {}}
+                    stagedFiles={taskStagedFiles[taskId] || []}
+                    fileUploading={taskFileUploading[taskId] || false}
+                    onFilesAdd={(files) => addStagedFiles(taskId, files)}
+                    onFileRemove={(url) => removeStagedFile(taskId, url)}
+                    onFileUploadStateChange={(v) =>
+                      setTaskFileUploading(prev => ({ ...prev, [taskId]: v }))
+                    }
                   />
                 )
               })}

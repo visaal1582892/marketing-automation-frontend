@@ -20,6 +20,12 @@ const campaignsApi = {
   addTasks: (id, specs) => api.post(`${BASE}/${id}/add-tasks`, specs),
 
   /**
+   * Add followup tasks to any non-cancelled/non-rejected campaign (incl. COMPLETED).
+   * payload: { specs: [...], fileUrls: [...], fileOriginalNames: [...] }
+   */
+  addFollowupTasks: (id, payload) => api.post(`${BASE}/${id}/followup-tasks`, payload),
+
+  /**
    * Requestor (owner) edits campaign form fields and/or adds new tasks/files.
    * payload: { ...formFields, newTaskSpecs: [...], newFileUrls: [...] }
    * Existing tasks and files are never modified or removed.
@@ -57,6 +63,16 @@ const campaignsApi = {
    */
   requestorRework: (campaignId, taskId, message) =>
     api.post(`${BASE}/${campaignId}/tasks/${taskId}/requestor-rework`, { message }),
+
+  /**
+   * Requestor approves a REQUESTOR_QC_REVIEW task.
+   * Task moves to COMPLETED; campaign moves to COMPLETED if all tasks are done.
+   */
+  requestorApprove: (campaignId, taskId, comment) =>
+    api.post(`${BASE}/${campaignId}/tasks/${taskId}/requestor-approve`, { comment }),
+
+  /** Paged REQUESTOR_QC_REVIEW tasks for the current user's campaigns. */
+  requestorQcTasks: (params = {}) => api.get(`${BASE}/requestor-qc-tasks`, { params }),
 
   /**
    * Returns all COMPLETED work tasks for the caller's campaigns.

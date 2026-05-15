@@ -21,15 +21,17 @@ const COLORS = {
 }
 
 const STATUS_COLOR = {
-  IN_PROGRESS: COLORS.blue,
-  QC_REVIEW:   COLORS.violet,
-  COMPLETED:   COLORS.emerald,
-  REJECTED:    COLORS.rose,
-  CANCELLED:   COLORS.slate,
-  PENDING:     COLORS.amber,
+  IN_PROGRESS:         COLORS.blue,
+  MANAGER_QC_REVIEW:   COLORS.violet,
+  REQUESTOR_QC_REVIEW: '#7c3aed',
+  COMPLETED:           COLORS.emerald,
+  REJECTED:            COLORS.rose,
+  CANCELLED:           COLORS.slate,
+  PENDING:             COLORS.amber,
 }
 const STATUS_LABEL = {
-  IN_PROGRESS: 'In Progress', QC_REVIEW: 'QC Review',
+  IN_PROGRESS: 'In Progress', MANAGER_QC_REVIEW: 'Manager QC Review',
+  REQUESTOR_QC_REVIEW: 'Requestor QC Review',
   COMPLETED: 'Completed',     REJECTED: 'Rejected',
   CANCELLED: 'Cancelled',     PENDING: 'Pending',
   ASSIGNED: 'Assigned',       REWORK: 'Rework',
@@ -37,13 +39,14 @@ const STATUS_LABEL = {
 }
 const PRIORITY_COLOR = { HIGH: COLORS.rose, MEDIUM: COLORS.amber, LOW: COLORS.emerald }
 const TASK_STATUS_COLOR = {
-  ASSIGNED:    '#94a3b8',
-  IN_PROGRESS: COLORS.blue,
-  QC_REVIEW:   COLORS.violet,
-  REWORK:      COLORS.amber,
-  COMPLETED:   COLORS.emerald,
-  HELD:        '#f59e0b',
-  CANCELLED:   '#cbd5e1',
+  ASSIGNED:             '#94a3b8',
+  IN_PROGRESS:          COLORS.blue,
+  MANAGER_QC_REVIEW:    COLORS.violet,
+  REQUESTOR_QC_REVIEW:  '#7c3aed',
+  REWORK:               COLORS.amber,
+  COMPLETED:            COLORS.emerald,
+  HELD:                 '#f59e0b',
+  CANCELLED:            '#cbd5e1',
 }
 
 const CHART_COLORS = [COLORS.brand, COLORS.blue, COLORS.violet, COLORS.emerald,

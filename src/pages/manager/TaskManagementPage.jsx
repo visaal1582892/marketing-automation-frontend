@@ -16,23 +16,25 @@ import DateRangePicker from '../../components/DateRangePicker'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_STYLES = {
-  ASSIGNED:    'bg-blue-50 text-blue-700 ring-blue-200',
-  IN_PROGRESS: 'bg-indigo-50 text-indigo-700 ring-indigo-200',
-  REWORK:      'bg-orange-50 text-orange-700 ring-orange-200',
-  QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
-  COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
-  CANCELLED:   'bg-slate-100 text-slate-500 ring-slate-200',
-  HELD:        'bg-amber-50 text-amber-700 ring-amber-200',
+  ASSIGNED:             'bg-blue-50 text-blue-700 ring-blue-200',
+  IN_PROGRESS:          'bg-indigo-50 text-indigo-700 ring-indigo-200',
+  REWORK:               'bg-orange-50 text-orange-700 ring-orange-200',
+  MANAGER_QC_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_QC_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
+  COMPLETED:            'bg-green-50 text-green-700 ring-green-200',
+  CANCELLED:            'bg-slate-100 text-slate-500 ring-slate-200',
+  HELD:                 'bg-amber-50 text-amber-700 ring-amber-200',
 }
 const STATUS_LABELS = {
-  ASSIGNED:    'Assigned',
-  IN_PROGRESS: 'In Progress',
-  REWORK:      'Rework',
-  QC_REVIEW:   'QC Review',
-  COMPLETED:   'Completed',
-  CANCELLED:   'Cancelled',
-  REJECTED:    'Rejected',
-  HELD:        'Held',
+  ASSIGNED:             'Assigned',
+  IN_PROGRESS:          'In Progress',
+  REWORK:               'Rework',
+  MANAGER_QC_REVIEW:    'Manager QC Review',
+  REQUESTOR_QC_REVIEW:  'Requestor QC Review',
+  COMPLETED:            'Completed',
+  CANCELLED:            'Cancelled',
+  REJECTED:             'Rejected',
+  HELD:                 'Held',
 }
 const PRIORITY_STYLES = {
   HIGH:   'bg-rose-50 text-rose-700 ring-rose-200',
@@ -108,7 +110,7 @@ function EditCampaignModal({ campaignId, task, onClose, onSaved }) {
   const [fetching, setFetching] = useState(true)
   const [saving,   setSaving]   = useState(false)
 
-  const isRestricted = ['COMPLETED', 'QC_REVIEW'].includes(task?.status)
+  const isRestricted = ['COMPLETED', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW'].includes(task?.status)
 
   useEffect(() => {
     campaignsApi.getById(campaignId)
@@ -161,7 +163,7 @@ function EditCampaignModal({ campaignId, task, onClose, onSaved }) {
                 <Icon name="alertCircle" className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
                 <span>
                   Priority and budget tier cannot be changed for tasks in{' '}
-                  <strong>{task?.status === 'QC_REVIEW' ? 'QC Review' : 'Completed'}</strong> status.
+                  <strong>{task?.status === 'MANAGER_QC_REVIEW' ? 'Manager QC Review' : task?.status === 'REQUESTOR_QC_REVIEW' ? 'Requestor QC Review' : 'Completed'}</strong> status.
                   You can still update the key message.
                 </span>
               </div>
@@ -518,7 +520,7 @@ export default function TaskManagementPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const PRIORITY_OPTS = ['HIGH', 'MEDIUM', 'LOW']
-  const STATUS_OPTS   = ['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'QC_REVIEW', 'COMPLETED', 'CANCELLED', 'REJECTED', 'HELD']
+  const STATUS_OPTS   = ['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW', 'COMPLETED', 'CANCELLED', 'REJECTED', 'HELD']
 
   const taskTypeOptions  = allTaskTypeOpts
   const priorityOptions  = PRIORITY_OPTS
@@ -874,12 +876,12 @@ function Th({ children, align = 'left', width = '', sticky = false }) {
 // ─── Data row ─────────────────────────────────────────────────────────────────
 
 const TaskRow = memo(function TaskRow({ task: t, alt, autoMode = false, holding, onHold, onUnhold, onCancel, onEdit, onViewBrief, onViewAssets }) {
-  // Hold: only ASSIGNED (not started yet)
-  const canHold   = t.status === 'ASSIGNED'
+  // Hold: ASSIGNED or REWORK (manager can pause and reassign)
+  const canHold   = t.status === 'ASSIGNED' || t.status === 'REWORK'
   // Unhold: only HELD
   const canUnhold = t.status === 'HELD'
-  // Cancel: ASSIGNED or HELD (not yet started / paused)
-  const canCancel = t.status === 'ASSIGNED' || t.status === 'HELD'
+  // Cancel: ASSIGNED, REWORK or HELD
+  const canCancel = t.status === 'ASSIGNED' || t.status === 'REWORK' || t.status === 'HELD'
 
   return (
     <tr className={`border-b border-slate-100 transition-colors hover:bg-brand-50/30

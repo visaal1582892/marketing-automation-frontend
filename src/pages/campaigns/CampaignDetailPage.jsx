@@ -9,27 +9,30 @@ import AssetPreviewModal from '../../components/AssetPreviewModal'
 
 const STATUS_STYLES = {
   IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
-  QC_REVIEW:                  'bg-purple-50 text-purple-700 ring-purple-200',
+  MANAGER_QC_REVIEW:          'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_QC_REVIEW:        'bg-violet-50 text-violet-700 ring-violet-200',
   COMPLETED:                  'bg-green-50 text-green-700 ring-green-200',
   REJECTED:                   'bg-red-50 text-red-700 ring-red-200',
 }
 const STATUS_LABELS = {
   IN_PROGRESS:                'In Progress',
-  QC_REVIEW:                  'QC Review',
+  MANAGER_QC_REVIEW:          'Manager QC Review',
+  REQUESTOR_QC_REVIEW:        'Requestor QC Review',
   COMPLETED:                  'Completed',
   REJECTED:                   'Rejected',
 }
 
 const TASK_STYLES = {
-  ASSIGNED:    'bg-blue-50 text-blue-700 ring-blue-200',
-  IN_PROGRESS: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  REWORK:      'bg-amber-50 text-amber-700 ring-amber-200',
-  QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
-  COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
+  ASSIGNED:             'bg-blue-50 text-blue-700 ring-blue-200',
+  IN_PROGRESS:          'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  REWORK:               'bg-amber-50 text-amber-700 ring-amber-200',
+  MANAGER_QC_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_QC_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
+  COMPLETED:            'bg-green-50 text-green-700 ring-green-200',
 }
 const TASK_LABELS = {
   ASSIGNED: 'Assigned', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
-  QC_REVIEW: 'In QC', COMPLETED: 'Completed',
+  MANAGER_QC_REVIEW: 'Manager QC', REQUESTOR_QC_REVIEW: 'Requestor QC', COMPLETED: 'Completed',
 }
 
 export default function CampaignDetailPage() {
@@ -379,7 +382,7 @@ export default function CampaignDetailPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap shrink-0">
-                    {(t.status === 'QC_REVIEW' || t.status === 'COMPLETED') && (
+                    {(t.status === 'MANAGER_QC_REVIEW' || t.status === 'REQUESTOR_QC_REVIEW' || t.status === 'COMPLETED') && (
                       <button
                         onClick={() => setAssetPreviewTask(t)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200
@@ -389,7 +392,7 @@ export default function CampaignDetailPage() {
                         View Assets
                       </button>
                     )}
-                    {t.status === 'COMPLETED' && canRequestRework && (
+                    {t.status === 'REQUESTOR_QC_REVIEW' && canRequestRework && (
                       <button
                         onClick={() => { setReworkTask(t); setReworkMsg('') }}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200
@@ -561,7 +564,8 @@ function TaskTimestamps({ task }) {
     { key: 'assigned',  label: 'Assigned',  ts: task.assignedAt || task.createdAt, done: { dot: 'bg-slate-500',   line: 'bg-slate-300',   text: 'text-slate-600',   card: 'bg-slate-50 border-slate-200'   } },
     { key: 'accepted',  label: 'Accepted',  ts: task.acceptedAt,                   done: { dot: 'bg-blue-500',    line: 'bg-blue-200',    text: 'text-blue-700',    card: 'bg-blue-50 border-blue-200'     } },
     { key: 'submitted', label: 'Submitted', ts: task.submittedAt,                  done: { dot: 'bg-violet-500',  line: 'bg-violet-200',  text: 'text-violet-700',  card: 'bg-violet-50 border-violet-200' } },
-    { key: 'approved',  label: 'Approved',  ts: task.completedAt,                  done: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' } },
+    { key: 'mgr_approved',  label: 'Mgr Approved',  ts: task.managerApprovedAt,   done: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' } },
+    { key: 'req_approved',  label: 'Req Approved',  ts: task.requestorApprovedAt, done: { dot: 'bg-green-600',   line: 'bg-green-200',   text: 'text-green-700',   card: 'bg-green-50 border-green-200'     } },
   ]
   return (
     <div className="overflow-x-auto pb-0.5">

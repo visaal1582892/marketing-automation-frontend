@@ -473,7 +473,8 @@ export function printBrief(campaign, filterTaskId = null) {
           { label: 'Assigned',  ts: t.assignedAt || t.createdAt, color: '#64748b' },
           { label: 'Accepted',  ts: t.acceptedAt,                color: '#2563eb' },
           { label: 'Submitted', ts: t.submittedAt,               color: '#7c3aed' },
-          { label: 'Approved',  ts: t.completedAt,               color: '#16a34a' },
+          { label: 'Mgr Approved', ts: t.managerApprovedAt,   color: '#059669' },
+          { label: 'Req Approved', ts: t.requestorApprovedAt, color: '#16a34a' },
         ]
         return `
         <div class="task-card">

@@ -453,7 +453,8 @@ function StatusBadge({ v }) {
     PENDING_MARKETING_APPROVAL: 'bg-orange-50 text-orange-700 ring-orange-200',
     PENDING_INTERVENTION:       'bg-amber-50 text-amber-700 ring-amber-200',
     IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
-    QC_REVIEW:                  'bg-purple-50 text-purple-700 ring-purple-200',
+    MANAGER_QC_REVIEW:          'bg-purple-50 text-purple-700 ring-purple-200',
+    REQUESTOR_QC_REVIEW:        'bg-violet-50 text-violet-700 ring-violet-200',
     COMPLETED:                  'bg-green-50 text-green-700 ring-green-200',
     REJECTED:                   'bg-red-50 text-red-700 ring-red-200',
   }
@@ -462,7 +463,8 @@ function StatusBadge({ v }) {
     PENDING_MARKETING_APPROVAL: 'Pending Marketing',
     PENDING_INTERVENTION:       'Intervention',
     IN_PROGRESS:                'In Progress',
-    QC_REVIEW:                  'In QC',
+    MANAGER_QC_REVIEW:          'Manager QC',
+    REQUESTOR_QC_REVIEW:        'Requestor QC',
     COMPLETED:                  'Completed',
     REJECTED:                   'Rejected',
   }

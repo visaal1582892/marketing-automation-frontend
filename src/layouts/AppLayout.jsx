@@ -188,7 +188,8 @@ export default function AppLayout() {
     if (location.pathname.startsWith('/my-tasks'))                 return 'My Tasks'
     if (location.pathname.startsWith('/collaborations'))           return 'Collaborations'
     if (location.pathname.startsWith('/manager/task-management'))  return 'Task Management'
-    if (location.pathname.startsWith('/manager/qc-review'))        return 'QC Review Queue'
+    if (location.pathname.startsWith('/manager/qc-review'))        return 'Manager QC Review Queue'
+    if (location.pathname.startsWith('/requestor-qc-review'))     return 'Requestor QC Review'
     if (location.pathname.startsWith('/manager/reports'))          return 'Time & Efficiency Reports'
     if (location.pathname === '/dashboard')                        return 'Dashboard'
     return 'Marketing Automation'
@@ -243,15 +244,24 @@ export default function AppLayout() {
             />
           ))}
 
-          {/* Requestor-only: Completed Tasks */}
+          {/* Requestor-only: QC Review + Completed Tasks */}
           {showRequests && (
-            <SidebarLink
-              to="/campaigns/completed"
-              label="Completed Tasks"
-              icon="check"
-              collapsed={collapsed}
-              onNavigate={() => setMobileOpen(false)}
-            />
+            <>
+              <SidebarLink
+                to="/requestor-qc-review"
+                label="Requestor QC Review"
+                icon="checkCircle"
+                collapsed={collapsed}
+                onNavigate={() => setMobileOpen(false)}
+              />
+              <SidebarLink
+                to="/campaigns/completed"
+                label="Completed Tasks"
+                icon="check"
+                collapsed={collapsed}
+                onNavigate={() => setMobileOpen(false)}
+              />
+            </>
           )}
 
           {/* Marketing-Manager tools */}
@@ -273,7 +283,7 @@ export default function AppLayout() {
               />
               <SidebarLink
                 to="/manager/qc-review"
-                label="QC Review"
+                label="Manager QC Review"
                 icon="check"
                 collapsed={collapsed}
                 nested

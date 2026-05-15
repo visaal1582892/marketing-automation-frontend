@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import campaignsApi from '../api/campaigns'
+import tasksApi from '../api/tasks'
 import api from '../api/client'
 import Icon from './Icon'
 import PriorityEditor from './PriorityEditor'
@@ -470,7 +471,7 @@ export default function RequestBriefDrawer({
                               </p>
                             )}
                           </div>
-                          {t.status === 'COMPLETED' && canRequestRework && (
+                          {t.status === 'REQUESTOR_QC_REVIEW' && canRequestRework && (
                             <button
                               onClick={() => { setReworkTask(t); setReworkMsg('') }}
                               className="flex items-center gap-1.5 rounded-lg border border-amber-200
@@ -521,34 +522,33 @@ export default function RequestBriefDrawer({
                             </div>
                           )}
 
-                          {t.latestManagerReworkComment && t.status === 'REWORK' && (
-                            <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <Icon name="alertCircle" className="h-3.5 w-3.5 text-orange-500" />
-                                <span className="text-xs font-bold text-orange-700">
-                                  Manager rework note
-                                </span>
+                          {t.latestReworkComment && t.status === 'REWORK' && (() => {
+                            const isRequestor = t.latestReworkSource === 'REQUESTOR_REWORK'
+                            return (
+                              <div className={`rounded-xl border px-4 py-3 ${isRequestor ? 'border-purple-200 bg-purple-50' : 'border-orange-200 bg-orange-50'}`}>
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <Icon name="alertCircle" className={`h-3.5 w-3.5 ${isRequestor ? 'text-purple-500' : 'text-orange-500'}`} />
+                                  <span className={`text-xs font-bold ${isRequestor ? 'text-purple-700' : 'text-orange-700'}`}>
+                                    {isRequestor ? 'Requestor rework note' : 'Manager rework note'}
+                                  </span>
+                                </div>
+                                <p className={`text-sm whitespace-pre-wrap leading-relaxed ${isRequestor ? 'text-purple-800' : 'text-orange-800'}`}>
+                                  {t.latestReworkComment}
+                                </p>
                               </div>
-                              <p className="text-sm text-orange-800 whitespace-pre-wrap leading-relaxed">
-                                {t.latestManagerReworkComment}
-                              </p>
-                            </div>
-                          )}
-                          {t.latestRequestorReworkComment && t.status === 'REWORK' && (
-                            <div className="rounded-xl border border-purple-200 bg-purple-50 px-4 py-3">
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <Icon name="alertCircle" className="h-3.5 w-3.5 text-purple-500" />
-                                <span className="text-xs font-bold text-purple-700">
-                                  Requestor rework note
-                                </span>
-                              </div>
-                              <p className="text-sm text-purple-800 whitespace-pre-wrap leading-relaxed">
-                                {t.latestRequestorReworkComment}
-                              </p>
-                            </div>
-                          )}
+                            )
+                          })()}
 
                           <TaskQuestionnaireBrief items={t.questionnaire} />
+
+                          <TaskFilesSection
+                            task={t}
+                            campaign={c}
+                            canEdit={false}
+                            onFilesChanged={() =>
+                              campaignsApi.getById(c.campaignId).then(r => setCampaign(r.data))
+                            }
+                          />
                         </div>
                       </div>
                     ))}
@@ -752,9 +752,14 @@ function TaskTimestamps({ task }) {
       icon: <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5"><path d="M.5 9.9a.5.5 0 0 1 .5.5V13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.6a.5.5 0 0 1 1 0V13a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.6a.5.5 0 0 1 .5-.5Z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3Z"/></svg>,
     },
     {
-      key: 'approved', label: 'Approved', ts: task.completedAt,
+      key: 'mgr_approved', label: 'Mgr Approved', ts: task.managerApprovedAt,
       done: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' },
       icon: <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0Z"/></svg>,
+    },
+    {
+      key: 'req_approved', label: 'Req Approved', ts: task.requestorApprovedAt,
+      done: { dot: 'bg-green-600', line: 'bg-green-200', text: 'text-green-700', card: 'bg-green-50 border-green-200' },
+      icon: <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5"><path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.78-1.72a.75.75 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25Z"/></svg>,
     },
   ]
   const fmt = ts => new Date(ts).toLocaleString('en-IN', {
@@ -822,14 +827,16 @@ function PriorityBadge({ v }) {
 }
 function StatusBadge({ status }) {
   const S = {
-    IN_PROGRESS: 'bg-blue-50 text-blue-700 ring-blue-200',
-    QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
-    COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
-    REJECTED:    'bg-red-50 text-red-700 ring-red-200',
-    CANCELLED:   'bg-slate-100 text-slate-500 ring-slate-200',
+    IN_PROGRESS:         'bg-blue-50 text-blue-700 ring-blue-200',
+    MANAGER_QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
+    REQUESTOR_QC_REVIEW: 'bg-violet-50 text-violet-700 ring-violet-200',
+    COMPLETED:           'bg-green-50 text-green-700 ring-green-200',
+    REJECTED:            'bg-red-50 text-red-700 ring-red-200',
+    CANCELLED:           'bg-slate-100 text-slate-500 ring-slate-200',
   }
   const L = {
-    IN_PROGRESS: 'In Progress', QC_REVIEW: 'QC Review',
+    IN_PROGRESS: 'In Progress', MANAGER_QC_REVIEW: 'Manager QC',
+    REQUESTOR_QC_REVIEW: 'Requestor QC',
     COMPLETED: 'Completed', REJECTED: 'Rejected', CANCELLED: 'Cancelled',
   }
   return (
@@ -841,17 +848,19 @@ function StatusBadge({ status }) {
 }
 function TaskBadge({ status }) {
   const S = {
-    ASSIGNED:    'bg-blue-50 text-blue-700 ring-blue-200',
-    IN_PROGRESS: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-    REWORK:      'bg-amber-50 text-amber-700 ring-amber-200',
-    QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
-    COMPLETED:   'bg-green-50 text-green-700 ring-green-200',
-    HELD:        'bg-amber-50 text-amber-600 ring-amber-200',
-    CANCELLED:   'bg-slate-100 text-slate-500 ring-slate-200',
+    ASSIGNED:             'bg-blue-50 text-blue-700 ring-blue-200',
+    IN_PROGRESS:          'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    REWORK:               'bg-amber-50 text-amber-700 ring-amber-200',
+    MANAGER_QC_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
+    REQUESTOR_QC_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
+    COMPLETED:            'bg-green-50 text-green-700 ring-green-200',
+    HELD:                 'bg-amber-50 text-amber-600 ring-amber-200',
+    CANCELLED:            'bg-slate-100 text-slate-500 ring-slate-200',
   }
   const L = {
     ASSIGNED: 'Assigned', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
-    QC_REVIEW: 'In QC',   COMPLETED: 'Completed', HELD: 'Held', CANCELLED: 'Cancelled',
+    MANAGER_QC_REVIEW: 'Manager QC', REQUESTOR_QC_REVIEW: 'Requestor QC',
+    COMPLETED: 'Completed', HELD: 'Held', CANCELLED: 'Cancelled',
   }
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1
@@ -916,6 +925,142 @@ function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClo
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Per-task reference files section ────────────────────────────────────────
+function TaskFilesSection({ task, campaign, canEdit, onFilesChanged }) {
+  const [uploading, setUploading] = useState(false)
+  const [removing,  setRemoving]  = useState(null)
+  const fileInputRef = useRef(null)
+  const toast = useToast()
+
+  const handleAdd = async (files) => {
+    if (!files?.length) return
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      files.forEach(f => fd.append('files', f))
+      const uploadRes = await api.post('/upload/asset', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      const urls  = uploadRes.data?.urls || []
+      const names = Array.from(files).map(f => f.name)
+      if (urls.length > 0) {
+        await tasksApi.addTaskFiles(task.taskId, campaign.campaignId, urls, names)
+        await onFilesChanged()
+        toast?.success?.('Files added.')
+      }
+    } catch {
+      toast?.error?.('Upload failed. Please try again.')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleRemove = async (url) => {
+    setRemoving(url)
+    try {
+      await tasksApi.removeTaskFile(task.taskId, url)
+      await onFilesChanged()
+    } catch {
+      toast?.error?.('Failed to remove file.')
+    } finally {
+      setRemoving(null)
+    }
+  }
+
+  const files     = task.fileUrls || []
+  const names     = task.fileOriginalNames || []
+  const hasFiles  = files.length > 0
+
+  if (!hasFiles && !canEdit) return null
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+          Task Files {hasFiles ? `(${files.length})` : ''}
+        </span>
+        {canEdit && (
+          <>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50
+                         px-2.5 py-1 text-[11px] font-semibold text-brand-700 hover:bg-brand-100
+                         disabled:opacity-50 transition">
+              {uploading
+                ? <><Icon name="loader" className="h-3 w-3 animate-spin" /> Uploading…</>
+                : <><Icon name="upload" className="h-3 w-3" /> Add Files</>
+              }
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={e => { handleAdd(Array.from(e.target.files)); e.target.value = '' }}
+            />
+          </>
+        )}
+      </div>
+
+      {hasFiles && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {files.map((url, i) => {
+            const origName = names[i]
+            const { label, icon } = fileDisplayInfo(url, i, origName)
+            const isRemoving = removing === url
+            return (
+              <div key={url}
+                className="flex flex-col rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50">
+                  <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${icon.cls}`}>
+                    {icon.tag}
+                  </span>
+                  <span className="flex-1 truncate text-xs font-medium text-slate-700" title={label}>
+                    {label}
+                  </span>
+                  {canEdit && (
+                    <button
+                      onClick={() => handleRemove(url)}
+                      disabled={isRemoving}
+                      title="Remove file"
+                      className="shrink-0 rounded p-0.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50
+                                 disabled:opacity-40 transition">
+                      {isRemoving
+                        ? <Icon name="loader" className="h-3 w-3 animate-spin" />
+                        : <Icon name="x" className="h-3 w-3" />
+                      }
+                    </button>
+                  )}
+                </div>
+                <div className="flex border-t border-slate-200">
+                  <a href={url} target="_blank" rel="noopener noreferrer"
+                    className="flex flex-1 items-center justify-center gap-1 py-1.5 text-[11px] font-medium
+                               text-brand-600 hover:bg-brand-50 transition">
+                    <Icon name="externalLink" className="h-3 w-3" /> Open
+                  </a>
+                  <span className="w-px bg-slate-200 shrink-0" />
+                  <button
+                    onClick={() => downloadCampaignFile(url, origName)}
+                    className="flex flex-1 items-center justify-center gap-1 py-1.5 text-[11px] font-medium
+                               text-slate-600 hover:bg-slate-50 transition">
+                    <Icon name="download" className="h-3 w-3" /> Download
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {!hasFiles && canEdit && (
+        <p className="text-[11px] text-slate-400 italic">No files yet. Click "Add Files" to attach reference assets.</p>
+      )}
+    </div>
+  )
+}
+
 async function downloadCampaignFile(url, originalName) {
   try {
     const res = await api.get('/upload/proxy-download', {
