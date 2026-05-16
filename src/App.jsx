@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import ProtectedRoute from './auth/ProtectedRoute'
 import { ToastProvider } from './components/Toast'
+import { NotificationProvider } from './context/NotificationContext'
 import AppLayout from './layouts/AppLayout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -11,6 +12,7 @@ import RoleTaskMappingPage from './pages/admin/RoleTaskMappingPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
 import QuestionMasterPage from './pages/admin/QuestionMasterPage'
 import QcRoutingPage from './pages/admin/QcRoutingPage'
+import NotificationTemplatesPage from './pages/admin/NotificationTemplatesPage'
 import CampaignFormPage from './pages/campaigns/CampaignFormPage'
 import CampaignListPage from './pages/campaigns/CampaignListPage'
 import CampaignDetailPage from './pages/campaigns/CampaignDetailPage'
@@ -29,6 +31,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
+        <NotificationProvider>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 
@@ -204,11 +207,20 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/admin/notification-templates"
+                element={
+                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                    <NotificationTemplatesPage />
+                  </ProtectedRoute>
+                }
+              />
             </Route>
 
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
+        </NotificationProvider>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

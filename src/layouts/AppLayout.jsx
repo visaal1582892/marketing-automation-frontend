@@ -5,6 +5,7 @@ import { MASTER_RESOURCES } from '../api/masterData'
 import Icon from '../components/Icon'
 import Logo from '../components/Logo'
 import Modal from '../components/Modal'
+import NotificationBell from '../components/NotificationBell'
 import { useToast } from '../components/Toast'
 import api from '../api/client'
 
@@ -179,7 +180,8 @@ export default function AppLayout() {
     if (location.pathname.startsWith('/admin/granular-tasks'))     return 'Granular Tasks'
     if (location.pathname.startsWith('/admin/role-task-mappings')) return 'Role → Task Mappings'
     if (location.pathname.startsWith('/admin/questions'))           return 'Question Library'
-    if (location.pathname.startsWith('/admin/qc-routing'))          return 'QC Routing'
+    if (location.pathname.startsWith('/admin/qc-routing'))                  return 'QC Routing'
+    if (location.pathname.startsWith('/admin/notification-templates'))      return 'Notification Templates'
     if (location.pathname.startsWith('/admin/users'))              return 'User Management'
     if (location.pathname.startsWith('/campaigns/new'))            return 'New Marketing Request'
     if (location.pathname.startsWith('/campaigns/completed'))      return 'Completed Tasks'
@@ -360,6 +362,14 @@ export default function AppLayout() {
                 onNavigate={() => setMobileOpen(false)}
               />
               <SidebarLink
+                to="/admin/notification-templates"
+                label="Notification Templates"
+                icon="bell"
+                collapsed={collapsed}
+                nested
+                onNavigate={() => setMobileOpen(false)}
+              />
+              <SidebarLink
                 to="/admin/users"
                 label="Users"
                 icon="users"
@@ -412,6 +422,8 @@ export default function AppLayout() {
             </h1>
           </div>
 
+          <div className="flex items-center gap-2">
+            <NotificationBell />
           <div className="relative shrink-0">
             <button
               onClick={() => setMenuOpen((m) => !m)}
@@ -476,6 +488,7 @@ export default function AppLayout() {
                 </div>
               </>
             )}
+          </div>
           </div>
         </header>
 

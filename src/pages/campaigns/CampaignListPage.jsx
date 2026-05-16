@@ -1433,7 +1433,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                                 <span className="text-sm text-slate-700 font-medium truncate">{taskName}</span>
                               </button>
 
-                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0 ${statusCls}`}>
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0 ${statusCls} ${d.workTaskStatus === 'HELD' ? 'animate-pulse ring-1 ring-amber-400' : ''}`}>
                                 {statusLabel}
                               </span>
 
