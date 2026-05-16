@@ -98,7 +98,7 @@ export default function DashboardPage() {
   const taskCounts = useMemo(() => ({
     open:     tasks.filter(t => ['ASSIGNED','IN_PROGRESS','REWORK'].includes(t.status)).length,
     inFlight: tasks.filter(t => t.status === 'IN_PROGRESS').length,
-    qc:       tasks.filter(t => t.status === 'MANAGER_QC_REVIEW').length,
+    qc:       tasks.filter(t => t.status === 'MANAGER_QC_REVIEW' || t.status === 'REQUESTOR_QC_REVIEW').length,
     done:     tasks.filter(t => t.status === 'COMPLETED').length,
   }), [tasks])
 
