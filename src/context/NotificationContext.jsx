@@ -9,7 +9,8 @@ import { useToast } from '../components/Toast'
 const NotificationContext = createContext(null)
 
 function buildWsUrl() {
-  const raw = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/')
+  const raw = (import.meta.env.VITE_API_BASE_URL || 'https://exemplify-kinsman-prison.ngrok-free.dev/')
+  // const raw = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/')
     .trim()
     .replace(/\/+$/, '')
     .replace(/\/api$/, '')
