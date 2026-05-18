@@ -5,6 +5,7 @@ import campaignsApi from '../api/campaigns'
 import tasksApi from '../api/tasks'
 import managerApi from '../api/manager'
 import Icon from '../components/Icon'
+import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts'
 
 /**
  * Role-aware dashboard.
@@ -45,6 +46,7 @@ export default function DashboardPage() {
   const [opsCounts,            setOpsCounts]            = useState({ qcReview: 0, rework: 0, inProgress: 0, completed: 0, assigned: 0, held: 0, cancelled: 0 })
   const [completedTasksCount,  setCompletedTasksCount]  = useState(0)
   const [loading,              setLoading]              = useState(true)
+  const [trend,                setTrend]                = useState(null)
 
   useEffect(() => {
     let alive = true
@@ -73,7 +75,8 @@ export default function DashboardPage() {
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'ASSIGNED',    size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'HELD',        size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'CANCELLED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
-    ]).then(([cs, completedTasks, ts, qc, rework, inProgress, completed, assigned, held, cancelled]) => {
+      need(showOpsWidgets,     () => managerApi.dashboardTrend().then(r => r.data)),
+    ]).then(([cs, completedTasks, ts, qc, rework, inProgress, completed, assigned, held, cancelled, trendData]) => {
       if (!alive) return
       setCampaigns(toArr(cs))
       setCompletedTasksCount(completedTasks ?? 0)
@@ -89,6 +92,7 @@ export default function DashboardPage() {
         held:       held       ?? 0,
         cancelled:  cancelled  ?? 0,
       })
+      if (trendData) setTrend(trendData)
     }).finally(() => alive && setLoading(false))
 
     return () => { alive = false }
@@ -111,6 +115,22 @@ export default function DashboardPage() {
       cancelled: my.filter(c => c.status === 'CANCELLED').length,
     }
   }, [campaigns])
+
+  // ── Derived analytics for card detail lines ───────────────────────────────
+  const mgrQcCount = opsQcTasks.filter(t => t.status === 'MANAGER_QC_REVIEW').length
+  const reqQcCount = opsQcTasks.filter(t => t.status === 'REQUESTOR_QC_REVIEW').length
+
+  // "Active" = everything not yet terminal
+  const opsActiveTotal = opsCounts.assigned + opsCounts.inProgress + opsCounts.qcReview + opsCounts.rework + opsCounts.held
+  const opsPct = (n) => opsActiveTotal > 0 ? Math.min(100, Math.round(n / opsActiveTotal * 100)) : 0
+  const allOpsTotal = opsActiveTotal + opsCounts.completed + opsCounts.cancelled
+  const completionRate = allOpsTotal > 0 ? Math.round(opsCounts.completed / allOpsTotal * 100) : 0
+
+  const workerTotal = taskCounts.open + taskCounts.qc + taskCounts.done
+  const workerPct  = (n) => workerTotal > 0 ? Math.min(100, Math.round(n / workerTotal * 100)) : 0
+
+  const reqActive = Math.max(0, myRequestCounts.total - myRequestCounts.completed - myRequestCounts.rejected - myRequestCounts.cancelled)
+  const reqPct    = (n) => myRequestCounts.total > 0 ? Math.min(100, Math.round(n / myRequestCounts.total * 100)) : 0
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -182,7 +202,10 @@ export default function DashboardPage() {
               icon="send"
               label="Pending QC Review"
               value={opsCounts.qcReview}
-              cta="Review queue →"
+              detail={opsCounts.qcReview > 0 ? `${mgrQcCount} mgr · ${reqQcCount} requestor` : 'All clear — nothing pending'}
+              progress={opsPct(opsCounts.qcReview)}
+              sparkline={trend?.qcReview}
+              trendPct={trend?.qcReviewTrend}
             />
             <KpiCard
               to="/manager/task-management?status=REWORK"
@@ -190,7 +213,10 @@ export default function DashboardPage() {
               icon="alertCircle"
               label="Sent for Rework"
               value={opsCounts.rework}
-              cta="View →"
+              detail={opsCounts.rework > 0 ? `${opsCounts.rework} task${opsCounts.rework !== 1 ? 's' : ''} need correction` : 'No reworks outstanding'}
+              progress={opsPct(opsCounts.rework)}
+              sparkline={trend?.rework}
+              trendPct={trend?.reworkTrend}
             />
             <KpiCard
               to="/manager/task-management?status=IN_PROGRESS"
@@ -198,7 +224,10 @@ export default function DashboardPage() {
               icon="play"
               label="Tasks In Progress"
               value={opsCounts.inProgress}
-              cta="View all →"
+              detail={`${opsPct(opsCounts.inProgress)}% of active pipeline`}
+              progress={opsPct(opsCounts.inProgress)}
+              sparkline={trend?.inProgress}
+              trendPct={trend?.inProgressTrend}
             />
             <KpiCard
               to="/manager/task-management?status=COMPLETED"
@@ -206,7 +235,10 @@ export default function DashboardPage() {
               icon="check"
               label="Tasks Completed"
               value={opsCounts.completed}
-              cta="View →"
+              detail={`${completionRate}% overall completion rate`}
+              progress={completionRate}
+              sparkline={trend?.completed}
+              trendPct={trend?.completedTrend}
             />
           </Section>
 
@@ -220,7 +252,10 @@ export default function DashboardPage() {
               icon="inbox"
               label="Newly Assigned"
               value={opsCounts.assigned}
-              cta="View →"
+              detail="Awaiting worker acceptance"
+              progress={opsPct(opsCounts.assigned)}
+              sparkline={trend?.assigned}
+              trendPct={trend?.assignedTrend}
             />
             <KpiCard
               to="/manager/task-management?status=REWORK"
@@ -228,7 +263,10 @@ export default function DashboardPage() {
               icon="refresh"
               label="Reworks"
               value={opsCounts.rework}
-              cta="View →"
+              detail={opsCounts.rework > 0 ? 'Pending correction' : 'No reworks active'}
+              progress={opsPct(opsCounts.rework)}
+              sparkline={trend?.rework}
+              trendPct={trend?.reworkTrend}
             />
             <KpiCard
               to="/manager/task-management?status=HELD"
@@ -236,7 +274,10 @@ export default function DashboardPage() {
               icon="pause"
               label="Held"
               value={opsCounts.held}
-              cta="View →"
+              detail={opsCounts.held > 0 ? `${opsPct(opsCounts.held)}% of pipeline blocked` : 'No blocked tasks'}
+              progress={opsPct(opsCounts.held)}
+              sparkline={trend?.held}
+              trendPct={trend?.heldTrend}
             />
             <KpiCard
               to="/manager/task-management?status=CANCELLED"
@@ -244,7 +285,10 @@ export default function DashboardPage() {
               icon="x"
               label="Cancelled"
               value={opsCounts.cancelled}
-              cta="View →"
+              detail={allOpsTotal > 0 ? `${Math.round(opsCounts.cancelled / allOpsTotal * 100)}% attrition rate` : 'No cancellations'}
+              progress={allOpsTotal > 0 ? Math.round(opsCounts.cancelled / allOpsTotal * 100) : 0}
+              sparkline={trend?.cancelled}
+              trendPct={trend?.cancelledTrend}
             />
           </Section>
         </>
@@ -296,7 +340,8 @@ export default function DashboardPage() {
             icon="play"
             label="Open / In Progress"
             value={taskCounts.open}
-            cta="Open queue →"
+            detail={taskCounts.inFlight > 0 ? `${taskCounts.inFlight} actively running` : 'None started yet'}
+            progress={workerPct(taskCounts.open)}
           />
           <KpiCard
             to="/my-tasks?tab=QC"
@@ -304,7 +349,8 @@ export default function DashboardPage() {
             icon="send"
             label="In QC Review"
             value={taskCounts.qc}
-            cta="View →"
+            detail={taskCounts.qc > 0 ? 'Awaiting reviewer sign-off' : 'Nothing under review'}
+            progress={workerPct(taskCounts.qc)}
           />
           <KpiCard
             to="/my-tasks?tab=DONE"
@@ -312,7 +358,8 @@ export default function DashboardPage() {
             icon="check"
             label="Completed"
             value={taskCounts.done}
-            cta="View →"
+            detail={workerTotal > 0 ? `${workerPct(taskCounts.done)}% of all your tasks` : '—'}
+            progress={workerPct(taskCounts.done)}
           />
         </Section>
       )}
@@ -326,7 +373,8 @@ export default function DashboardPage() {
             icon="fileText"
             label="Total Submitted"
             value={myRequestCounts.total}
-            cta="View all →"
+            detail={reqActive > 0 ? `${reqActive} currently active` : 'No active requests'}
+            progress={100}
           />
           <KpiCard
             to="/campaigns/completed"
@@ -334,7 +382,8 @@ export default function DashboardPage() {
             icon="check"
             label="Delivered Tasks"
             value={completedTasksCount}
-            cta="View →"
+            detail={myRequestCounts.completed > 0 ? `Across ${myRequestCounts.completed} completed campaigns` : 'None delivered yet'}
+            progress={reqPct(myRequestCounts.completed)}
           />
           <KpiCard
             to="/campaigns?status=REJECTED"
@@ -342,7 +391,8 @@ export default function DashboardPage() {
             icon="alertCircle"
             label="Rejected"
             value={myRequestCounts.rejected}
-            cta="View →"
+            detail={myRequestCounts.total > 0 ? `${reqPct(myRequestCounts.rejected)}% rejection rate` : '—'}
+            progress={reqPct(myRequestCounts.rejected)}
           />
           <KpiCard
             to="/campaigns?status=CANCELLED"
@@ -350,19 +400,12 @@ export default function DashboardPage() {
             icon="x"
             label="Cancelled"
             value={myRequestCounts.cancelled}
-            cta="View →"
+            detail={myRequestCounts.total > 0 ? `${reqPct(myRequestCounts.cancelled)}% cancellation rate` : '—'}
+            progress={reqPct(myRequestCounts.cancelled)}
           />
         </Section>
       )}
 
-      {/* Recent activity feeds */}
-      {showOpsWidgets && opsQcTasks.length > 0 && (
-        <RecentTasksFeed
-          tasks={opsQcTasks.slice(0, 5)}
-          title="Pending QC — Recent Submissions"
-          linkTo="/manager/qc-review"
-        />
-      )}
     </div>
   )
 }
@@ -392,24 +435,103 @@ const TONES = {
   rose:    'from-rose-400 to-rose-600',
 }
 
-function KpiCard({ to, tone = 'brand', icon, label, value, cta }) {
+// Solid fill colours for recharts Area (must be a plain colour, not a gradient class)
+const TONE_COLOURS = {
+  brand:   '#6366f1',
+  emerald: '#10b981',
+  amber:   '#f59e0b',
+  violet:  '#8b5cf6',
+  orange:  '#f97316',
+  rose:    '#f43f5e',
+}
+
+function KpiCard({ to, tone = 'brand', icon, label, value, detail, progress, sparkline, trendPct }) {
+  // Convert raw int array → recharts-friendly [{v}] objects
+  const chartData = sparkline?.map(v => ({ v })) ?? []
+  const colour    = TONE_COLOURS[tone] ?? '#6366f1'
+
+  const trendUp   = trendPct != null && trendPct > 0
+  const trendDown = trendPct != null && trendPct < 0
+  const trendFlat = trendPct != null && trendPct === 0
+
   return (
     <Link
       to={to}
-      className="group flex flex-col overflow-hidden rounded-2xl bg-white p-5
+      className="group flex flex-col overflow-hidden rounded-2xl bg-white px-4 py-3.5
                  shadow-sm ring-1 ring-slate-900/5
                  transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-slate-900/8"
     >
+      {/* Top row: icon + trend badge */}
       <div className="flex items-start justify-between">
-        <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl
+        <div className={`inline-flex h-9 w-9 items-center justify-center rounded-xl
                          bg-gradient-to-br ${TONES[tone]} text-white shadow-sm`}>
-          <Icon name={icon} className="h-[17px] w-[17px]" strokeWidth={2} />
+          <Icon name={icon} className="h-4 w-4" strokeWidth={2} />
         </div>
-        <Icon name="chevron"
-          className="h-4 w-4 text-slate-200 transition-all duration-200 group-hover:text-brand-400 group-hover:translate-x-0.5" />
+        <div className="flex items-center gap-1.5">
+          {trendPct != null && (
+            <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+              trendUp   ? 'bg-emerald-50 text-emerald-700' :
+              trendDown ? 'bg-rose-50 text-rose-600' :
+                          'bg-slate-100 text-slate-500'
+            }`}>
+              {trendUp ? '↑' : trendDown ? '↓' : '→'} {Math.abs(trendPct)}%
+            </span>
+          )}
+          <Icon name="chevron"
+            className="h-4 w-4 text-slate-200 transition-all duration-200 group-hover:text-brand-400 group-hover:translate-x-0.5" />
+        </div>
       </div>
-      <div className="mt-4 text-3xl font-bold tracking-tight text-slate-900">{value ?? 0}</div>
-      <div className="mt-0.5 text-xs font-medium text-slate-400">{label}</div>
+
+      {/* Value + label + sparkline in one row */}
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-3xl font-bold tracking-tight text-slate-900 leading-none">{value ?? 0}</div>
+          <div className="mt-0.5 text-xs font-medium text-slate-400">{label}</div>
+          {detail && (
+            <div className="mt-0.5 text-[10px] text-slate-400 leading-tight truncate">{detail}</div>
+          )}
+        </div>
+
+        {/* Sparkline — compact, right-aligned */}
+        {chartData.length > 1 && (
+          <div className="h-10 w-20 shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id={`grad-${tone}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor={colour} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={colour} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Tooltip
+                  contentStyle={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,.12)' }}
+                  formatter={(v) => [v, '']}
+                  labelFormatter={() => ''}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="v"
+                  stroke={colour}
+                  strokeWidth={1.5}
+                  fill={`url(#grad-${tone})`}
+                  dot={false}
+                  activeDot={{ r: 2.5, fill: colour }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      {/* Progress bar — thin strip at bottom */}
+      {progress != null && (
+        <div className="mt-2 h-0.5 w-full rounded-full bg-slate-100">
+          <div
+            className={`h-0.5 rounded-full bg-gradient-to-r ${TONES[tone]} transition-all duration-500`}
+            style={{ width: `${Math.max(2, progress)}%` }}
+          />
+        </div>
+      )}
     </Link>
   )
 }

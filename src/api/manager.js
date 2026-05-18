@@ -33,6 +33,9 @@ const managerApi = {
 
   // ── Time-tracking reports (Module 3) ───────────────────────────────────────
   timeReport: (from, to) => api.get(`${BASE}/reports/time`, { params: { from, to } }),
+
+  // ── Dashboard KPI sparklines — 7-day daily trend data ────────────────────
+  dashboardTrend: () => api.get(`${BASE}/dashboard/trend`),
 }
 
 export default managerApi

@@ -167,18 +167,6 @@ export default function MyTasksPage() {
     ).length,
   }), [tasks])
 
-  const statusFilterOptions = useMemo(() => {
-    const opts = [
-      { value: 'OPEN', label: `Open (${counts.open})` },
-      { value: 'QC', label: `In QC (${counts.qc})` },
-      { value: 'DONE', label: `Done (${counts.done})` },
-    ]
-    if (counts.held > 0) opts.push({ value: 'HELD', label: `On Hold (${counts.held})` })
-    if (counts.cancelled > 0) opts.push({ value: 'CANCELLED', label: `Cancelled (${counts.cancelled})` })
-    opts.push({ value: 'ALL', label: 'All' })
-    return opts
-  }, [counts])
-
   const accept = async (task) => {
     setSavingId(task.taskId)
     try {
@@ -371,26 +359,53 @@ export default function MyTasksPage() {
     navigate(`/collaborations?taskId=${task.taskId}`)
   }
 
+  const TAB_DEFS = [
+    { key: 'OPEN',      label: 'Open',      count: counts.open },
+    { key: 'QC',        label: 'In QC',     count: counts.qc },
+    { key: 'DONE',      label: 'Done',      count: counts.done },
+    { key: 'HELD',      label: 'On Hold',   count: counts.held },
+    { key: 'CANCELLED', label: 'Cancelled', count: counts.cancelled },
+    { key: 'ALL',       label: 'All',       count: tasks.length },
+  ]
+
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">My Tasks</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Your live work queue, ordered by priority. Up to 3 tasks can be active at a time.
-          </p>
-        </div>
-        <div className="w-full sm:w-64">
-          <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
-          <AppSelect
-            value={filter}
-            onChange={setFilter}
-            options={statusFilterOptions}
-            isClearable={false}
-            isSearchable
-            menuPortal
-          />
-        </div>
+      <div>
+        <h2 className="text-xl font-bold text-slate-900">My Tasks</h2>
+        <p className="mt-0.5 text-sm text-slate-500">
+          Your live work queue, ordered by priority. Up to 3 tasks can be active at a time.
+        </p>
+      </div>
+
+      {/* Tab bar */}
+      <div className="border-b border-slate-200">
+        <nav className="-mb-px flex gap-0 overflow-x-auto">
+          {TAB_DEFS.map(tab => {
+            const active = filter === tab.key
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`
+                  flex items-center gap-1.5 whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+                  ${active
+                    ? 'border-brand-600 text-brand-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                  }
+                `}
+              >
+                {tab.label}
+                {tab.count > 0 && (
+                  <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+                    active ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
       </div>
 
       {loading ? (

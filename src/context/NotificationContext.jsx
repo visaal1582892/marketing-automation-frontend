@@ -18,14 +18,47 @@ function buildWsUrl() {
   return raw.replace(/^http/, 'ws') + '/ws'
 }
 
+/** Request browser notification permission — returns the final permission state. */
+async function requestBrowserPermission() {
+  if (!('Notification' in window)) return 'unsupported'
+  if (Notification.permission !== 'default') return Notification.permission
+  try {
+    return await Notification.requestPermission()
+  } catch {
+    return 'denied'
+  }
+}
+
+/** Fire a native browser notification if tab is hidden or not focused. */
+function fireBrowserNotification(title, body, url, navigate) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  if (!document.hidden && document.hasFocus()) return  // user is watching — skip
+  const n = new Notification(title, { body, icon: '/favicon.ico' })
+  if (url) n.onclick = () => { window.focus(); navigate(url); n.close() }
+}
+
 export function NotificationProvider({ children }) {
   const { user }   = useAuth()
   const toast      = useToast()
   const navigate   = useNavigate()
   const [notifications, setNotifications] = useState([])
   const [unreadCount,   setUnreadCount]   = useState(0)
-  const clientRef = useRef(null)
-  const userId    = user?.id
+  const clientRef  = useRef(null)
+  const userId     = user?.id
+  const [browserNotifStatus, setBrowserNotifStatus] = useState(
+    () => 'Notification' in window ? Notification.permission : 'unsupported'
+  )
+
+  // Ask for browser notification permission when user logs in
+  useEffect(() => {
+    if (!userId) return
+    requestBrowserPermission().then(setBrowserNotifStatus)
+  }, [userId])
+
+  const enableBrowserNotifications = useCallback(async () => {
+    const result = await requestBrowserPermission()
+    setBrowserNotifStatus(result)
+  }, [])
 
   // ── Load initial notifications from REST ─────────────────────────────────
   useEffect(() => {
@@ -51,14 +84,29 @@ export function NotificationProvider({ children }) {
       onConnect: () => {
         client.subscribe(`/topic/notifications/${userId}`, frame => {
           try {
-            const notification = JSON.parse(frame.body)
-            setNotifications(prev => [notification, ...prev])
+            const msg = JSON.parse(frame.body)
+
+            // RESOLVED signal — re-fetch from REST so state mirrors DB exactly
+            if (msg.type === 'RESOLVED') {
+              notificationsApi.getAll()
+                .then(data => {
+                  setNotifications(data)
+                  setUnreadCount(data.filter(n => !n.read).length)
+                })
+                .catch(() => {})
+              return
+            }
+
+            // New notification push
+            setNotifications(prev => [msg, ...prev])
             setUnreadCount(c => c + 1)
-            // Real-time popup — click navigates to the notification URL
+            // In-app toast (when tab is visible)
             toast.notify(
-              notification.message,
-              notification.url ? () => navigate(notification.url) : null
+              msg.message,
+              msg.url ? () => navigate(msg.url) : null
             )
+            // Browser notification (when tab is hidden / not focused)
+            fireBrowserNotification('New Notification', msg.message, msg.url, navigate)
           } catch { /* ignore malformed frame */ }
         })
       },
@@ -89,7 +137,10 @@ export function NotificationProvider({ children }) {
   }, [])
 
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markRead, markAllRead }}>
+    <NotificationContext.Provider value={{
+      notifications, unreadCount, markRead, markAllRead,
+      browserNotifStatus, enableBrowserNotifications
+    }}>
       {children}
     </NotificationContext.Provider>
   )

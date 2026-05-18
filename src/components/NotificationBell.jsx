@@ -14,7 +14,8 @@ function timeAgo(dateStr) {
 }
 
 export default function NotificationBell() {
-  const { notifications, unreadCount, markRead, markAllRead } = useNotifications()
+  const { notifications, unreadCount, markRead, markAllRead,
+          browserNotifStatus, enableBrowserNotifications } = useNotifications()
   const unread = notifications.filter(n => !n.read)
   const [open, setOpen] = useState(false)
   const panelRef        = useRef(null)
@@ -72,6 +73,22 @@ export default function NotificationBell() {
               </button>
             )}
           </div>
+
+          {/* Browser notification prompt */}
+          {browserNotifStatus === 'default' && (
+            <div className="flex items-center gap-2 border-b border-amber-100 bg-amber-50 px-4 py-2.5">
+              <span className="text-xs text-amber-700 flex-1">Enable browser notifications to get alerts when you're in another tab.</span>
+              <button
+                onClick={enableBrowserNotifications}
+                className="shrink-0 rounded-md bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-600 transition"
+              >Enable</button>
+            </div>
+          )}
+          {browserNotifStatus === 'denied' && (
+            <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-[11px] text-red-600">
+              Browser notifications blocked. Allow in browser site settings to enable.
+            </div>
+          )}
 
           {/* List */}
           <ul className="max-h-[420px] overflow-y-auto divide-y divide-slate-50">
