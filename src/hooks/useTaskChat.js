@@ -100,7 +100,7 @@ export default function useTaskChat(taskId, active, currentUserId) {
 
     const client = new Client({
       brokerURL:         wsUrl,
-      reconnectDelay:    0,        // manual exponential backoff via scheduleReconnect
+      reconnectDelay:    5000,        // manual exponential backoff via scheduleReconnect
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,
       connectHeaders: {
