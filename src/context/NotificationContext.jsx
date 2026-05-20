@@ -86,6 +86,7 @@ export function NotificationProvider({ children }) {
 
     const scheduleReconnect = () => {
       if (destroyed.current) return
+      if (retryTimer.current) return           // already scheduled — ignore duplicate call
       if (retryCount.current >= MAX_RETRIES) {
         console.warn('[Notifications] WebSocket failed after max retries — real-time updates paused.')
         return
@@ -93,14 +94,20 @@ export function NotificationProvider({ children }) {
       const delay = Math.min(BASE_DELAY * 2 ** retryCount.current, MAX_DELAY)
       retryCount.current += 1
       retryTimer.current = setTimeout(() => {
+        retryTimer.current = null              // allow next disconnect to schedule again
         if (!destroyed.current) client.activate()
       }, delay)
     }
 
     const client = new Client({
-      brokerURL:      wsUrl,
-      reconnectDelay: 0, // manual exponential backoff via scheduleReconnect
-      connectHeaders: { Authorization: `Bearer ${tokenStorage.get()}` },
+      brokerURL:        wsUrl,
+      reconnectDelay:   0, // manual exponential backoff via scheduleReconnect
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
+      connectHeaders: {
+        Authorization:             `Bearer ${tokenStorage.get()}`,
+        'ngrok-skip-browser-warning': 'true',
+      },
 
       onConnect: () => {
         retryCount.current = 0

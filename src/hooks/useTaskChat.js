@@ -85,6 +85,7 @@ export default function useTaskChat(taskId, active, currentUserId) {
     // ── Schedule a reconnect with exponential backoff ───────────────────────
     const scheduleReconnect = () => {
       if (destroyed.current) return
+      if (retryTimer.current) return           // already scheduled — ignore duplicate call
       if (retryCount.current >= MAX_RETRIES) {
         console.warn(`[Chat] WebSocket failed after ${MAX_RETRIES} attempts — giving up. Check that the backend is reachable.`)
         return
@@ -92,19 +93,20 @@ export default function useTaskChat(taskId, active, currentUserId) {
       const delay = Math.min(BASE_DELAY * 2 ** retryCount.current, MAX_DELAY)
       retryCount.current += 1
       retryTimer.current = setTimeout(() => {
+        retryTimer.current = null              // allow next disconnect to schedule again
         if (!destroyed.current) clientRef.current?.activate()
       }, delay)
     }
 
     const client = new Client({
-      brokerURL: wsUrl,
+      brokerURL:         wsUrl,
+      reconnectDelay:    0,        // manual exponential backoff via scheduleReconnect
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
       connectHeaders: {
-        Authorization: `Bearer ${token}`,
+        Authorization:                `Bearer ${token}`,
         'ngrok-skip-browser-warning': 'true',
       },
-      // Disable STOMP's built-in reconnect — we handle it ourselves so we
-      // can apply exponential backoff and a retry cap.
-      reconnectDelay: 0,
 
       onConnect: () => {
         retryCount.current = 0
