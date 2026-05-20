@@ -3,8 +3,15 @@ import api from './client'
 const BASE = '/tasks'
 
 const tasksApi = {
-  /** Tasks assigned to the currently logged-in user. */
-  listMy: () => api.get(`${BASE}/my`),
+  /**
+   * Paginated task list for the current user.
+   * @param {string}  q           – free-text search
+   * @param {string}  statusGroup – tab filter: OPEN | QC | DONE | HELD | CANCELLED | ALL
+   * @param {number}  page        – 0-based page index
+   * @param {number}  size        – page size
+   */
+  listMy: (q, statusGroup = 'ALL', page = 0, size = 10) =>
+    api.get(`${BASE}/my`, { params: { q: q || undefined, statusGroup, page, size } }),
 
   getById: (id) => api.get(`${BASE}/${id}`),
 

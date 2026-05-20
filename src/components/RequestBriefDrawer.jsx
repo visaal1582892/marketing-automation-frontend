@@ -37,6 +37,21 @@ export default function RequestBriefDrawer({
   const [reworkMsg,    setReworkMsg]    = useState('')
   const [submittingRw, setSubmittingRw] = useState(false)
 
+  const [markingCommentId, setMarkingCommentId] = useState(null)
+  const handleMarkAnswered = useCallback(async (taskId, commentId) => {
+    setMarkingCommentId(commentId)
+    try {
+      await tasksApi.markCommentAnswered(taskId, commentId)
+      const res = await campaignsApi.getById(campaign.campaignId)
+      setCampaign(res.data)
+      onCampaignChanged?.(res.data)
+    } catch (e) {
+      toast.error?.(e?.response?.data?.message || 'Failed to mark comment as answered.')
+    } finally {
+      setMarkingCommentId(null)
+    }
+  }, [campaign, onCampaignChanged, toast]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Slide-in / slide-out animation ────────────────────────────────────────
   const [visible, setVisible] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -496,27 +511,41 @@ export default function RequestBriefDrawer({
                             </div>
                           )}
 
-                          {t.status === 'HELD' && t.activeComments?.length > 0 && (
+                          {t.activeComments?.length > 0 && (
                             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
                               <div className="flex items-center gap-2">
                                 <Icon name="messageSquare" className="h-3.5 w-3.5 text-amber-600" />
                                 <span className="text-xs font-bold text-amber-800">
-                                  Worker comment{t.activeComments.length > 1 ? 's' : ''} — task on hold
+                                  Worker comment{t.activeComments.length > 1 ? 's' : ''}
+                                  {t.status === 'HELD' && <span className="font-normal ml-1">— task on hold</span>}
                                 </span>
                               </div>
                               {t.activeComments.map((wc) => (
                                 <div key={wc.commentId} className="border-t border-amber-200 pt-2 first:border-0 first:pt-0">
-                                  <p className="text-[10px] font-semibold text-amber-700 mb-0.5">
-                                    {wc.userName}
-                                    {wc.createdAt && (
-                                      <span className="font-normal text-amber-500 ml-1">
-                                        · {new Date(wc.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                                      </span>
-                                    )}
-                                  </p>
-                                  <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">
-                                    {wc.comment}
-                                  </p>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[10px] font-semibold text-amber-700 mb-0.5">
+                                        {wc.userName}
+                                        {wc.createdAt && (
+                                          <span className="font-normal text-amber-500 ml-1">
+                                            · {new Date(wc.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                          </span>
+                                        )}
+                                      </p>
+                                      <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">
+                                        {wc.comment}
+                                      </p>
+                                    </div>
+                                    <button
+                                      onClick={() => handleMarkAnswered(t.taskId, wc.commentId)}
+                                      disabled={markingCommentId === wc.commentId}
+                                      title="Mark this comment as answered"
+                                      className="mt-0.5 shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold
+                                                 bg-amber-100 text-amber-700 border border-amber-300
+                                                 hover:bg-amber-200 transition disabled:opacity-50">
+                                      {markingCommentId === wc.commentId ? '…' : '✓ Answered'}
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>

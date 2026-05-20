@@ -8,11 +8,12 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import MasterTablePage from './pages/admin/MasterTablePage'
 import GranularTaskPage from './pages/admin/GranularTaskPage'
-import RoleTaskMappingPage from './pages/admin/RoleTaskMappingPage'
+import TaskMappingsPage from './pages/admin/TaskMappingsPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
 import QuestionMasterPage from './pages/admin/QuestionMasterPage'
 import QcRoutingPage from './pages/admin/QcRoutingPage'
 import NotificationTemplatesPage from './pages/admin/NotificationTemplatesPage'
+import CampaignSpecificationsPage from './pages/admin/CampaignSpecificationsPage'
 import CampaignFormPage from './pages/campaigns/CampaignFormPage'
 import CampaignListPage from './pages/campaigns/CampaignListPage'
 import CampaignDetailPage from './pages/campaigns/CampaignDetailPage'
@@ -176,10 +177,10 @@ export default function App() {
                 }
               />
               <Route
-                path="/admin/role-task-mappings"
+                path="/admin/task-mappings"
                 element={
                   <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
-                    <RoleTaskMappingPage />
+                    <TaskMappingsPage />
                   </ProtectedRoute>
                 }
               />
@@ -212,6 +213,14 @@ export default function App() {
                 element={
                   <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
                     <NotificationTemplatesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/campaign-specifications"
+                element={
+                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                    <CampaignSpecificationsPage />
                   </ProtectedRoute>
                 }
               />

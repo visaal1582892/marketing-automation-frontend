@@ -1907,15 +1907,16 @@ const CampaignRow = memo(function CampaignRow({
   onClone,
   onEdit,
 }) {
-  const taskCount   = c.taskCount ?? (c.workTasks || []).length
-  const doneCount   = c.completedTaskCount ?? (c.workTasks || []).filter(t => t.status === 'COMPLETED').length
-  const hasRework   = c.hasRework   ?? (c.workTasks || []).some(t => t.status === 'REWORK')
-  const hasQcReview = c.hasQcReview ?? (c.workTasks || []).some(t => t.status === 'MANAGER_QC_REVIEW' || t.status === 'REQUESTOR_QC_REVIEW')
-  const canEdit     = !ROW_TERMINAL.includes(c.status)
-  const isBookmarked = !!c.bookmarked
+  const taskCount           = c.taskCount ?? (c.workTasks || []).length
+  const doneCount           = c.completedTaskCount ?? (c.workTasks || []).filter(t => t.status === 'COMPLETED').length
+  const hasRework           = c.hasRework   ?? (c.workTasks || []).some(t => t.status === 'REWORK')
+  const hasQcReview         = c.hasQcReview ?? (c.workTasks || []).some(t => t.status === 'MANAGER_QC_REVIEW' || t.status === 'REQUESTOR_QC_REVIEW')
+  const hasUnansweredComments = !!c.hasUnansweredComments
+  const canEdit             = !ROW_TERMINAL.includes(c.status)
+  const isBookmarked        = !!c.bookmarked
 
   return (
-    <tr className="transition hover:bg-slate-50/70">
+    <tr className={`transition hover:bg-slate-50/70 ${hasUnansweredComments ? 'bg-sky-50/40' : ''}`}>
       <td className="px-3 py-3">
         <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{c.campaignId}</span>
       </td>
@@ -1937,6 +1938,15 @@ const CampaignRow = memo(function CampaignRow({
           {hasQcReview && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 ring-1 ring-purple-200">
               ⏳ QC
+            </span>
+          )}
+          {hasUnansweredComments && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 ring-1 ring-sky-200">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-sky-500" />
+              </span>
+              New comment
             </span>
           )}
         </div>

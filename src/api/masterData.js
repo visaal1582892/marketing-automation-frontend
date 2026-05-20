@@ -22,6 +22,11 @@ export const MASTER_RESOURCES = [
   { slug: 'vendor-types',        label: 'Vendor Types',        icon: 'truck'     },
   { slug: 'kpi-types',           label: 'KPI Types',           icon: 'barChart'  },
   { slug: 'expected-outputs',    label: 'Expected Outputs',    icon: 'download'  },
+  // Campaign Specifications
+  { slug: 'campaign-types',      label: 'Campaign Types',      icon: 'tag'       },
+  { slug: 'business-verticals',  label: 'Business Verticals',  icon: 'building'  },
+  { slug: 'business-types',      label: 'Business Types',      icon: 'list'      },
+  { slug: 'store-format-types',  label: 'Store / Format Types', icon: 'globe'    },
 ]
 
 export const findResource = (slug) =>
@@ -83,6 +88,27 @@ export const roleTaskApi = {
   update:      (mappingId, { roleId, taskId, status }) =>
     api.patch(`/master/routing/role-task/${mappingId}`, { roleId, taskId, status }).then((r) => r.data),
   remove:      (mappingId)     => api.delete(`/master/routing/role-task/${mappingId}`).then((r) => r.data),
+}
+
+/** API for Campaign Task Configurations (/api/campaign-task-config) */
+export const campaignTaskConfigApi = {
+  /** Grouped list of all configs. */
+  list: () => api.get('/campaign-task-config').then((r) => r.data),
+
+  /** Bulk-create tasks for a combination. */
+  create: (payload) => api.post('/campaign-task-config', payload).then((r) => r.data),
+
+  /** Replace all tasks for a combination with a new set. */
+  updateCombination: (payload) => api.put('/campaign-task-config/combination', payload).then((r) => r.data),
+
+  /** Delete a single task row by its DB id. */
+  deleteById: (id) => api.delete(`/campaign-task-config/${id}`).then((r) => r.data),
+
+  /** Delete all rows for a combination (by query params). */
+  deleteByCombination: (campaignTypeId = '', businessVerticalId = '', businessTypeId = '', storeFormatTypeId = '') =>
+    api.delete('/campaign-task-config/combination', {
+      params: { campaignTypeId, businessVerticalId, businessTypeId, storeFormatTypeId },
+    }).then((r) => r.data),
 }
 
 /** API for Question Library (/api/admin/questions) */

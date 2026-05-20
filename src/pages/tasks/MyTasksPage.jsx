@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import tasksApi from '../../api/tasks'
+import useDebounce from '../../hooks/useDebounce'
 import collaborationApi from '../../api/collaboration'
 import Icon from '../../components/Icon'
 import { useToast } from '../../components/Toast'
@@ -8,6 +9,7 @@ import RequestBriefDrawer, { RequestSummaryCard } from '../../components/Request
 import campaignsApi from '../../api/campaigns'
 import AssetPanel from '../../components/AssetPanel'
 import AppSelect from '../../components/AppSelect'
+import Pagination from '../../components/Pagination'
 import { useAuth } from '../../auth/AuthContext'
 
 /**
@@ -31,9 +33,15 @@ export default function MyTasksPage() {
     return VALID_FILTERS.includes(param) ? param : 'OPEN'
   }
 
-  const [tasks, setTasks]       = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [filter, setFilter]     = useState(initialFilter)
+  const [tasks, setTasks]             = useState([])
+  const [loading, setLoading]         = useState(true)
+  const [filter, setFilter]           = useState(initialFilter)
+  const [search, setSearch]           = useState('')
+  const [page, setPage]               = useState(0)
+  const [totalElements, setTotal]     = useState(0)
+  const [totalPages, setTotalPages]   = useState(1)
+  const [tabCounts, setTabCounts]     = useState({})
+  const [inFlightFull, setInFlightFull] = useState(false)
   const [submitting, setSubmitting] = useState(null)
   const [submitForm, setSubmitForm] = useState({ submissionNotes: '' })
   // fileItems: [{ id, file, status: 'uploading'|'done'|'error', url, errorMsg }]
@@ -59,113 +67,80 @@ export default function MyTasksPage() {
   const [taskQuestions, setTaskQuestions] = useState([])
   const [taskAnswers,   setTaskAnswers]   = useState({}) // { [questionId]: string }
 
-  // `load()` blanks the list to "Loading…" — used only on first mount /
-  // route change. `refresh()` silently swaps tasks without flicker so the
-  // live timer span isn't unmounted while we sync after Start / Submit.
-  const load = () => {
+  const PAGE_SIZE = 10
+  const debouncedSearch = useDebounce(search, 500)
+
+  const applyResponse = (res) => {
+    const d = res.data || {}
+    setTasks(d.content || [])
+    setTotal(d.totalElements ?? 0)
+    setTotalPages(d.totalPages ?? 1)
+    setTabCounts(d.counts ?? {})
+    setInFlightFull(d.inFlightFull ?? false)
+  }
+
+  // `load(pg)` blanks to "Loading…" — navigation / tab / search / page changes.
+  // `refresh()` silently swaps tasks without flicker after accept / submit actions.
+  const load = (pg = 0) => {
     setLoading(true)
-    tasksApi.listMy()
-      .then(res => setTasks(res.data || []))
+    tasksApi.listMy(debouncedSearch || undefined, filter, pg, PAGE_SIZE)
+      .then(applyResponse)
       .catch(() => showToast('Failed to load tasks', 'error'))
       .finally(() => setLoading(false))
   }
   const refresh = () => {
-    tasksApi.listMy()
-      .then(res => setTasks(res.data || []))
-      .catch(() => { /* silent — UI still shows the optimistic state */ })
+    tasksApi.listMy(debouncedSearch || undefined, filter, page, PAGE_SIZE)
+      .then(applyResponse)
+      .catch(() => {})
   }
 
-  useEffect(load, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Navigation → reset everything and load page 0
+  useEffect(() => {
+    setSearch('')
+    setPage(0)
+    setLoading(true)
+    tasksApi.listMy(undefined, filter, 0, PAGE_SIZE)
+      .then(applyResponse)
+      .catch(() => showToast('Failed to load tasks', 'error'))
+      .finally(() => setLoading(false))
+  }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Tab change → reset to page 0 and reload
+  const filterInitialized = useRef(false)
+  useEffect(() => {
+    if (!filterInitialized.current) { filterInitialized.current = true; return }
+    setPage(0)
+    load(0)
+  }, [filter]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounced search change → reset to page 0 and reload
+  const searchInitialized = useRef(false)
+  useEffect(() => {
+    if (!searchInitialized.current) { searchInitialized.current = true; return }
+    setPage(0)
+    load(0)
+  }, [debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Live "wall clock" used by the timer badge ───────────────────────────
-  // We keep an actual `now` state value (vs the old setTick re-render trick)
-  // so it's a real piece of reactive state that React tracks. Every second
-  // we bump it to the current millisecond stamp; `formatElapsed(task, now)`
-  // then renders task.startedAt → now as MM:SS.
-  // The interval is only armed while at least one task is IN_PROGRESS,
-  // so an idle worker page costs zero ticks.
   const [now, setNow]   = useState(() => Date.now())
   const hasInFlight     = tasks.some(t => t.status === 'IN_PROGRESS')
   useEffect(() => {
     if (!hasInFlight) return
-    setNow(Date.now()) // sync immediately so the first frame already shows ≥0s
+    setNow(Date.now())
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [hasInFlight])
 
-  // A task whose parent campaign is REJECTED/COMPLETED is no longer
-  // actionable — the worker may still see it for reference, but Accept/Submit
-  // must be disabled. We treat such tasks as "closed" regardless of the task's
-  // own status (e.g. it could still say ASSIGNED if the cancel sweep hasn't
-  // re-rendered yet on a stale tab).
+  // A task whose parent campaign is REJECTED/COMPLETED is no longer actionable.
   const isTaskClosed = (t) =>
     t.status === 'COMPLETED' ||
     t.status === 'CANCELLED' ||
     t.campaignStatus === 'REJECTED' ||
     t.campaignStatus === 'COMPLETED'
 
-  // ── Queue rules ─────────────────────────────────────────────────────────
-  // The worker can have UP TO 3 tasks in flight simultaneously. The backend
-  // already returns tasks ordered by priority (HIGH first, then MEDIUM, LOW)
-  // and within each priority by status precedence + creation time.
-  //
-  //  - REWORK tasks: Start button always visible (any queue position) as long
-  //    as fewer than 3 tasks are IN_PROGRESS. Rework is urgent — bypass order.
-  //  - ASSIGNED tasks: only the top (3 − inFlight) get a Start button.
-  //  - Once 3 tasks are IN_PROGRESS → no more Start buttons appear.
-  const MAX_IN_FLIGHT = 3
-  const inFlightCount = useMemo(
-    () => tasks.filter(t => t.status === 'IN_PROGRESS' && !isTaskClosed(t)).length,
-    [tasks] // eslint-disable-line react-hooks/exhaustive-deps
-  )
-  const canStartMore = inFlightCount < MAX_IN_FLIGHT
-  // IDs of the next (up to MAX_IN_FLIGHT − inFlightCount) startable tasks.
-  const startableTaskIds = useMemo(() => {
-    if (!canStartMore) return new Set()
-    const slots = MAX_IN_FLIGHT - inFlightCount
-    const ids = new Set()
-    for (const t of tasks) {
-      if (ids.size >= slots) break
-      if ((t.status === 'ASSIGNED' || t.status === 'REWORK') && !isTaskClosed(t)) {
-        ids.add(t.taskId)
-      }
-    }
-    return ids
-  }, [tasks, canStartMore, inFlightCount]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const filtered = useMemo(() => {
-    if (filter === 'ALL') return tasks
-    if (filter === 'OPEN') return tasks.filter(t =>
-      ['ASSIGNED', 'IN_PROGRESS', 'REWORK'].includes(t.status) &&
-      t.campaignStatus !== 'REJECTED' &&
-      t.campaignStatus !== 'COMPLETED'
-    )
-    if (filter === 'HELD')      return tasks.filter(t => t.status === 'HELD')
-    if (filter === 'QC')        return tasks.filter(t => t.status === 'MANAGER_QC_REVIEW' || t.status === 'REQUESTOR_QC_REVIEW')
-    if (filter === 'DONE')      return tasks.filter(t => t.status === 'COMPLETED')
-    if (filter === 'CANCELLED') return tasks.filter(t =>
-      t.status === 'CANCELLED' ||
-      (['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW'].includes(t.status) &&
-        (t.campaignStatus === 'REJECTED' || t.campaignStatus === 'COMPLETED'))
-    )
-    return tasks
-  }, [tasks, filter])
-
-  const counts = useMemo(() => ({
-    open: tasks.filter(t =>
-      ['ASSIGNED', 'IN_PROGRESS', 'REWORK'].includes(t.status) &&
-      t.campaignStatus !== 'REJECTED' &&
-      t.campaignStatus !== 'COMPLETED'
-    ).length,
-    held: tasks.filter(t => t.status === 'HELD').length,
-    qc:   tasks.filter(t => t.status === 'MANAGER_QC_REVIEW' || t.status === 'REQUESTOR_QC_REVIEW').length,
-    done: tasks.filter(t => t.status === 'COMPLETED').length,
-    cancelled: tasks.filter(t =>
-      t.status === 'CANCELLED' ||
-      (['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW'].includes(t.status) &&
-        (t.campaignStatus === 'REJECTED' || t.campaignStatus === 'COMPLETED'))
-    ).length,
-  }), [tasks])
+  // Tab / search filtering are now done server-side.
+  // `tasks` already holds the current page of the active tab.
+  const filtered = tasks
 
   const accept = async (task) => {
     setSavingId(task.taskId)
@@ -360,12 +335,12 @@ export default function MyTasksPage() {
   }
 
   const TAB_DEFS = [
-    { key: 'OPEN',      label: 'Open',      count: counts.open },
-    { key: 'QC',        label: 'In QC',     count: counts.qc },
-    { key: 'DONE',      label: 'Done',      count: counts.done },
-    { key: 'HELD',      label: 'On Hold',   count: counts.held },
-    { key: 'CANCELLED', label: 'Cancelled', count: counts.cancelled },
-    { key: 'ALL',       label: 'All',       count: tasks.length },
+    { key: 'OPEN',      label: 'Open',      count: tabCounts.open      ?? 0 },
+    { key: 'QC',        label: 'In QC',     count: tabCounts.qc        ?? 0 },
+    { key: 'DONE',      label: 'Done',      count: tabCounts.done      ?? 0 },
+    { key: 'HELD',      label: 'On Hold',   count: tabCounts.held      ?? 0 },
+    { key: 'CANCELLED', label: 'Cancelled', count: tabCounts.cancelled ?? 0 },
+    { key: 'ALL',       label: 'All',       count: tabCounts.all       ?? 0 },
   ]
 
   return (
@@ -377,35 +352,57 @@ export default function MyTasksPage() {
         </p>
       </div>
 
-      {/* Tab bar */}
+      {/* Tab bar + search */}
       <div className="border-b border-slate-200">
-        <nav className="-mb-px flex gap-0 overflow-x-auto">
-          {TAB_DEFS.map(tab => {
-            const active = filter === tab.key
-            return (
+        <div className="flex items-center justify-between gap-3">
+          <nav className="-mb-px flex gap-0 overflow-x-auto">
+            {TAB_DEFS.map(tab => {
+              const active = filter === tab.key
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => { setFilter(tab.key); setSearch('') }}
+                  className={`
+                    flex items-center gap-1.5 whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+                    ${active
+                      ? 'border-brand-600 text-brand-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                    }
+                  `}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+                      active ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </nav>
+
+          {/* Search — filters within the active tab */}
+          <div className="relative shrink-0 pb-px">
+            <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by task, campaign, requestor…"
+              className="w-80 rounded-lg border border-slate-200 bg-white pl-8 pr-8 py-1.5 text-xs
+                placeholder-slate-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-200 transition"
+            />
+            {search && (
               <button
-                key={tab.key}
-                onClick={() => setFilter(tab.key)}
-                className={`
-                  flex items-center gap-1.5 whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
-                  ${active
-                    ? 'border-brand-600 text-brand-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-                  }
-                `}
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
               >
-                {tab.label}
-                {tab.count > 0 && (
-                  <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
-                    active ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {tab.count}
-                  </span>
-                )}
+                <Icon name="x" className="h-3 w-3" />
               </button>
-            )
-          })}
-        </nav>
+            )}
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -413,10 +410,18 @@ export default function MyTasksPage() {
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white py-14 text-center">
           <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
-          <p className="text-sm text-slate-500">No tasks in this view.</p>
+          <p className="text-sm text-slate-500">
+            {search ? `No tasks match "${search}" in this tab.` : 'No tasks in this view.'}
+          </p>
+          {search && (
+            <button onClick={() => setSearch('')} className="mt-2 text-xs text-brand-600 hover:underline">
+              Clear search
+            </button>
+          )}
         </div>
       ) : (
-        <div className="space-y-3">
+        <>
+          <div className="space-y-3">
           {filtered.map(t => (
             <TaskCard
               key={t.taskId}
@@ -424,8 +429,8 @@ export default function MyTasksPage() {
               now={now}
               busy={savingId === t.taskId}
               closed={isTaskClosed(t)}
-              isNextUp={startableTaskIds.has(t.taskId)}
-              hasInFlight={!canStartMore}
+              isNextUp={t.canStart}
+              hasInFlight={inFlightFull}
               onAccept={() => accept(t)}
               onSubmit={() => openSubmit(t)}
               onView={() => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}
@@ -438,6 +443,16 @@ export default function MyTasksPage() {
             />
           ))}
         </div>
+
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          totalElements={totalElements}
+          pageSize={PAGE_SIZE}
+          loading={loading}
+          onPageChange={(pg) => { setPage(pg); load(pg) }}
+        />
+        </>
       )}
 
       {submitting && (

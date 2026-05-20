@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { useToast } from '../../components/Toast'
@@ -9,6 +9,7 @@ import api from '../../api/client'
 import AppSelect from '../../components/AppSelect'
 import tasksApi from '../../api/tasks'
 import Icon from '../../components/Icon'
+import campaignSpecsApi from '../../api/campaignSpecs'
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
 
@@ -44,6 +45,52 @@ function FormGroup({ label, required, children, hint, error }) {
       {children}
       {hint  && <p className="mt-0.5 text-xs text-slate-400">{hint}</p>}
       {error && <p className="mt-0.5 text-xs text-red-500 font-medium">{error}</p>}
+    </div>
+  )
+}
+
+// ─── Radio group (single-select pill tiles with inline indicator) ─────────────
+
+function RadioGroup({ name, value, onChange, options, hasError, disabled }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((opt) => {
+        const optVal  = opt.value ?? opt.id ?? opt.code ?? ''
+        const optLabel = opt.label ?? opt.name ?? ''
+        const checked  = value === optVal
+        return (
+          <label
+            key={optVal}
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm
+              font-medium cursor-pointer transition select-none whitespace-nowrap
+              ${disabled ? 'cursor-not-allowed opacity-50' : ''}
+              ${checked
+                ? 'border-brand-500 bg-brand-50 text-brand-700 shadow-sm ring-1 ring-brand-300'
+                : hasError
+                  ? 'border-red-300 bg-white text-slate-600 hover:border-red-400 hover:bg-red-50/30'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:bg-brand-50/40'
+              }`}
+          >
+            <input
+              type="radio"
+              name={name}
+              value={optVal}
+              checked={checked}
+              disabled={disabled}
+              onChange={() => !disabled && onChange({ target: { name, value: optVal } })}
+              className="sr-only"
+            />
+            {/* Custom radio indicator */}
+            <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-all
+              ${checked
+                ? 'border-brand-500 bg-brand-500'
+                : hasError ? 'border-red-300' : 'border-slate-300'}`}>
+              {checked && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+            </span>
+            <span className="leading-snug">{optLabel}</span>
+          </label>
+        )
+      })}
     </div>
   )
 }
@@ -980,6 +1027,12 @@ export default function CampaignFormPage() {
   const [allAvailableTasks,  setAllAvailableTasks]  = useState([])
   const [loadingTasks,       setLoadingTasks]       = useState(true)
 
+  // Campaign Specifications — hierarchical selects
+  const [campaignTypes,       setCampaignTypes]       = useState([])
+  const [businessVerticals,   setBusinessVerticals]   = useState([])
+  const [businessTypeOpts,    setBusinessTypeOpts]    = useState([])   // filtered by selected vertical
+  const [storeFormatOpts,     setStoreFormatOpts]     = useState([])   // filtered by selected business type
+
   // Enum options — only priorities remain as Java enum (not admin-configurable)
   const [enumOpts, setEnumOpts] = useState({ priorities: [] })
 
@@ -987,6 +1040,10 @@ export default function CampaignFormPage() {
     departmentId:            user?.departmentId || '',
     businessObjective:       '',
     businessObjectiveOther:  '',
+    campaignTypeId:          '',
+    businessVerticalId:      '',
+    businessTypeId:          '',
+    storeFormatTypeId:       '',
     taskTypeId:              [],
     audienceTypeIds:         [],
     audienceTypeOther:       '',
@@ -1062,12 +1119,30 @@ export default function CampaignFormPage() {
     masterApi.list('vendor-types').then(nbM(setVendorTypes)).catch(() => {})
     masterApi.list('kpi-types').then(nb(setKpiTypeOpts)).catch(() => {})
     masterApi.list('expected-outputs').then(nb(setExpectedOutputOpts)).catch(() => {})
+    masterApi.list('campaign-types').then((d) => setCampaignTypes(d.map(normaliseById))).catch(() => {})
+    masterApi.list('business-verticals').then((d) => setBusinessVerticals(d.map(normaliseById))).catch(() => {})
 
     masterApi.list('granular-tasks').then((d) => setAllAvailableTasks(d))
       .catch(() => {}).finally(() => setLoadingTasks(false))
 
     enumsApi.getCampaignFormOptions().then((data) => setEnumOpts(data)).catch(() => {})
   }, [])
+
+  // Cascade: load Business Types when Business Vertical changes
+  useEffect(() => {
+    if (!form.businessVerticalId) { setBusinessTypeOpts([]); return }
+    campaignSpecsApi.getBusinessTypesByVertical(form.businessVerticalId)
+      .then((d) => setBusinessTypeOpts(d.map(normaliseById)))
+      .catch(() => setBusinessTypeOpts([]))
+  }, [form.businessVerticalId])
+
+  // Cascade: load Store Format Types when Business Type changes
+  useEffect(() => {
+    if (!form.businessTypeId) { setStoreFormatOpts([]); return }
+    campaignSpecsApi.getStoreFormatsByBusinessType(form.businessTypeId)
+      .then((d) => setStoreFormatOpts(d.map(normaliseById)))
+      .catch(() => setStoreFormatOpts([]))
+  }, [form.businessTypeId])
 
   // Filter granular tasks by ALL selected task types (union); show all when nothing is selected.
   // Normalize both sides to strings — master-data IDs arrive as numbers from the API but the
@@ -1174,6 +1249,14 @@ export default function CampaignFormPage() {
         next.vendorTypeIds  = []
         next.vendorTypeOther = ''
       }
+      // Cascade: clear child when parent changes
+      if (name === 'businessVerticalId') {
+        next.businessTypeId   = ''
+        next.storeFormatTypeId = ''
+      }
+      if (name === 'businessTypeId') {
+        next.storeFormatTypeId = ''
+      }
       // Clear "other" text when a different option is selected
       if (name === 'businessObjective' && value !== 'Other')  next.businessObjectiveOther = ''
       if (name === 'offerTypeId'       && value !== 'Other')  next.offerTypeOther         = ''
@@ -1257,11 +1340,14 @@ export default function CampaignFormPage() {
     const e = {}
 
     // Section 1
-    if (!form.departmentId)      e.departmentId      = 'Required'
     if (targetLocations.length === 0) e.targetLocations = 'Select at least one location'
     if (!form.businessObjective) e.businessObjective = 'Required'
     else if (form.businessObjective === 'Other' && !form.businessObjectiveOther?.trim())
       e.businessObjectiveOther = 'Please specify your custom business objective'
+    if (!form.campaignTypeId)     e.campaignTypeId     = 'Required'
+    if (!form.businessVerticalId) e.businessVerticalId = 'Required'
+    if (form.businessVerticalId && businessTypeOpts.length > 0 && !form.businessTypeId)   e.businessTypeId   = 'Required'
+    if (form.businessTypeId    && storeFormatOpts.length > 0 && !form.storeFormatTypeId) e.storeFormatTypeId = 'Required'
 
     // Section 2
     if (form.taskTypeId.length === 0) e.taskTypeId = 'Select at least one task type'
@@ -1379,8 +1465,12 @@ export default function CampaignFormPage() {
       )]
 
       const payload = {
-        departmentId:      form.departmentId || null,
-        businessObjective: resolve(form.businessObjective, form.businessObjectiveOther),
+        departmentId:        form.departmentId || null,
+        businessObjective:   resolve(form.businessObjective, form.businessObjectiveOther),
+        campaignTypeId:      form.campaignTypeId      || null,
+        businessVerticalId:  form.businessVerticalId  || null,
+        businessTypeId:      form.businessTypeId      || null,
+        storeFormatTypeId:   form.storeFormatTypeId   || null,
         taskTypeId:        derivedTaskTypeIds.length > 0 ? derivedTaskTypeIds : null,
         // multi-select fields — sent as JSON arrays to the backend List<String> fields
         audienceTypeId:    resolveMultiArr(form.audienceTypeIds, form.audienceTypeOther),
@@ -1517,22 +1607,13 @@ export default function CampaignFormPage() {
 
       <form onSubmit={handleSubmit} noValidate className="space-y-3">
 
-        {/* ── Card 1: Requestor · Campaign Type · Audience ── */}
+        {/* ── Card 1: Campaign Specifications · Audience ── */}
         <Card>
-          {/* §1 Requestor Details */}
-          <SectionLabel number="1" title="Requestor Details" />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <FormGroup label="Requestor Name">
-              <input className={inputCls} value={user?.fullName || user?.email || ''} disabled />
-            </FormGroup>
+          {/* §1 Campaign Specifications */}
+          <SectionLabel number="1" title="Campaign Specifications" />
 
-            <FormGroup label="Department" required error={errors.departmentId}>
-              <div data-has-error={!!errors.departmentId || undefined}>
-                <Select name="departmentId" value={form.departmentId} onChange={handleChange}
-                  options={depts} placeholder="Select…" hasError={!!errors.departmentId} />
-              </div>
-            </FormGroup>
-
+          {/* Row 1: Business Objective + Campaign Type */}
+          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
             <FormGroup label="Business Objective" required error={errors.businessObjective || errors.businessObjectiveOther}>
               <div data-has-error={!!(errors.businessObjective || errors.businessObjectiveOther) || undefined}>
                 <Select name="businessObjective" value={form.businessObjective} onChange={handleChange}
@@ -1545,35 +1626,91 @@ export default function CampaignFormPage() {
               )}
             </FormGroup>
 
-            <FormGroup label="Task Type" required error={errors.taskTypeId}
-              hint="Select one or more task types — only matching tasks will appear below">
-              <GenericMultiSelect
-                name="taskTypeId"
-                values={form.taskTypeId}
+            <FormGroup label="Campaign Type" required error={errors.campaignTypeId}>
+              <RadioGroup
+                name="campaignTypeId"
+                value={form.campaignTypeId}
                 onChange={handleChange}
-                options={taskTypes}
-                placeholder="Select task type(s)…"
-                hasError={!!errors.taskTypeId}
+                options={campaignTypes}
+                hasError={!!errors.campaignTypeId}
               />
             </FormGroup>
           </div>
 
-          {/* Location spans full width */}
-          <div className="mt-3">
-            <FormGroup label="Target Location(s)" required error={errors.targetLocations}
-              hint="Search cities, districts or states — multiple allowed">
-              <div data-has-error={!!errors.targetLocations || undefined}>
-                <LocationMultiSelect
-                  selected={targetLocations}
-                  onChange={(locs) => {
-                    setTargetLocations(locs)
-                    if (errors.targetLocations) setErrors((prev) => ({ ...prev, targetLocations: '' }))
-                  }}
-                  hasError={!!errors.targetLocations}
+          <Divider />
+
+          {/* Business Vertical — radio */}
+          <FormGroup label="Business Vertical" required error={errors.businessVerticalId}>
+            <RadioGroup
+              name="businessVerticalId"
+              value={form.businessVerticalId}
+              onChange={handleChange}
+              options={businessVerticals}
+              hasError={!!errors.businessVerticalId}
+            />
+          </FormGroup>
+
+          {/* Business Type — shown only after a vertical is chosen AND options exist */}
+          {form.businessVerticalId && businessTypeOpts.length > 0 && (
+            <div className="mt-3">
+              <FormGroup label="Business Type" required error={errors.businessTypeId}>
+                <RadioGroup
+                  name="businessTypeId"
+                  value={form.businessTypeId}
+                  onChange={handleChange}
+                  options={businessTypeOpts}
+                  hasError={!!errors.businessTypeId}
                 />
-              </div>
-            </FormGroup>
-          </div>
+              </FormGroup>
+            </div>
+          )}
+
+          {/* Store / Format Type — shown only after a business type is chosen AND options exist */}
+          {form.businessVerticalId && form.businessTypeId && storeFormatOpts.length > 0 && (
+            <div className="mt-3">
+              <FormGroup label="Store / Format Type" required error={errors.storeFormatTypeId}>
+                <RadioGroup
+                  name="storeFormatTypeId"
+                  value={form.storeFormatTypeId}
+                  onChange={handleChange}
+                  options={storeFormatOpts}
+                  hasError={!!errors.storeFormatTypeId}
+                />
+              </FormGroup>
+            </div>
+          )}
+
+          <Divider />
+
+          {/* Task Type — end of Campaign Specifications */}
+          <FormGroup label="Task Type" required error={errors.taskTypeId}
+            hint="Select one or more task types — only matching tasks will appear in Deliverables">
+            <GenericMultiSelect
+              name="taskTypeId"
+              values={form.taskTypeId}
+              onChange={handleChange}
+              options={taskTypes}
+              placeholder="Select task type(s)…"
+              hasError={!!errors.taskTypeId}
+            />
+          </FormGroup>
+        </Card>
+
+        {/* ── Card 1b: Location + Audience ── */}
+        <Card>
+          <FormGroup label="Target Location(s)" required error={errors.targetLocations}
+            hint="Search cities, districts or states — multiple allowed">
+            <div data-has-error={!!errors.targetLocations || undefined}>
+              <LocationMultiSelect
+                selected={targetLocations}
+                onChange={(locs) => {
+                  setTargetLocations(locs)
+                  if (errors.targetLocations) setErrors((prev) => ({ ...prev, targetLocations: '' }))
+                }}
+                hasError={!!errors.targetLocations}
+              />
+            </div>
+          </FormGroup>
 
           <Divider />
 

@@ -77,11 +77,33 @@ export function NotificationProvider({ children }) {
     const wsUrl = buildWsUrl()
     if (!wsUrl) return
 
+    const MAX_RETRIES = 5
+    const BASE_DELAY  = 5_000   // 5 s → 10 s → 20 s → 40 s → 80 s
+    const MAX_DELAY   = 120_000 // cap at 2 min
+    const retryCount  = { current: 0 }
+    const retryTimer  = { current: null }
+    const destroyed   = { current: false }
+
+    const scheduleReconnect = () => {
+      if (destroyed.current) return
+      if (retryCount.current >= MAX_RETRIES) {
+        console.warn('[Notifications] WebSocket failed after max retries — real-time updates paused.')
+        return
+      }
+      const delay = Math.min(BASE_DELAY * 2 ** retryCount.current, MAX_DELAY)
+      retryCount.current += 1
+      retryTimer.current = setTimeout(() => {
+        if (!destroyed.current) client.activate()
+      }, delay)
+    }
+
     const client = new Client({
-      brokerURL:        wsUrl,
-      reconnectDelay:   5000,
-      connectHeaders:   { Authorization: `Bearer ${tokenStorage.get()}` },
+      brokerURL:      wsUrl,
+      reconnectDelay: 0, // manual exponential backoff via scheduleReconnect
+      connectHeaders: { Authorization: `Bearer ${tokenStorage.get()}` },
+
       onConnect: () => {
+        retryCount.current = 0
         client.subscribe(`/topic/notifications/${userId}`, frame => {
           try {
             const msg = JSON.parse(frame.body)
@@ -110,12 +132,18 @@ export function NotificationProvider({ children }) {
           } catch { /* ignore malformed frame */ }
         })
       },
+
+      onDisconnect:     () => scheduleReconnect(),
+      onStompError:     () => scheduleReconnect(),
+      onWebSocketError: () => { /* browser already logs one line */ },
     })
 
     client.activate()
     clientRef.current = client
 
     return () => {
+      destroyed.current = true
+      if (retryTimer.current) clearTimeout(retryTimer.current)
       client.deactivate()
       clientRef.current = null
     }

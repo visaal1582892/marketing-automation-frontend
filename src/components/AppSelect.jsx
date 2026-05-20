@@ -13,7 +13,7 @@
  *   isSearchable boolean                               enable text search
  *   menuPortal   boolean                               render menu in document.body (avoids overflow clipping)
  */
-import ReactSelect from 'react-select'
+import ReactSelect, { components } from 'react-select'
 
 // brand palette (from index.css CSS vars)
 const B = {
@@ -125,6 +125,37 @@ function buildStyles(size) {
 }
 
 /**
+ * ValueContainer that shows at most `max` multi-value chips, then "+N more".
+ * Keeps the search Input always rendered so typing still works.
+ */
+function makeLimitedValueContainer(max) {
+  return function LimitedValueContainer({ children, ...props }) {
+    const values = props.getValue()
+    const overflow = Math.max(0, values.length - max)
+    // children = [<MultiValue/>, …, <Input/>]  (Input is always last)
+    const kids = Array.isArray(children) ? children : [children]
+    const input = kids[kids.length - 1]
+    const chips = kids.slice(0, kids.length - 1)
+    const visible = chips.slice(0, max)
+    return (
+      <components.ValueContainer {...props}>
+        {visible}
+        {overflow > 0 && (
+          <span style={{
+            fontSize: '0.7rem', fontWeight: 500, color: '#475569',
+            background: '#e2e8f0', borderRadius: '999px',
+            padding: '1px 7px', whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            +{overflow} more
+          </span>
+        )}
+        {input}
+      </components.ValueContainer>
+    )
+  }
+}
+
+/**
  * Normalise a raw options array into react-select's {value, label} format.
  * Accepts: string[], {value,label}[], or [value, label][] pairs.
  * Grouped options ({ label, options[] }) are passed through unchanged.
@@ -150,6 +181,8 @@ export default function AppSelect({
   isSearchable = false,
   isMulti = false,
   menuPortal = false,
+  /** Max chips shown before "+N more" — multi mode only. Default 2. */
+  maxMultiValues = 2,
 }) {
   const normOpts = normalise(options)
   const styles   = buildStyles(size)
@@ -157,6 +190,7 @@ export default function AppSelect({
   // Multi mode: normalise value items to strings so they match normOpts
   if (isMulti) {
     const normValue = (value ?? []).map(v => ({ ...v, value: String(v.value) }))
+    const LimitedVC = makeLimitedValueContainer(maxMultiValues)
     return (
       <ReactSelect
         isMulti
@@ -169,13 +203,18 @@ export default function AppSelect({
         isDisabled={isDisabled}
         isSearchable
         noOptionsMessage={() => 'No matches found'}
+        components={{ ValueContainer: LimitedVC }}
         styles={{
           ...styles,
-          valueContainer: (base) => ({ ...base, padding: '2px 8px', flexWrap: 'wrap' }),
+          valueContainer: (base) => ({
+            ...base, padding: '2px 6px', flexWrap: 'nowrap',
+            overflow: 'hidden', alignItems: 'center',
+          }),
           multiValue: (base) => ({
             ...base,
             backgroundColor: B[100],
             borderRadius: '4px',
+            flexShrink: 0,
           }),
           multiValueLabel: (base) => ({
             ...base,

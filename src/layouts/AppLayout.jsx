@@ -178,10 +178,11 @@ export default function AppLayout() {
   const navHeader = useMemo(() => {
     if (location.pathname.startsWith('/admin/master'))             return 'Master Data'
     if (location.pathname.startsWith('/admin/granular-tasks'))     return 'Granular Tasks'
-    if (location.pathname.startsWith('/admin/role-task-mappings')) return 'Role → Task Mappings'
+    if (location.pathname.startsWith('/admin/task-mappings')) return 'Task Mappings'
     if (location.pathname.startsWith('/admin/questions'))           return 'Question Library'
     if (location.pathname.startsWith('/admin/qc-routing'))                  return 'QC Routing'
     if (location.pathname.startsWith('/admin/notification-templates'))      return 'Notification Templates'
+    if (location.pathname.startsWith('/admin/campaign-specifications'))     return 'Campaign Specifications'
     if (location.pathname.startsWith('/admin/users'))              return 'User Management'
     if (location.pathname.startsWith('/campaigns/new'))            return 'New Marketing Request'
     if (location.pathname.startsWith('/campaigns/completed'))      return 'Completed Tasks'
@@ -338,8 +339,8 @@ export default function AppLayout() {
                 onNavigate={() => setMobileOpen(false)}
               />
               <SidebarLink
-                to="/admin/role-task-mappings"
-                label="Role-Task Mappings"
+                to="/admin/task-mappings"
+                label="Task Mappings"
                 icon="shield"
                 collapsed={collapsed}
                 nested
@@ -365,6 +366,14 @@ export default function AppLayout() {
                 to="/admin/notification-templates"
                 label="Notification Templates"
                 icon="bell"
+                collapsed={collapsed}
+                nested
+                onNavigate={() => setMobileOpen(false)}
+              />
+              <SidebarLink
+                to="/admin/campaign-specifications"
+                label="Campaign Specs"
+                icon="tag"
                 collapsed={collapsed}
                 nested
                 onNavigate={() => setMobileOpen(false)}
