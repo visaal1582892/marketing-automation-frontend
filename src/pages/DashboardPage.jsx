@@ -42,6 +42,7 @@ export default function DashboardPage() {
 
   const [campaigns,            setCampaigns]            = useState([])
   const [tasks,                setTasks]                = useState([])
+  const [workerCounts,         setWorkerCounts]         = useState({ open: 0, inFlight: 0, qc: 0, done: 0 })
   const [opsQcTasks,           setOpsQcTasks]           = useState([])
   const [opsCounts,            setOpsCounts]            = useState({ qcReview: 0, rework: 0, inProgress: 0, completed: 0, assigned: 0, held: 0, cancelled: 0 })
   const [completedTasksCount,  setCompletedTasksCount]  = useState(0)
@@ -58,14 +59,22 @@ export default function DashboardPage() {
     const toArr = (data) => Array.isArray(data) ? data : (data?.content || [])
     // Extract total count from plain array or PagedResponse
     const toCount = (data) => Array.isArray(data) ? data.length : (data?.totalElements ?? 0)
+    // totalElements from a size=1 paginated fetch
+    const toTotal = (data) => data?.totalElements ?? 0
 
     Promise.all([
       // Requestor: just first page is enough for the array (used for task-level status filters)
       need(showRequestWidgets, () => campaignsApi.list().then(r => r.data)),
       // Requestor: total completed tasks count (size=1 — only totalElements needed)
       need(showRequestWidgets, () => campaignsApi.completedTasks({ page: 0, size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      // Worker: own task list
-      need(showWorkerWidgets,  () => tasksApi.listMy().then(r => r.data)),
+      // Worker: per-status counts via size=1 so totalElements is accurate for all statuses,
+      // not just the first page. Fetching the full list would miss completed/held tasks
+      // that fall beyond page 0.
+      need(showWorkerWidgets, () => tasksApi.listMy(null, 'OPEN', 0, 1).then(r => r.data)),
+      need(showWorkerWidgets, () => tasksApi.listMy(null, 'QC',   0, 1).then(r => r.data)),
+      need(showWorkerWidgets, () => tasksApi.listMy(null, 'DONE', 0, 1).then(r => r.data)),
+      // Worker: recent task list for the feed (first page, default size)
+      need(showWorkerWidgets, () => tasksApi.listMy().then(r => r.data)),
       // Ops: QC pending (full list — usually small)
       need(showOpsWidgets,     () => managerApi.pendingTasks().then(r => r.data)),
       // Ops: per-status counts — fetch size=1 so backend returns totalElements accurately
@@ -76,11 +85,23 @@ export default function DashboardPage() {
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'HELD',        size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'CANCELLED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets,     () => managerApi.dashboardTrend().then(r => r.data)),
-    ]).then(([cs, completedTasks, ts, qc, rework, inProgress, completed, assigned, held, cancelled, trendData]) => {
+    ]).then(([cs, completedTasks, openData, qcData, doneData, ts, qc, rework, inProgress, completed, assigned, held, cancelled, trendData]) => {
       if (!alive) return
       setCampaigns(toArr(cs))
       setCompletedTasksCount(completedTasks ?? 0)
-      setTasks(toArr(ts))
+
+      // Worker counts from accurate totalElements (not filtered from a single page)
+      const openTotal = toTotal(openData)
+      // IN_PROGRESS is a subset of OPEN — derive from the full list for the detail line
+      const tsArr = toArr(ts)
+      setTasks(tsArr)
+      setWorkerCounts({
+        open:     openTotal,
+        inFlight: tsArr.filter(t => t.status === 'IN_PROGRESS').length, // detail line only
+        qc:       toTotal(qcData),
+        done:     toTotal(doneData),
+      })
+
       const qcArr = toArr(qc)
       setOpsQcTasks(qcArr)
       setOpsCounts({
@@ -98,13 +119,8 @@ export default function DashboardPage() {
     return () => { alive = false }
   }, [showWorkerWidgets, showOpsWidgets, showRequestWidgets])
 
-  // Derived KPIs
-  const taskCounts = useMemo(() => ({
-    open:     tasks.filter(t => ['ASSIGNED','IN_PROGRESS','REWORK'].includes(t.status)).length,
-    inFlight: tasks.filter(t => t.status === 'IN_PROGRESS').length,
-    qc:       tasks.filter(t => t.status === 'MANAGER_QC_REVIEW' || t.status === 'REQUESTOR_QC_REVIEW').length,
-    done:     tasks.filter(t => t.status === 'COMPLETED').length,
-  }), [tasks])
+  // Worker KPI aliases (counts come from accurate totalElements, not from a filtered page)
+  const taskCounts = workerCounts
 
   const myRequestCounts = useMemo(() => {
     const my = campaigns
@@ -126,7 +142,7 @@ export default function DashboardPage() {
   const allOpsTotal = opsActiveTotal + opsCounts.completed + opsCounts.cancelled
   const completionRate = allOpsTotal > 0 ? Math.round(opsCounts.completed / allOpsTotal * 100) : 0
 
-  const workerTotal = taskCounts.open + taskCounts.qc + taskCounts.done
+  const workerTotal = workerCounts.open + workerCounts.qc + workerCounts.done
   const workerPct  = (n) => workerTotal > 0 ? Math.min(100, Math.round(n / workerTotal * 100)) : 0
 
   const reqActive = Math.max(0, myRequestCounts.total - myRequestCounts.completed - myRequestCounts.rejected - myRequestCounts.cancelled)
