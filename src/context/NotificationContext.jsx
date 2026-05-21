@@ -101,7 +101,7 @@ export function NotificationProvider({ children }) {
 
     const client = new Client({
       brokerURL:        wsUrl,
-      reconnectDelay:   5000, // 5 seconds // manual exponential backoff via scheduleReconnect
+      reconnectDelay:   10000, // 5 seconds // manual exponential backoff via scheduleReconnect
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,
       connectHeaders: {
