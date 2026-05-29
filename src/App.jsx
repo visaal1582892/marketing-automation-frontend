@@ -6,6 +6,7 @@ import { NotificationProvider } from './context/NotificationContext'
 import AppLayout from './layouts/AppLayout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
+import MasterHubPage from './pages/admin/MasterHubPage'
 import MasterTablePage from './pages/admin/MasterTablePage'
 import GranularTaskPage from './pages/admin/GranularTaskPage'
 import TaskMappingsPage from './pages/admin/TaskMappingsPage'
@@ -13,7 +14,8 @@ import UserManagementPage from './pages/admin/UserManagementPage'
 import QuestionMasterPage from './pages/admin/QuestionMasterPage'
 import QcRoutingPage from './pages/admin/QcRoutingPage'
 import NotificationTemplatesPage from './pages/admin/NotificationTemplatesPage'
-import CampaignSpecificationsPage from './pages/admin/CampaignSpecificationsPage'
+import VerticalTypeMappingPage from './pages/admin/VerticalTypeMappingPage'
+import TypeFormatMappingPage from './pages/admin/TypeFormatMappingPage'
 import CampaignFormPage from './pages/campaigns/CampaignFormPage'
 import CampaignListPage from './pages/campaigns/CampaignListPage'
 import CampaignDetailPage from './pages/campaigns/CampaignDetailPage'
@@ -22,11 +24,8 @@ import MyTasksPage from './pages/tasks/MyTasksPage'
 import CollaborationsPage from './pages/tasks/CollaborationsPage'
 import ManagerQcReviewPage from './pages/manager/ManagerQcReviewPage'
 import RequestorQcReviewPage from './pages/campaigns/RequestorQcReviewPage'
-import TimeReportPage from './pages/manager/TimeReportPage'
 import TaskManagementPage from './pages/manager/TaskManagementPage'
 import AnalyticsPage from './pages/manager/AnalyticsPage'
-import { MASTER_RESOURCES } from './api/masterData'
-
 export default function App() {
   return (
     <BrowserRouter>
@@ -134,15 +133,6 @@ export default function App() {
                 }
               />
               <Route
-                path="/manager/reports"
-                element={
-                  <ProtectedRoute requireRole={['Marketing Manager', 'Procurement Manager']}>
-                    <TimeReportPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
                 path="/manager/analytics"
                 element={
                   <ProtectedRoute requireRole={['Marketing Manager', 'Procurement Manager']}>
@@ -156,7 +146,7 @@ export default function App() {
                 path="/admin/master"
                 element={
                   <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
-                    <Navigate to={`/admin/master/${MASTER_RESOURCES[0].slug}`} replace />
+                    <MasterHubPage />
                   </ProtectedRoute>
                 }
               />
@@ -217,10 +207,18 @@ export default function App() {
                 }
               />
               <Route
-                path="/admin/campaign-specifications"
+                path="/admin/campaign-mappings/vertical-type"
                 element={
                   <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
-                    <CampaignSpecificationsPage />
+                    <VerticalTypeMappingPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/campaign-mappings/type-format"
+                element={
+                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                    <TypeFormatMappingPage />
                   </ProtectedRoute>
                 }
               />

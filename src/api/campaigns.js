@@ -33,10 +33,10 @@ const campaignsApi = {
   requestorEdit: (id, payload) => api.put(`${BASE}/${id}/requestor-edit`, payload),
 
   /**
-   * Requestor deletes a single task spec (by specId) from their campaign.
+   * Requestor deletes a single work task (by taskId) from their campaign.
    * Only allowed when the task has not yet been started (ASSIGNED / HELD / ACCEPTED).
    */
-  deleteTask: (campaignId, specId) => api.delete(`${BASE}/${campaignId}/deliverables/${specId}`),
+  deleteTask: (campaignId, taskId) => api.delete(`${BASE}/${campaignId}/tasks/${taskId}`),
 
   /**
    * Requestor deletes their entire campaign.

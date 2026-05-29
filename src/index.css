@@ -33,6 +33,12 @@
 
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
+
+  /* Stacking: sidebar < header < dropdowns < modals */
+  --z-index-sidebar: 40;
+  --z-index-header: 50;
+  --z-index-dropdown: 60;
+  --z-index-modal: 100;
 }
 
 /* ------------------------------------------------------------------ */

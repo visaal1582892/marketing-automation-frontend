@@ -344,16 +344,9 @@ export default function MyTasksPage() {
   ]
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">My Tasks</h2>
-        <p className="mt-0.5 text-sm text-slate-500">
-          Your live work queue, ordered by priority. Up to 3 tasks can be active at a time.
-        </p>
-      </div>
-
+    <div className="h-full flex flex-col gap-2">
       {/* Tab bar + search */}
-      <div className="border-b border-slate-200">
+      <div className="shrink-0 border-b border-slate-200">
         <div className="flex items-center justify-between gap-3">
           <nav className="-mb-px flex gap-0 overflow-x-auto">
             {TAB_DEFS.map(tab => {
@@ -405,55 +398,57 @@ export default function MyTasksPage() {
         </div>
       </div>
 
-      {loading ? (
-        <p className="text-center text-slate-400 py-12 text-sm">Loading…</p>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white py-14 text-center">
-          <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
-          <p className="text-sm text-slate-500">
-            {search ? `No tasks match "${search}" in this tab.` : 'No tasks in this view.'}
-          </p>
-          {search && (
-            <button onClick={() => setSearch('')} className="mt-2 text-xs text-brand-600 hover:underline">
-              Clear search
-            </button>
-          )}
-        </div>
-      ) : (
-        <>
-          <div className="space-y-3">
-          {filtered.map(t => (
-            <TaskCard
-              key={t.taskId}
-              task={t}
-              now={now}
-              busy={savingId === t.taskId}
-              closed={isTaskClosed(t)}
-              isNextUp={t.canStart}
-              hasInFlight={inFlightFull}
-              onAccept={() => accept(t)}
-              onSubmit={() => openSubmit(t)}
-              onView={() => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}
-              onComment={() => openCommentModal(t)}
-              onWorkerUnhold={() => workerUnhold(t)}
-              onCollaborate={() => handleCollaborate(t)}
-              isGraphicDesigner={isGraphicDesigner}
-              onRequestContent={() => requestContent(t)}
-              requestingContent={requestingContentId === t.taskId}
+      <div className="flex-1 min-h-0 flex flex-col">
+        {loading ? (
+          <p className="text-center text-slate-400 py-12 text-sm">Loading…</p>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white py-14 text-center">
+            <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
+            <p className="text-sm text-slate-500">
+              {search ? `No tasks match "${search}" in this tab.` : 'No tasks in this view.'}
+            </p>
+            {search && (
+              <button onClick={() => setSearch('')} className="mt-2 text-xs text-brand-600 hover:underline">
+                Clear search
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {filtered.map(t => (
+                <TaskCard
+                  key={t.taskId}
+                  task={t}
+                  now={now}
+                  busy={savingId === t.taskId}
+                  closed={isTaskClosed(t)}
+                  isNextUp={t.canStart}
+                  hasInFlight={inFlightFull}
+                  onAccept={() => accept(t)}
+                  onSubmit={() => openSubmit(t)}
+                  onView={() => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}
+                  onComment={() => openCommentModal(t)}
+                  onWorkerUnhold={() => workerUnhold(t)}
+                  onCommentAnswered={() => refresh()}
+                  onCollaborate={() => handleCollaborate(t)}
+                  isGraphicDesigner={isGraphicDesigner}
+                  onRequestContent={() => requestContent(t)}
+                  requestingContent={requestingContentId === t.taskId}
+                />
+              ))}
+            </div>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalElements={totalElements}
+              pageSize={PAGE_SIZE}
+              loading={loading}
+              onPageChange={(pg) => { setPage(pg); load(pg) }}
             />
-          ))}
-        </div>
-
-        <Pagination
-          page={page}
-          totalPages={totalPages}
-          totalElements={totalElements}
-          pageSize={PAGE_SIZE}
-          loading={loading}
-          onPageChange={(pg) => { setPage(pg); load(pg) }}
-        />
-        </>
-      )}
+          </>
+        )}
+      </div>
 
       {submitting && (
         <SubmitModal
@@ -513,11 +508,13 @@ export default function MyTasksPage() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onCollaborate, isGraphicDesigner, onRequestContent, requestingContent }) {
+function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onCommentAnswered, onCollaborate, isGraphicDesigner, onRequestContent, requestingContent }) {
   const [showAssets, setShowAssets] = useState(false)
   const elapsed      = formatElapsed(task, now)
-  const isAssigned   = (task.status === 'ASSIGNED' || task.status === 'REWORK') && !closed
+  const isAssigned   = task.status === 'ASSIGNED' && !closed
+  const isRework     = task.status === 'REWORK' && !closed
   const isInProgress = task.status === 'IN_PROGRESS' && !closed
+  const isActiveWork = isInProgress && !closed
   const isHeld       = task.status === 'HELD'
   // Self-held tasks (the worker put themselves on hold) have active comments.
   const isSelfHeld   = isHeld && task.activeComments?.length > 0
@@ -526,8 +523,8 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
   // corrections) — they only respect the 3-task cap.
   // ASSIGNED tasks still follow the position rule: only the top
   // (3 − inFlight) slots get a Start button.
-  const canStart = isAssigned && !hasInFlight && (task.status === 'REWORK' || isNextUp)
-  const isLocked = isAssigned && !canStart
+  const canStart = !hasInFlight && ((isAssigned && isNextUp) || isRework)
+  const isLocked = (isAssigned || isRework) && !canStart
   // A task is "deactivated" when its parent campaign was rejected/completed
   // out from under it but the task row hasn't been swept to CANCELLED yet
   // (or when the task itself is now CANCELLED).
@@ -589,6 +586,8 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
           </div>
           <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
             <span>Campaign {task.campaignId} · {task.taskTypeName || '—'}</span>
+            {task.storeId       && <span>• Store: <span className="font-medium text-slate-700">{task.storeId}</span></span>}
+            {task.contactNumber && <span>• <span className="font-medium text-slate-700">{task.contactNumber}</span></span>}
             {task.platformName && <span>• {task.platformName}</span>}
             {task.formatName   && <span>• {task.formatName}</span>}
             {task.quantity     && <span>• {task.quantity}</span>}
@@ -603,11 +602,11 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
         </div>
 
         <div className="flex items-center gap-2">
-          {isInProgress && (
+          {isActiveWork && (
             <span
-              key={task.startedAt || task.taskId}
+              key={task.acceptedAt || task.startedAt || task.taskId}
               className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 tabular-nums"
-              title={task.startedAt ? `Started ${fmtDateTime(task.startedAt)}` : 'Timer running'}
+              title={task.acceptedAt ? `Accepted ${fmtDateTime(task.acceptedAt)}` : 'Timer running'}
             >
               <Icon name="clock" className="h-3.5 w-3.5" />
               {elapsed || '00:00'}
@@ -636,7 +635,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
               {hasInFlight ? 'Locked — 3 tasks active' : 'Locked — start a top task first'}
             </span>
           )}
-          {isInProgress && (
+          {isActiveWork && (
             <button
               onClick={onSubmit}
               disabled={busy}
@@ -646,7 +645,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
               {task.autoGenerated ? 'Submit' : 'Submit for QC'}
             </button>
           )}
-          {isGraphicDesigner && (isAssigned || isInProgress) && !isCancelled && !task.contentAssigneeName && !isLocked && (
+          {isGraphicDesigner && (isAssigned || isActiveWork) && !isCancelled && !task.contentAssigneeName && !isLocked && (
             <button
               onClick={onRequestContent}
               disabled={requestingContent}
@@ -656,17 +655,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
               {requestingContent ? 'Requesting…' : 'Need Content?'}
             </button>
           )}
-          {isGraphicDesigner && task.status === 'REWORK' && task.contentAssigneeName && task.contentTaskStatus !== 'REWORK' && (
-            <button
-              onClick={onRequestContent}
-              disabled={requestingContent}
-              className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition disabled:opacity-60"
-            >
-              <Icon name="refresh" className="h-3.5 w-3.5" />
-              {requestingContent ? 'Sending…' : 'Content Rework'}
-            </button>
-          )}
-          {(isAssigned || isInProgress) && !isCancelled && (
+          {(isAssigned || isActiveWork) && !isCancelled && (
             <button
               onClick={onComment}
               className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition"
@@ -696,7 +685,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
               View Brief
             </button>
           )}
-          {isInProgress && (
+          {isActiveWork && (
             <button
               onClick={onCollaborate}
               className="flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100 transition"
@@ -715,28 +704,31 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
         <ActiveCommentsList
           taskId={task.taskId}
           comments={task.activeComments}
-          onAnswered={onWorkerUnhold}
+          onAnswered={onCommentAnswered || onWorkerUnhold}
         />
       )}
 
-      {['REWORK', 'IN_PROGRESS'].includes(task.status) && task.latestManagerReworkComment && !task.latestRequestorReworkComment && (
-        <div className="border-t border-orange-100 bg-orange-50/60 px-4 py-2.5 flex items-start gap-2">
-          <Icon name="alertCircle" className="h-3.5 w-3.5 text-orange-500 shrink-0 mt-0.5" />
-          <div>
-            <span className="text-xs font-semibold text-orange-700">Manager rework note:</span>
-            <p className="mt-0.5 text-xs text-orange-800 whitespace-pre-wrap">{task.latestManagerReworkComment}</p>
+      {['REWORK', 'IN_PROGRESS', 'ASSIGNED', 'HELD'].includes(task.status) && task.latestReworkComment && (() => {
+        const isRequestor = task.latestReworkSource === 'REQUESTOR_REWORK'
+        return (
+          <div className={`border-t px-4 py-2.5 flex items-start gap-2 ${
+            isRequestor ? 'border-purple-100 bg-purple-50/60' : 'border-orange-100 bg-orange-50/60'
+          }`}>
+            <Icon
+              name="alertCircle"
+              className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${isRequestor ? 'text-purple-500' : 'text-orange-500'}`}
+            />
+            <div>
+              <span className={`text-xs font-semibold ${isRequestor ? 'text-purple-700' : 'text-orange-700'}`}>
+                {isRequestor ? 'Requestor rework note:' : 'Manager rework note:'}
+              </span>
+              <p className={`mt-0.5 text-xs whitespace-pre-wrap ${isRequestor ? 'text-purple-800' : 'text-orange-800'}`}>
+                {task.latestReworkComment}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
-      {['REWORK', 'IN_PROGRESS'].includes(task.status) && task.latestRequestorReworkComment && (
-        <div className="border-t border-purple-100 bg-purple-50/60 px-4 py-2.5 flex items-start gap-2">
-          <Icon name="alertCircle" className="h-3.5 w-3.5 text-purple-500 shrink-0 mt-0.5" />
-          <div>
-            <span className="text-xs font-semibold text-purple-700">Requestor rework note:</span>
-            <p className="mt-0.5 text-xs text-purple-800 whitespace-pre-wrap">{task.latestRequestorReworkComment}</p>
-          </div>
-        </div>
-      )}
+        )
+      })()}
 
       {task.totalTimeLoggedMinutes != null && (
         <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5 flex flex-wrap items-center gap-4 text-xs text-slate-600">
@@ -910,7 +902,7 @@ function SubmitModal({
   onCancel, onConfirm, onViewBrief, saving,
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
       <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl flex flex-col max-h-[92vh]">
 
         {/* Header */}
@@ -919,7 +911,7 @@ function SubmitModal({
             <h3 className="text-base font-semibold text-slate-900">Submit for QC review</h3>
             <p className="mt-0.5 text-xs text-slate-500">
               {task.granularTaskName || task.taskTypeName || 'Task'}
-              {campaign && <span className="text-slate-400"> · {campaign.taskTypeName || `Campaign ${task.campaignId}`}</span>}
+              {campaign && <span className="text-slate-400"> · {campaign.businessObjective || `Campaign ${task.campaignId}`}</span>}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -991,7 +983,7 @@ function SubmitModal({
 // actually re-render every second, since React tracks props.
 function formatElapsed(task, now) {
   if (task.status !== 'IN_PROGRESS') return ''
-  const start = parseTs(task.startedAt) ?? parseTs(task.acceptedAt)
+  const start = parseTs(task.acceptedAt) ?? parseTs(task.startedAt)
   if (start == null) return '00:00'
   const ms    = Math.max(0, (now ?? Date.now()) - start)
   const total = Math.floor(ms / 1000)
@@ -1021,7 +1013,7 @@ function parseTs(v) {
 // ─── Comment & Hold modal ─────────────────────────────────────────────────────
 function CommentModal({ task, comment, onCommentChange, onConfirm, onClose, saving }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white shadow-xl flex flex-col">
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-100">
           <div>
@@ -1161,7 +1153,7 @@ function CollaborateModal({ task, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>

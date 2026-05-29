@@ -215,7 +215,7 @@ export default function CampaignDetailPage() {
                 Campaign Detail
               </p>
               <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">
-                {c.taskTypeName || 'Marketing Request'}
+                {c.businessObjective || 'Marketing Request'}
               </h1>
               <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-white/55">
                 {c.requestorName && <span>{c.requestorName}</span>}
@@ -260,6 +260,22 @@ export default function CampaignDetailPage() {
                 {fmtTargetLocation(c.targetLocation)}
               </span>
             )}
+            {c.storeId && (
+              <span className="text-xs text-white/60">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
+                  Store ID
+                </span>
+                {c.storeId}
+              </span>
+            )}
+            {c.contactNumber && (
+              <span className="text-xs text-white/60">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
+                  Contact
+                </span>
+                {c.contactNumber}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -287,7 +303,8 @@ export default function CampaignDetailPage() {
       {/* ── 3-col info sections ── */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <BriefCard title="Campaign Overview" icon="fileText" accent="blue">
-          <DetailRow label="Task Type" value={c.taskTypeName} />
+          {c.storeId       && <DetailRow label="Store ID"       value={c.storeId} />}
+          {c.contactNumber && <DetailRow label="Contact Number" value={c.contactNumber} />}
           <DetailRow label="Audience Type"    value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
           <DetailRow label="Language"         value={fmtMultiValue(c.language)} />
           <DetailRow label="Tone / Style"     value={fmtMultiValue(c.tone)} />
@@ -319,12 +336,12 @@ export default function CampaignDetailPage() {
       {c.deliverables?.length > 0 && (
         <BriefCard title={`Deliverables (${c.deliverables.length})`} icon="checkSquare" accent="slate">
           <div className="flex flex-wrap gap-2">
-            {c.deliverables.map((d, i) => (
-              <div key={d.specId ?? i}
+            {c.deliverables.map((d) => (
+              <div key={d.taskId ?? d.granularTaskId}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full
-                                 bg-brand-100 text-[10px] font-bold text-brand-700">
-                  {i + 1}
+                <span className="flex items-center justify-center rounded-full
+                                 bg-brand-100 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 whitespace-nowrap">
+                  {d.taskId}
                 </span>
                 <span className="text-xs font-medium text-slate-700">
                   {d.granularTaskName || d.granularTaskId}
@@ -608,7 +625,7 @@ function TaskTimestamps({ task }) {
 
 function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClose, submitting }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl flex flex-col">
 
         {/* Header */}

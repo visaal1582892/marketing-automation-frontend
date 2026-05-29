@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, memo, useState } from 'react'
+import { useCallback, useEffect, memo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import managerApi from '../../api/manager'
 import campaignsApi from '../../api/campaigns'
@@ -12,6 +12,7 @@ import AssetPreviewModal from '../../components/AssetPreviewModal'
 import { useAuth } from '../../auth/AuthContext'
 import AppSelect from '../../components/AppSelect'
 import DateRangePicker from '../../components/DateRangePicker'
+import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ const STATUS_LABELS = {
   CANCELLED:            'Cancelled',
   REJECTED:             'Rejected',
   HELD:                 'Held',
+  REQUESTED:            'Requested'
 }
 const PRIORITY_STYLES = {
   HIGH:   'bg-rose-50 text-rose-700 ring-rose-200',
@@ -51,48 +53,87 @@ const BUDGET_OPTIONS = [
   { value: 'ABOVE_10L',         label: '₹10L+' },
 ]
 
+// ─── Table column layout (fixed widths — keeps header / filter / body aligned) ─
+
+/** Min px per column — table scrolls horizontally when viewport narrower than sum */
+const TASK_COLS_GENERAL = [88, 124, 144, 144, 164, 196, 108, 160, 112, 124, 136, 136, 172, 240]
+/** Source task, Requested by, Content status — inserted after Task, before Campaign */
+const TASK_COLS_AUTO_MID = [116, 160, 168]
+
+const cellCls = 'min-w-0 overflow-hidden px-4 py-2.5'
+
+/** Sticky Actions column — solid bg so fixed column obvious */
+const ACTIONS_STICKY_HEADER = 'sticky right-0 z-30 bg-slate-100'
+const ACTIONS_STICKY_BODY = 'sticky right-0 z-[1] bg-slate-50'
+
+function taskTableCols(autoMode) {
+  if (!autoMode) return TASK_COLS_GENERAL
+  return [
+    TASK_COLS_GENERAL[0],
+    ...TASK_COLS_AUTO_MID,
+    148, // Campaign — room for #id + task type line
+    ...TASK_COLS_GENERAL.slice(2),
+  ]
+}
+
+function taskTableMinWidth(autoMode) {
+  return taskTableCols(autoMode).reduce((sum, w) => sum + w, 0)
+}
+
 // ─── Inline column-filter primitives ─────────────────────────────────────────
+
+const filterWrapCls = 'min-w-0 w-full [&_.app-select__control]:!min-h-[28px] [&_.app-select__control]:!h-[28px]'
 
 function SelectFilter({ value, onChange, options, placeholder = 'All' }) {
   const normOpts = options.map(o => ({ value: o, label: STATUS_LABELS[o] || o }))
   return (
-    <AppSelect
-      value={value}
-      onChange={onChange}
-      options={normOpts}
-      placeholder={placeholder}
-      size="sm"
-      isSearchable
-      menuPortal
-    />
+    <div className={filterWrapCls}>
+      <AppSelect
+        className="w-full"
+        value={value}
+        onChange={onChange}
+        options={normOpts}
+        placeholder={placeholder}
+        size="sm"
+        isSearchable
+        menuPortal
+      />
+    </div>
   )
 }
 
 function SearchSelectFilter({ value, onChange, options, placeholder = 'All' }) {
-  const normOpts = options.map(o => ({ value: o, label: o }))
+  const normOpts = options.map(o => ({
+    value: o,
+    label: STATUS_LABELS[o] || o,
+  }))
+
   return (
-    <AppSelect
-      value={value}
-      onChange={v => onChange(v ?? '')}
-      options={normOpts}
-      placeholder={placeholder}
-      size="sm"
-      isSearchable
-      menuPortal
-    />
+    <div className={filterWrapCls}>
+      <AppSelect
+        className="w-full"
+        value={value}
+        onChange={v => onChange(v ?? '')}
+        options={normOpts}
+        placeholder={placeholder}
+        size="sm"
+        isSearchable
+        menuPortal
+      />
+    </div>
   )
 }
 
 function TextFilter({ value, onChange, placeholder }) {
   return (
-    <div className="relative">
-      <Icon name="search" className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 pointer-events-none" />
+    <div className="relative min-w-0 w-full">
+      <Icon name="search" className="pointer-events-none absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
       <input
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`w-full rounded border pl-5 pr-1.5 py-1 text-xs leading-tight
+        className={`w-full rounded border py-1 pl-5 pr-1.5 text-xs leading-tight
                     focus:outline-none focus:ring-1 focus:ring-brand-300
                     ${value
                       ? 'border-brand-400 bg-brand-50 text-brand-700'
@@ -102,32 +143,80 @@ function TextFilter({ value, onChange, placeholder }) {
   )
 }
 
+function FilterTd({ children, sticky = false }) {
+  return (
+    <td className={`min-w-0 px-3 py-1.5 align-top ${sticky ? ACTIONS_STICKY_HEADER : 'bg-white'}`}>
+      {children != null ? <div className="min-w-0 w-full">{children}</div> : null}
+    </td>
+  )
+}
+
 // ─── Edit modal ───────────────────────────────────────────────────────────────
+
+// Tasks whose status blocks deletion (matches backend constraint)
+const UNDELETABLE_STATUSES = new Set(['IN_PROGRESS', 'REWORK', 'MANAGER_QC_REVIEW', 'COMPLETED'])
+
+const TASK_STATUS_STYLES = {
+  ASSIGNED:             'bg-blue-50 text-blue-700 ring-blue-200',
+  IN_PROGRESS:          'bg-indigo-50 text-indigo-700 ring-indigo-200',
+  REWORK:               'bg-orange-50 text-orange-700 ring-orange-200',
+  MANAGER_QC_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_QC_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
+  COMPLETED:            'bg-green-50 text-green-700 ring-green-200',
+  CANCELLED:            'bg-slate-100 text-slate-500 ring-slate-200',
+  HELD:                 'bg-amber-50 text-amber-700 ring-amber-200',
+}
 
 function EditCampaignModal({ campaignId, task, onClose, onSaved }) {
   const toast = useToast()
-  const [form,     setForm]     = useState({ priority: '', keyMessage: '', budgetTier: '' })
-  const [fetching, setFetching] = useState(true)
-  const [saving,   setSaving]   = useState(false)
+  const [form,       setForm]       = useState({ priority: '', budgetTier: '', budgetTierOther: '', keyMessage: '' })
+  const [budgetOpts, setBudgetOpts] = useState([])
+  const [fetching,   setFetching]   = useState(true)
+  const [saving,     setSaving]     = useState(false)
+  const [workTasks,  setWorkTasks]  = useState([])
+  const [deletingId, setDeletingId] = useState(null)
 
-  const isRestricted = ['COMPLETED', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW'].includes(task?.status)
+  const resolveId = (opts, storedVal) => {
+    if (!storedVal) return { selected: '', other: '' }
+    return opts.find(o => o.value === storedVal && o.value !== 'Other')
+      ? { selected: storedVal, other: '' }
+      : { selected: 'Other', other: storedVal }
+  }
 
-  useEffect(() => {
-    campaignsApi.getById(campaignId)
-      .then(res => {
-        const c = res.data
-        setForm({ priority: c.priority || '', budgetTier: c.budgetTier || '', keyMessage: '' })
+  const loadCampaign = () => {
+    setFetching(true)
+    Promise.all([
+      campaignsApi.getById(campaignId),
+      masterApi.list('budget-tiers'),
+    ]).then(([campRes, budgets]) => {
+        const c    = campRes.data
+        const raw  = Array.isArray(budgets) ? budgets : []
+        const opts = [
+          ...raw.map(i => ({ value: i.id, label: i.name })),
+          { value: 'Other', label: 'Other (specify below)' },
+        ]
+        setBudgetOpts(opts)
+        const bgt = resolveId(opts, c.budgetTierId || '')
+        setForm({ priority: c.priority || '', budgetTier: bgt.selected, budgetTierOther: bgt.other, keyMessage: c.keyMessage || '' })
+        setWorkTasks(Array.isArray(c.workTasks) ? c.workTasks : [])
       })
       .catch(() => toast.error('Could not load campaign details.'))
       .finally(() => setFetching(false))
-  }, [campaignId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
+
+  useEffect(loadCampaign, [campaignId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const resolveBudget = () =>
+    form.budgetTier === 'Other'
+      ? (form.budgetTierOther?.trim() || undefined)
+      : (form.budgetTier || undefined)
 
   const handleSave = async () => {
     setSaving(true)
     try {
       await campaignsApi.updateCampaign(campaignId, {
-        priority:   form.priority   || undefined,
-        budgetTier: form.budgetTier || undefined,
+        priority:   form.priority  || undefined,
+        budgetTier: resolveBudget(),
         keyMessage: form.keyMessage || undefined,
       })
       toast.success('Campaign updated successfully.')
@@ -139,68 +228,93 @@ function EditCampaignModal({ campaignId, task, onClose, onSaved }) {
     }
   }
 
+  const handleDeleteTask = async (wt) => {
+    if (!window.confirm(`Delete task "${wt.granularTaskName || wt.taskTypeName || wt.taskId}"? This cannot be undone.`)) return
+    setDeletingId(wt.taskId)
+    try {
+      await campaignsApi.deleteTask(campaignId, wt.taskId)
+      toast.success(`Task ${wt.taskId} deleted.`)
+      setWorkTasks(prev => prev.filter(t => t.taskId !== wt.taskId))
+      onSaved()
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Could not delete task.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const visibleTasks = workTasks.filter(t => t.status !== 'CANCELLED')
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-slate-900/40" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+      <div className="relative z-10 w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 flex-shrink-0">
           <div>
             <h3 className="text-base font-semibold text-slate-800">Edit Campaign</h3>
-            <p className="mt-0.5 text-xs text-slate-400">Campaign {campaignId} · Task {task.taskId}</p>
+            <p className="mt-0.5 text-xs text-slate-400">
+              Campaign {campaignId}{task?.taskId ? ` · Task ${task.taskId}` : ''}
+            </p>
           </div>
           <button onClick={onClose} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 transition">
             <Icon name="x" className="h-4 w-4" />
           </button>
         </div>
+
         {fetching ? (
           <div className="flex items-center justify-center py-12 gap-2 text-slate-400">
             <Icon name="refresh" className="h-4 w-4 animate-spin" /><span className="text-sm">Loading…</span>
           </div>
         ) : (
-          <div className="space-y-4 px-5 py-4">
-            {isRestricted && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
-                <Icon name="alertCircle" className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
-                <span>
-                  Priority and budget tier cannot be changed for tasks in{' '}
-                  <strong>{task?.status === 'MANAGER_QC_REVIEW' ? 'Manager QC Review' : task?.status === 'REQUESTOR_QC_REVIEW' ? 'Requestor QC Review' : 'Completed'}</strong> status.
-                  You can still update the key message.
-                </span>
+          <div className="overflow-y-auto flex-1">
+            {/* Campaign fields */}
+            <div className="space-y-4 px-5 py-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Priority</label>
+                  <AppSelect
+                    value={form.priority}
+                    onChange={v => setForm(f => ({ ...f, priority: v }))}
+                    options={PRIORITY_OPTIONS.map(p => ({ value: p, label: p.charAt(0) + p.slice(1).toLowerCase() }))}
+                    placeholder="Select priority…"
+                    isClearable={false}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Budget Tier</label>
+                  <AppSelect
+                    value={form.budgetTier}
+                    onChange={v => setForm(f => ({ ...f, budgetTier: v, budgetTierOther: v !== 'Other' ? '' : f.budgetTierOther }))}
+                    options={budgetOpts}
+                    placeholder="Select budget tier…"
+                    isClearable={false}
+                  />
+                  {form.budgetTier === 'Other' && (
+                    <input
+                      value={form.budgetTierOther}
+                      onChange={e => setForm(f => ({ ...f, budgetTierOther: e.target.value }))}
+                      placeholder="Specify budget tier…"
+                      className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm
+                                 text-slate-800 placeholder:text-slate-400 focus:border-brand-400
+                                 focus:outline-none focus:ring-1 focus:ring-brand-300"
+                    />
+                  )}
+                </div>
               </div>
-            )}
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Priority</label>
-              <AppSelect
-                value={form.priority}
-                onChange={v => setForm(f => ({ ...f, priority: v }))}
-                options={PRIORITY_OPTIONS.map(p => ({ value: p, label: p.charAt(0) + p.slice(1).toLowerCase() }))}
-                placeholder="Select priority…"
-                isClearable={false}
-                isDisabled={isRestricted}
-              />
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Key Message</label>
+                <textarea value={form.keyMessage} onChange={e => setForm(f => ({ ...f, keyMessage: e.target.value }))}
+                  rows={2} placeholder="Type a new key message…"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800
+                             placeholder:text-slate-400 focus:border-brand-400 focus:outline-none
+                             focus:ring-1 focus:ring-brand-300 resize-none" />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Budget Tier</label>
-              <AppSelect
-                value={form.budgetTier}
-                onChange={v => setForm(f => ({ ...f, budgetTier: v }))}
-                options={BUDGET_OPTIONS}
-                placeholder="Select budget tier…"
-                isClearable={false}
-                isDisabled={isRestricted}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Key Message</label>
-              <textarea value={form.keyMessage} onChange={e => setForm(f => ({ ...f, keyMessage: e.target.value }))}
-                rows={3} placeholder="Type a new key message…"
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800
-                           placeholder:text-slate-400 focus:border-brand-400 focus:outline-none
-                           focus:ring-1 focus:ring-brand-300 resize-none" />
-            </div>
+
           </div>
         )}
-        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-3 sm:flex-row sm:justify-end">
+
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-3 sm:flex-row sm:justify-end flex-shrink-0">
           <button onClick={onClose} disabled={saving || fetching}
             className="w-full rounded-md border border-slate-200 px-4 py-1.5 text-sm text-slate-600
                        hover:bg-slate-50 transition disabled:opacity-60 sm:w-auto">Cancel</button>
@@ -230,7 +344,7 @@ function UnholdModal({ task: t, isOther, mode, onSelectAuto, onSelectManual,
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/40">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
 
         {/* Header */}
@@ -379,7 +493,7 @@ function UnholdModal({ task: t, isOther, mode, onSelectAuto, onSelectManual,
 
 function CancelConfirmModal({ task: t, onConfirm, onClose, acting }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/40">
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl overflow-hidden">
         <div className="px-5 py-5 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
@@ -425,6 +539,8 @@ export default function TaskManagementPage() {
   const [page,          setPage]          = useState(0)
   const [loading,       setLoading]       = useState(true)
   const [refreshSeed,   setRefreshSeed]   = useState(0)
+  const [generalHeldCount, setGeneralHeldCount] = useState(0)
+  const [autoHeldCount,    setAutoHeldCount]    = useState(0)
   const { user } = useAuth()
   const [editTarget,       setEditTarget]       = useState(null)
   const [briefId,          setBriefId]          = useState(null)
@@ -436,21 +552,28 @@ export default function TaskManagementPage() {
   // Pre-populate status from URL query param (e.g. ?status=REWORK from dashboard)
   const [fTaskId,         setFTaskId]         = useState('')
   const [fCampaign,       setFCampaign]       = useState('')
+  const [fStoreId,        setFStoreId]        = useState('')
   const [fRequestor,      setFRequestor]      = useState('')
   const [fAssignee,       setFAssignee]       = useState('')
   const [fTaskType,       setFTaskType]       = useState('')
   const [fPriority,       setFPriority]       = useState('')
   const [fStatus,         setFStatus]         = useState(() => new URLSearchParams(location.search).get('status') || '')
   const [fActionDoneBy,   setFActionDoneBy]   = useState('')
+  const [fSourceTaskId, setFSourceTaskId]     = useState('')
+  const [fContentRequestedBy, setFContentRequestedBy] = useState('')
+  const [fContentRequestStatus, setFContentRequestStatus] = useState('')
   const [fDateFrom,       setFDateFrom]       = useState(null)
   const [fDateTo,         setFDateTo]         = useState(null)
 
   // ── Debounced text filters (delay API call while typing) ──────────────────
   const dTaskId       = useDebounce(fTaskId)
   const dCampaign     = useDebounce(fCampaign)
+  const dStoreId      = useDebounce(fStoreId)
   const dRequestor    = useDebounce(fRequestor)
   const dAssignee     = useDebounce(fAssignee)
   const dActionDoneBy = useDebounce(fActionDoneBy)
+  const dSourceTaskId = useDebounce(fSourceTaskId)
+  const dContentRequestedBy = useDebounce(fContentRequestedBy)
 
   // ── Unhold modal state ────────────────────────────────────────────────────
   const [unholdTarget,   setUnholdTarget]   = useState(null)
@@ -466,7 +589,8 @@ export default function TaskManagementPage() {
 
   // ── Reset to page 0 whenever any filter changes ───────────────────────────
   useEffect(() => { setPage(0) },
-    [dTaskId, dCampaign, dRequestor, dAssignee, dActionDoneBy, fTaskType, fPriority, fStatus, fDateFrom, fDateTo, taskListMode]) // eslint-disable-line react-hooks/exhaustive-deps
+    [dTaskId, dCampaign, dStoreId, dRequestor, dAssignee, dActionDoneBy, dSourceTaskId, dContentRequestedBy,
+      fContentRequestStatus, fTaskType, fPriority, fStatus, fDateFrom, fDateTo, taskListMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch data from backend (debounced filters + page) ────────────────────
   useEffect(() => {
@@ -476,6 +600,7 @@ export default function TaskManagementPage() {
       page, size: PAGE_SIZE,
       ...(dTaskId       && { taskId:          dTaskId       }),
       ...(dCampaign     && { campaignId:      dCampaign     }),
+      ...(dStoreId      && { storeId:         dStoreId      }),
       ...(dRequestor    && { requestorName:   dRequestor    }),
       ...(dAssignee     && { assigneeName:    dAssignee     }),
       ...(dActionDoneBy && { actionDoneBy:    dActionDoneBy }),
@@ -485,12 +610,18 @@ export default function TaskManagementPage() {
       ...(fDateFrom     && { dateFrom:        fDateFrom     }),
       ...(fDateTo       && { dateTo:          fDateTo       }),
       autoGenerated: taskListMode === 'auto',
+      ...(taskListMode === 'auto' && dSourceTaskId && { sourceTaskId: dSourceTaskId }),
+      ...(taskListMode === 'auto' && dContentRequestedBy && { contentRequestedBy: dContentRequestedBy }),
+      ...(taskListMode === 'auto' && fContentRequestStatus && { contentRequestStatus: fContentRequestStatus }),
     }
-    managerApi.allTasks(params)
-      .then(r => {
+    const heldCountParams = { status: 'HELD', page: 0, size: 1 }
+    Promise.all([
+      managerApi.allTasks(params),
+      managerApi.allTasks({ ...heldCountParams, autoGenerated: false }),
+      managerApi.allTasks({ ...heldCountParams, autoGenerated: true }),
+    ]).then(([r, heldGeneral, heldAuto]) => {
         if (!alive) return
         const raw = r.data
-        // Handle both old (plain array) and new (PagedResponse) formats
         if (Array.isArray(raw)) {
           setTasks(raw)
           setTotalElements(raw.length)
@@ -501,11 +632,19 @@ export default function TaskManagementPage() {
           setTotalElements(d.totalElements || 0)
           setTotalPages(d.totalPages || 0)
         }
+        const parseHeldTotal = (res) => {
+          const d = res?.data
+          if (Array.isArray(d)) return d.length
+          return d?.totalElements ?? 0
+        }
+        setGeneralHeldCount(parseHeldTotal(heldGeneral))
+        setAutoHeldCount(parseHeldTotal(heldAuto))
       })
       .catch(() => { if (alive) toast.error('Failed to load requests') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [dTaskId, dCampaign, dRequestor, dAssignee, dActionDoneBy, fTaskType, fPriority, fStatus, fDateFrom, fDateTo, page, refreshSeed, location.key, taskListMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dTaskId, dCampaign, dStoreId, dRequestor, dAssignee, dActionDoneBy, dSourceTaskId, dContentRequestedBy,
+    fContentRequestStatus, fTaskType, fPriority, fStatus, fDateFrom, fDateTo, page, refreshSeed, location.key, taskListMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Master data for filter dropdowns ─────────────────────────────────────
   const [allTaskTypeOpts, setAllTaskTypeOpts] = useState([])
@@ -521,20 +660,24 @@ export default function TaskManagementPage() {
 
   const PRIORITY_OPTS = ['HIGH', 'MEDIUM', 'LOW']
   const STATUS_OPTS   = ['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW', 'COMPLETED', 'CANCELLED', 'REJECTED', 'HELD']
+  const CONTENT_REQUEST_STATUS_OPTS = ['REQUESTED', 'ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW', 'COMPLETED', 'CANCELLED', 'HELD']
 
   const taskTypeOptions  = allTaskTypeOpts
   const priorityOptions  = PRIORITY_OPTS
   const statusOptions    = STATUS_OPTS
+  const contentRequestStatusOptions = CONTENT_REQUEST_STATUS_OPTS
 
   // The data shown in the table is the current page (server already filtered it)
   const filtered = tasks
 
-  const activeFilters = [fTaskId, fCampaign, fRequestor, fAssignee, fTaskType, fPriority, fStatus, fActionDoneBy, fDateFrom, fDateTo]
+  const activeFilters = [fTaskId, fCampaign, fStoreId, fRequestor, fAssignee, fTaskType, fPriority, fStatus, fActionDoneBy,
+    fSourceTaskId, fContentRequestedBy, fContentRequestStatus, fDateFrom, fDateTo]
     .filter(Boolean).length
 
   const clearFilters = () => {
-    setFTaskId(''); setFCampaign(''); setFRequestor(''); setFAssignee('')
+    setFTaskId(''); setFCampaign(''); setFStoreId(''); setFRequestor(''); setFAssignee('')
     setFTaskType(''); setFPriority(''); setFStatus(''); setFActionDoneBy('')
+    setFSourceTaskId(''); setFContentRequestedBy(''); setFContentRequestStatus('')
     setFDateFrom(null); setFDateTo(null)
     // clear the URL query param if it was set from the dashboard
     if (location.search) navigate('/manager/task-management', { replace: true })
@@ -645,23 +788,47 @@ export default function TaskManagementPage() {
   }
 
   const autoListMode = taskListMode === 'auto'
-  const tableColSpan = autoListMode ? 16 : 13
+  const tableColSpan = autoListMode ? 17 : 14
 
   return (
-    <div className="space-y-5">
-      {/* ── Page header ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Task Management</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Every work task across the team. Hold, unhold, cancel (not-started only), edit, or view briefs.
-          </p>
+    <div className="h-full flex flex-col gap-2">
+      {/* ── Controls bar ── */}
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker
+            from={fDateFrom}
+            to={fDateTo}
+            onChange={({ from, to }) => { setFDateFrom(from); setFDateTo(to) }}
+            placeholder="All dates"
+            maxDate={new Date().toISOString().slice(0, 10)}
+          />
+          <StatChip icon="clipboard" label={`${totalElements} task${totalElements !== 1 ? 's' : ''}`} color="slate" />
+          <StatChip
+            icon="pause"
+            label={autoListMode
+              ? `${autoHeldCount} auto task${autoHeldCount !== 1 ? 's' : ''} on hold`
+              : `${generalHeldCount} general task${generalHeldCount !== 1 ? 's' : ''} on hold`}
+            color="amber"
+          />
+          {activeFilters > 0 && (
+            <button onClick={clearFilters}
+              className="flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50
+                         px-3 py-1 text-xs text-brand-700 hover:bg-brand-100 transition">
+              <Icon name="x" className="h-3 w-3" />
+              Clear {activeFilters} filter{activeFilters > 1 ? 's' : ''}
+            </button>
+          )}
         </div>
-        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+        <div className="flex items-center gap-2">
           <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
             <button
               type="button"
-              onClick={() => setTaskListMode('general')}
+              onClick={() => {
+                setTaskListMode('general')
+                setFSourceTaskId('')
+                setFContentRequestedBy('')
+                setFContentRequestStatus('')
+              }}
               className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
                 taskListMode === 'general'
                   ? 'bg-brand-600 text-white shadow-sm'
@@ -684,8 +851,8 @@ export default function TaskManagementPage() {
           </div>
           <button
             onClick={() => setRefreshSeed(s => s + 1)} disabled={loading}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5
-                       text-xs text-slate-600 hover:bg-slate-50 transition disabled:opacity-60 sm:w-auto"
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5
+                       text-xs text-slate-600 hover:bg-slate-50 transition disabled:opacity-60"
           >
             <Icon name="refresh" className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -693,90 +860,88 @@ export default function TaskManagementPage() {
         </div>
       </div>
 
-      {/* ── Date range + Stats bar ── */}
-      <div className="flex flex-wrap items-center gap-3">
-        <DateRangePicker
-          from={fDateFrom}
-          to={fDateTo}
-          onChange={({ from, to }) => { setFDateFrom(from); setFDateTo(to) }}
-          placeholder="All dates"
-          maxDate={new Date().toISOString().slice(0, 10)}
-        />
-        <StatChip icon="clipboard" label={`${totalElements} task${totalElements !== 1 ? 's' : ''}`} color="slate" />
-        <StatChip icon="pause"     label={`${tasks.filter(t => t.status === 'HELD').length} on hold (this page)`} color="amber" />
-        {activeFilters > 0 && (
-          <button onClick={clearFilters}
-            className="flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50
-                       px-3 py-1 text-xs text-brand-700 hover:bg-brand-100 transition">
-            <Icon name="x" className="h-3 w-3" />
-            Clear {activeFilters} filter{activeFilters > 1 ? 's' : ''}
-          </button>
-        )}
-      </div>
-
       {/* ── Table ── */}
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1480px] text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <Th width="w-16">Task</Th>
-                  {autoListMode && <Th width="w-28">Source Task</Th>}
+      <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div className="w-full flex-1 overflow-auto">
+            <table
+              className={DATA_TABLE_CLASS}
+              style={dataTableStyle(taskTableMinWidth(autoListMode))}
+            >
+              <DataTableColGroup widths={taskTableCols(autoListMode)} />
+              <thead className="sticky top-0 z-20 bg-slate-50">
+                <tr className="bg-slate-50">
+                  <Th>Task</Th>
+                  {autoListMode && <Th>Source Task</Th>}
                   {autoListMode && <Th>Requested By</Th>}
-                  {autoListMode && <Th width="w-28">Content Status</Th>}
-                  <Th width="w-28">Campaign</Th>
+                  {autoListMode && <Th>Content Status</Th>}
+                  <Th>Campaign</Th>
+                  <Th>Store ID</Th>
                   <Th>{autoListMode ? 'Source Requestor' : 'Requestor'}</Th>
                   <Th>Assignee</Th>
                   <Th>Task</Th>
-                  <Th width="w-24">Priority</Th>
-                  <Th width="w-28">Status</Th>
-                  <Th width="w-20" title="Times sent back by QC manager">QC Reworks</Th>
-                  <Th width="w-24" title="Times sent back by requestor">Req. Reworks</Th>
-                  <Th width="w-28">Created On</Th>
-                  <Th width="w-28">Assigned On</Th>
-                  <Th width="w-32" title="Who performed the most recent action on this task">Action done by</Th>
-                  <Th align="right" width="w-44" sticky>Actions</Th>
+                  <Th>Priority</Th>
+                  <Th>Status</Th>
+                  <Th title="Times sent back by QC manager">QC Reworks</Th>
+                  <Th title="Times sent back by requestor">Req. Reworks</Th>
+                  <Th>Created On</Th>
+                  <Th>Assigned On</Th>
+                  <Th title="Who performed the most recent action on this task">Action done by</Th>
+                  <Th align="right" sticky>Actions</Th>
                 </tr>
-                <tr className="bg-white border-b border-slate-200">
-                  <td className="px-2 py-1.5"><TextFilter value={fTaskId}    onChange={setFTaskId}    placeholder="e.g. 42" /></td>
-                  {autoListMode && <td className="px-2 py-1.5" />}
-                  {autoListMode && <td className="px-2 py-1.5" />}
-                  {autoListMode && <td className="px-2 py-1.5" />}
-                  <td className="px-2 py-1.5"><TextFilter value={fCampaign}  onChange={setFCampaign}  placeholder="ID…" /></td>
-                  <td className="px-2 py-1.5"><TextFilter value={fRequestor} onChange={setFRequestor} placeholder="Search…" /></td>
-                  <td className="px-2 py-1.5"><TextFilter value={fAssignee}  onChange={setFAssignee}  placeholder="Search…" /></td>
-                  <td className="px-2 py-1.5"><SearchSelectFilter value={fTaskType}  onChange={setFTaskType}  options={taskTypeOptions} /></td>
-                  <td className="px-2 py-1.5"><SelectFilter value={fPriority}  onChange={setFPriority}  options={priorityOptions} /></td>
-                  <td className="px-2 py-1.5"><SelectFilter value={fStatus}    onChange={setFStatus}    options={statusOptions} /></td>
-                  <td className="px-2 py-1.5" />
-                  <td className="px-2 py-1.5" />
-                  <td className="px-2 py-1.5" />
-                  <td className="px-2 py-1.5" />
-                  <td className="px-2 py-1.5"><TextFilter value={fActionDoneBy} onChange={setFActionDoneBy} placeholder="Search…" /></td>
-                  <td className="sticky right-0 z-10 bg-white border-l border-slate-200 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)] px-2 py-1.5" />
+                <tr className="border-b border-slate-200">
+                  <FilterTd><TextFilter value={fTaskId} onChange={setFTaskId} placeholder="e.g. 42" /></FilterTd>
+                  {autoListMode && (
+                    <FilterTd>
+                      <TextFilter value={fSourceTaskId} onChange={setFSourceTaskId} placeholder="Search…" />
+                    </FilterTd>
+                  )}
+                  {autoListMode && (
+                    <FilterTd>
+                      <TextFilter value={fContentRequestedBy} onChange={setFContentRequestedBy} placeholder="Search…" />
+                    </FilterTd>
+                  )}
+                  {autoListMode && (
+                    <FilterTd>
+                      <SearchSelectFilter
+                        value={fContentRequestStatus}
+                        onChange={setFContentRequestStatus}
+                        options={contentRequestStatusOptions}
+                        placeholder="All"
+                      />
+                    </FilterTd>
+                  )}
+                  <FilterTd><TextFilter value={fCampaign} onChange={setFCampaign} placeholder="ID…" /></FilterTd>
+                  <FilterTd><TextFilter value={fStoreId} onChange={setFStoreId} placeholder="Search…" /></FilterTd>
+                  <FilterTd><TextFilter value={fRequestor} onChange={setFRequestor} placeholder="Search…" /></FilterTd>
+                  <FilterTd><TextFilter value={fAssignee} onChange={setFAssignee} placeholder="Search…" /></FilterTd>
+                  <FilterTd><SearchSelectFilter value={fTaskType} onChange={setFTaskType} options={taskTypeOptions} /></FilterTd>
+                  <FilterTd><SelectFilter value={fPriority} onChange={setFPriority} options={priorityOptions} /></FilterTd>
+                  <FilterTd><SelectFilter value={fStatus} onChange={setFStatus} options={statusOptions} /></FilterTd>
+                  <FilterTd />
+                  <FilterTd />
+                  <FilterTd />
+                  <FilterTd />
+                  <FilterTd><TextFilter value={fActionDoneBy} onChange={setFActionDoneBy} placeholder="Search…" /></FilterTd>
+                  <FilterTd sticky />
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="bg-white">
                 {loading ? (
-                  <tr>
-                    <td colSpan={tableColSpan} className="py-14 text-center">
-                      <LoadingState inline />
-                    </td>
-                  </tr>
+                  <TableStatusRow colSpan={tableColSpan}>
+                    <LoadingState inline />
+                  </TableStatusRow>
                 ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={tableColSpan} className="py-14 text-center">
-                      <Icon name="inbox" className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-                      <p className="text-sm text-slate-500">
-                        {activeFilters > 0 ? 'No tasks match the current filters.' : 'No tasks found.'}
-                      </p>
-                      {activeFilters > 0 && (
-                        <button onClick={clearFilters} className="mt-2 text-xs text-brand-600 hover:underline">
-                          Clear all filters
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+                  <TableStatusRow colSpan={tableColSpan}>
+                    <Icon name="inbox" className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+                    <p className="text-sm text-slate-500">
+                      {activeFilters > 0 ? 'No tasks match the current filters.' : 'No tasks found.'}
+                    </p>
+                    {activeFilters > 0 && (
+                      <button onClick={clearFilters} className="mt-2 text-xs text-brand-600 hover:underline">
+                        Clear all filters
+                      </button>
+                    )}
+                  </TableStatusRow>
                 ) : filtered.map((t, i) => (
                   <TaskRow
                     key={t.taskId}
@@ -795,7 +960,7 @@ export default function TaskManagementPage() {
               </tbody>
             </table>
           </div>
-          <div className="border-t border-slate-100 bg-slate-50 px-4 py-1">
+          <div className="shrink-0 border-t border-slate-100 bg-slate-50 px-4 py-1">
             <Pagination
               page={page}
               totalPages={totalPages}
@@ -828,7 +993,19 @@ export default function TaskManagementPage() {
       )}
 
       {/* Brief drawer */}
-      {briefId && <RequestBriefDrawer campaignId={briefId} filterTaskId={briefTaskId} onClose={() => { setBriefId(null); setBriefTaskId(null) }} />}
+      {briefId && (
+        <RequestBriefDrawer
+          campaignId={briefId}
+          filterTaskId={briefTaskId}
+          onClose={() => { setBriefId(null); setBriefTaskId(null) }}
+          onCommentAnswered={({ taskId, hasActiveComments }) => {
+            setTasks(prev => prev.map(t =>
+              String(t.taskId) === String(taskId) ? { ...t, hasActiveComments } : t
+            ))
+          }}
+          onCampaignChanged={() => setRefreshSeed(s => s + 1)}
+        />
+      )}
 
       {/* Unhold modal */}
       {unholdTarget && (
@@ -863,11 +1040,15 @@ export default function TaskManagementPage() {
 
 // ─── Table header cell ────────────────────────────────────────────────────────
 
-function Th({ children, align = 'left', width = '', sticky = false }) {
+function Th({ children, align = 'left', sticky = false, title }) {
   return (
-    <th className={`px-3 py-2.5 text-xs font-semibold uppercase tracking-wider
-                    text-slate-500 whitespace-nowrap text-${align} ${width}
-                    ${sticky ? 'sticky right-0 z-10 bg-slate-50 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)] border-l border-slate-200' : ''}`}>
+    <th
+      title={title}
+      className={`min-w-0 border-b border-slate-200 px-4 py-2.5 text-xs font-semibold uppercase
+                  tracking-wide whitespace-nowrap
+                  ${align === 'right' ? 'text-right' : 'text-left'}
+                  ${sticky ? `${ACTIONS_STICKY_HEADER} text-slate-600` : 'bg-slate-50 text-slate-500'}`}
+    >
       {children}
     </th>
   )
@@ -887,14 +1068,14 @@ const TaskRow = memo(function TaskRow({ task: t, alt, autoMode = false, holding,
     <tr className={`border-b border-slate-100 transition-colors hover:bg-brand-50/30
                     ${alt ? 'bg-slate-50' : 'bg-white'}`}>
 
-      <td className="px-3 py-2.5">
+      <td className={cellCls}>
         <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-600">
           {t.taskId}
         </span>
       </td>
 
       {autoMode && (
-        <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
+        <td className={`${cellCls} text-slate-600`}>
           {t.sourceTaskId
             ? <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-600">
                 {t.sourceTaskId}
@@ -903,47 +1084,71 @@ const TaskRow = memo(function TaskRow({ task: t, alt, autoMode = false, holding,
         </td>
       )}
       {autoMode && (
-        <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
-          {t.contentRequestedByName || <span className="text-slate-300">—</span>}
+        <td className={`${cellCls} text-slate-600`}>
+          <span className="block truncate" title={t.contentRequestedByName}>
+            {t.contentRequestedByName || <span className="text-slate-300">—</span>}
+          </span>
         </td>
       )}
       {autoMode && (
-        <td className="px-3 py-2.5 whitespace-nowrap">
+        <td className={cellCls}>
           {t.contentRequestStatus
-            ? <span className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-200">
-                {t.contentRequestStatus}
+            ? <span className="inline-flex max-w-full truncate items-center rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-200">
+                {STATUS_LABELS[t.contentRequestStatus] || t.contentRequestStatus}
               </span>
             : <span className="text-slate-300">—</span>}
         </td>
       )}
 
-      <td className="px-3 py-2.5">
-        <button onClick={() => onViewBrief(t)} className="font-medium text-brand-700 hover:underline leading-tight">
+      <td className={cellCls}>
+        <button onClick={() => onViewBrief(t)} className="block truncate text-left font-medium text-brand-700 hover:underline leading-tight">
           #{t.campaignId}
         </button>
         {t.taskTypeName && (
-          <div className="text-xs text-slate-400 mt-0.5">{t.taskTypeName}</div>
+          <div className="mt-0.5 truncate text-xs text-slate-400" title={t.taskTypeName}>{t.taskTypeName}</div>
         )}
       </td>
 
-      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
-        {t.requestorName || <span className="text-slate-300">—</span>}
+      <td className={`${cellCls} text-xs text-slate-600`}>
+        {t.storeId
+          ? <span className="block truncate font-medium text-slate-700" title={t.storeId}>{t.storeId}</span>
+          : <span className="text-slate-300">—</span>}
       </td>
 
-      <td className="px-3 py-2.5">
+      <td className={`${cellCls} text-slate-600`}>
+        {t.requestorName
+          ? <span className="block truncate" title={t.requestorName}>{t.requestorName}</span>
+          : <span className="text-slate-300">—</span>}
+      </td>
+
+      <td className={cellCls}>
         {t.assigneeName
-          ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5
-                             text-xs font-medium text-slate-700">
-              <Icon name="users" className="h-3 w-3 text-slate-400" />{t.assigneeName}
+          ? <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full bg-slate-100 px-2 py-0.5
+                             text-xs font-medium text-slate-700" title={t.assigneeName}>
+              <Icon name="users" className="h-3 w-3 shrink-0 text-slate-400" />
+              <span className="truncate">{t.assigneeName}</span>
             </span>
           : <span className="text-slate-300">Unassigned</span>}
       </td>
 
-      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
-        {t.granularTaskName || t.taskTypeName || <span className="text-slate-300">—</span>}
+      <td className={`${cellCls} text-slate-600`}>
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="truncate" title={t.granularTaskName || t.taskTypeName}>
+            {t.granularTaskName || t.taskTypeName || <span className="text-slate-300">—</span>}
+          </span>
+          {t.hasActiveComments && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 ring-1 ring-sky-200 w-fit">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-sky-500" />
+              </span>
+              New comment
+            </span>
+          )}
+        </div>
       </td>
 
-      <td className="px-3 py-2.5">
+      <td className={cellCls}>
         {t.campaignPriority
           ? <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs
                               font-medium ring-1 ${PRIORITY_STYLES[t.campaignPriority] || 'bg-slate-100 text-slate-600'}`}>
@@ -952,14 +1157,15 @@ const TaskRow = memo(function TaskRow({ task: t, alt, autoMode = false, holding,
           : <span className="text-slate-300">—</span>}
       </td>
 
-      <td className="px-3 py-2.5">
-        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs
-                          font-medium ring-1 ${STATUS_STYLES[t.status] || 'bg-slate-100 text-slate-600'}`}>
+      <td className={cellCls}>
+        <span className={`inline-flex max-w-full truncate items-center rounded-full px-2 py-0.5 text-xs
+                          font-medium ring-1 ${STATUS_STYLES[t.status] || 'bg-slate-100 text-slate-600'}`}
+              title={STATUS_LABELS[t.status] || t.status}>
           {STATUS_LABELS[t.status] || t.status}
         </span>
       </td>
 
-      <td className="px-3 py-2.5 text-center">
+      <td className={`${cellCls} text-center`}>
         {t.reworkCount > 0
           ? <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5
                              text-xs font-semibold text-orange-700 ring-1 ring-orange-200">
@@ -968,7 +1174,7 @@ const TaskRow = memo(function TaskRow({ task: t, alt, autoMode = false, holding,
           : <span className="text-slate-300">—</span>}
       </td>
 
-      <td className="px-3 py-2.5 text-center">
+      <td className={`${cellCls} text-center`}>
         {t.requestorReworkCount > 0
           ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5
                              text-xs font-semibold text-purple-700 ring-1 ring-purple-200">
@@ -977,26 +1183,29 @@ const TaskRow = memo(function TaskRow({ task: t, alt, autoMode = false, holding,
           : <span className="text-slate-300">—</span>}
       </td>
 
-      <td className="px-3 py-2.5 whitespace-nowrap text-slate-500 text-xs">
-        {t.createdAt ? fmtDate(t.createdAt) : <span className="text-slate-300">—</span>}
+      <td className={`${cellCls} whitespace-nowrap text-xs text-slate-500`}>
+        <span className="block truncate" title={t.createdAt ? fmtDate(t.createdAt) : undefined}>
+          {t.createdAt ? fmtDate(t.createdAt) : <span className="text-slate-300">—</span>}
+        </span>
       </td>
 
-      <td className="px-3 py-2.5 whitespace-nowrap text-slate-500 text-xs">
-        {t.assignedAt ? fmtDate(t.assignedAt) : <span className="text-slate-300">—</span>}
+      <td className={`${cellCls} whitespace-nowrap text-xs text-slate-500`}>
+        <span className="block truncate" title={t.assignedAt ? fmtDate(t.assignedAt) : undefined}>
+          {t.assignedAt ? fmtDate(t.assignedAt) : <span className="text-slate-300">—</span>}
+        </span>
       </td>
 
-      <td className="px-3 py-2.5 text-slate-600 text-xs whitespace-nowrap">
+      <td className={`${cellCls} text-xs text-slate-600`}>
         {t.latestActionDoneByName
-          ? <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5
-                             text-xs font-medium text-indigo-700 ring-1 ring-indigo-100">
-              {t.latestActionDoneByName}
+          ? <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full bg-indigo-50 px-2 py-0.5
+                             text-xs font-medium text-indigo-700 ring-1 ring-indigo-100" title={t.latestActionDoneByName}>
+              <span className="truncate">{t.latestActionDoneByName}</span>
             </span>
           : <span className="text-slate-300">N/A</span>}
       </td>
 
-      <td className={`sticky right-0 z-10 px-3 py-2.5 border-l border-slate-200 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]
-                      ${alt ? 'bg-slate-50' : 'bg-white'}`}>
-        <div className="flex items-center justify-end gap-1">
+      <td className={`${ACTIONS_STICKY_BODY} min-w-0 overflow-hidden px-2 py-2.5`}>
+        <div className="flex flex-wrap items-center justify-end gap-1">
           {/* Brief */}
           <button onClick={() => onViewBrief(t)} title="View brief"
             className="rounded border border-slate-200 p-1.5 text-slate-400
@@ -1013,12 +1222,14 @@ const TaskRow = memo(function TaskRow({ task: t, alt, autoMode = false, holding,
             </button>
           )}
 
-          {/* Edit */}
-          <button onClick={() => onEdit(t)} title="Edit campaign"
-            className="rounded border border-slate-200 p-1.5 text-slate-400
-                       hover:bg-slate-50 hover:text-slate-700 transition">
-            <Icon name="edit" className="h-3.5 w-3.5" />
-          </button>
+          {/* Edit — only for mutable statuses */}
+          {['ASSIGNED', 'HELD', 'IN_PROGRESS', 'REWORK'].includes(t.status) && (
+            <button onClick={() => onEdit(t)} title="Edit campaign"
+              className="rounded border border-slate-200 p-1.5 text-slate-400
+                         hover:bg-slate-50 hover:text-slate-700 transition">
+              <Icon name="edit" className="h-3.5 w-3.5" />
+            </button>
+          )}
 
           {/* Hold */}
           {canHold && (

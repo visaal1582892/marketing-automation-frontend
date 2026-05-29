@@ -6,6 +6,7 @@ import Modal from '../../components/Modal'
 import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
+import { TableStatusRow } from '../../components/dataTable'
 
 export default function RoleTaskMappingPage() {
   const toast = useToast()
@@ -141,9 +142,9 @@ export default function RoleTaskMappingPage() {
       {/* Card with table */}
       <section className="rounded-lg bg-white shadow-sm ring-1 ring-slate-200/70">
         {/* Desktop */}
-        <div className="hidden overflow-x-auto sm:block">
-          <table className="w-full text-sm">
-            <thead>
+        <div className="hidden w-full overflow-x-auto sm:block">
+          <table className="w-full min-w-full text-sm">
+            <thead className="bg-slate-50">
               <tr className="bg-slate-50/70 text-left text-xs font-semibold uppercase
                               tracking-wider text-slate-500">
                 <th className="w-20 px-4 py-2.5">ID</th>
@@ -167,13 +168,11 @@ export default function RoleTaskMappingPage() {
                 <th />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
-                <tr><td colSpan="5" className="px-4 py-12 text-center text-slate-500">Loading…</td></tr>
+                <TableStatusRow colSpan={5} className="py-12">Loading…</TableStatusRow>
               ) : rows.length === 0 ? (
-                <tr><td colSpan="5" className="px-4 py-12 text-center text-slate-500">
-                  No matching records.
-                </td></tr>
+                <TableStatusRow colSpan={5} className="py-12">No matching records.</TableStatusRow>
               ) : (
                 rows.map((row) => (
                   <MappingRow key={row.mappingId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} />

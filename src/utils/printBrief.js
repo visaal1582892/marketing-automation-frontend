@@ -84,23 +84,16 @@ export function printBrief(campaign, filterTaskId = null) {
   const statusColor   = STATUS_COLOR[c.status]    || '#94a3b8'
   const priorityColor = PRIORITY_COLOR[c.priority] || '#64748b'
 
-  const deliverables = (c.deliverables || [])
-
-  // If opened from a worker's task card, only show their task.
+  // Deliverables are now derived from work_tasks (non-cancelled)
   const allTasks = (c.workTasks || []).filter(t => t.status !== 'CANCELLED')
   const tasks = filterTaskId
     ? allTasks.filter(t => String(t.taskId) === String(filterTaskId))
     : allTasks
 
-  // When printing a single task, also filter deliverables to the matched task's granularTaskId
-  const matchedTask  = tasks[0]
+  // When printing a single task, show only its deliverable entry
   const printDeliverables = filterTaskId
-    ? deliverables.filter(d =>
-        matchedTask &&
-        (String(d.granularTaskId) === String(matchedTask.granularTaskId) ||
-         d.granularTaskName === matchedTask.granularTaskName)
-      )
-    : deliverables
+    ? allTasks.filter(t => String(t.taskId) === String(filterTaskId))
+    : allTasks
 
   const isSingleTask = !!filterTaskId
 
@@ -110,7 +103,7 @@ export function printBrief(campaign, filterTaskId = null) {
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Brief #${c.campaignId} — ${safe(c.taskTypeName)}${isSingleTask ? ` — Task #${filterTaskId}` : ''}</title>
+<title>Brief #${c.campaignId} — ${safe(c.businessObjective || 'Campaign')}${isSingleTask ? ` — Task #${filterTaskId}` : ''}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{
@@ -320,7 +313,7 @@ export function printBrief(campaign, filterTaskId = null) {
   <!-- ── COVER ── -->
   <div class="cover">
     <div class="cover-eyebrow">MedPlus Marketing Automation · ${isSingleTask ? 'Task Brief' : 'Campaign Brief'}</div>
-    <div class="cover-title">${safe(c.taskTypeName)}</div>
+    <div class="cover-title">${safe(c.businessObjective || 'Marketing Request')}</div>
     <div class="cover-meta">
       <span>${safe(c.requestorName)}</span>
       ${c.departmentName ? `<span>${safe(c.departmentName)}</span>` : ''}
@@ -338,6 +331,8 @@ export function printBrief(campaign, filterTaskId = null) {
   <div class="obj-strip">
     ${c.businessObjective ? `<div class="obj-item"><strong>Objective</strong>${safe(c.businessObjective)}</div>` : ''}
     ${safeLocation(c.targetLocation) !== '—' ? `<div class="obj-item"><strong>Location</strong>${safeLocation(c.targetLocation)}</div>` : ''}
+    ${c.storeId       ? `<div class="obj-item"><strong>Store ID</strong>${safe(c.storeId)}</div>`           : ''}
+    ${c.contactNumber ? `<div class="obj-item"><strong>Contact</strong>${safe(c.contactNumber)}</div>`      : ''}
   </div>` : ''}
 
   <!-- ── BODY ── -->
@@ -361,10 +356,8 @@ export function printBrief(campaign, filterTaskId = null) {
       </div>
       <div class="card">
         <div class="field-grid">
-          <div>
-            <div class="field-label">Task Type</div>
-            <div class="field-value">${safe(c.taskTypeName)}</div>
-          </div>
+          ${c.storeId ? `<div><div class="field-label">Store ID</div><div class="field-value">${safe(c.storeId)}</div></div>` : ''}
+          ${c.contactNumber ? `<div><div class="field-label">Contact Number</div><div class="field-value">${safe(c.contactNumber)}</div></div>` : ''}
           <div>
             <div class="field-label">Audience Type</div>
             <div class="field-value">${safeMulti(c.audienceName || c.audienceTypeId)}</div>
@@ -449,9 +442,9 @@ export function printBrief(campaign, filterTaskId = null) {
       </div>
       <div class="card">
         <div class="deliverable-list">
-          ${printDeliverables.map((d, i) =>
+          ${printDeliverables.map((d) =>
             `<div class="deliverable-pill">
-              <span class="deliverable-num">${i + 1}</span>
+              <span class="deliverable-num">${safe(d.taskId)}</span>
               ${safe(d.granularTaskName || d.granularTaskId)}
             </div>`
           ).join('')}

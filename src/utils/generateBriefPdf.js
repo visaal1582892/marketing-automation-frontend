@@ -232,14 +232,14 @@ export async function generateBriefPdf(campaign) {
   txt(`#${campaign.campaignId}`, PW - MR, 16, { align: 'right' })
   font('normal', 7.5)
   ink([255, 180, 180])
-  txt(safe(campaign.taskTypeName), PW - MR, 22, { align: 'right' })
+  txt(safe(campaign.businessObjective), PW - MR, 22, { align: 'right' })
 
   y = 46
 
   // ── Campaign title & meta ─────────────────────────────────────────────────
   font('bold', 14)
   ink(C.ink)
-  const titleLines = doc.splitTextToSize(safe(campaign.taskTypeName), CW)
+  const titleLines = doc.splitTextToSize(safe(campaign.businessObjective || 'Marketing Request'), CW)
   doc.text(titleLines, ML, y)
   y += titleLines.length * 7 + 2
 
@@ -274,9 +274,10 @@ export async function generateBriefPdf(campaign) {
   section('Campaign Details')
 
   grid([
-    { label: 'Task Type',   value: safe(campaign.taskTypeName) },
     { label: 'Business Objective', value: safe(campaign.businessObjective) },
     { label: 'Target Location',    value: safeLocation(campaign.targetLocation) },
+    ...(campaign.storeId       ? [{ label: 'Store ID',        value: safe(campaign.storeId) }]       : []),
+    ...(campaign.contactNumber ? [{ label: 'Contact Number',  value: safe(campaign.contactNumber) }] : []),
     { label: 'Audience Type',      value: safeMulti(campaign.audienceName || campaign.audienceTypeId) },
     { label: 'Language',           value: safeMulti(campaign.language) },
     { label: 'Tone / Style',       value: safeMulti(campaign.tone) },
@@ -311,29 +312,35 @@ export async function generateBriefPdf(campaign) {
   // ════════════════════════════════════════════════════════════════════════════
   // SECTION 4 — Deliverables
   // ════════════════════════════════════════════════════════════════════════════
-  const deliverables = campaign.deliverables || []
+  const deliverables = (campaign.workTasks || campaign.deliverables || []).filter(d => d.status !== 'CANCELLED' && d.status !== 'canceled')
   if (deliverables.length) {
     section(`Deliverables  (${deliverables.length})`)
 
-    deliverables.forEach((d, i) => {
+    deliverables.forEach((d) => {
       needY(8)
 
-      // Bullet line
+      // Task ID badge
+      font('bold', 7.5)
       fill(C.brand)
-      doc.circle(ML + 2, y - 1, 1, 'F')
+      ink('#fff')
+      const idLabel = safe(d.taskId || '')
+      const idW = doc.getStringUnitWidth(idLabel) * 7.5 / doc.internal.scaleFactor + 4
+      doc.roundedRect(ML, y - 4.5, idW, 5.5, 1, 1, 'F')
+      txt(idLabel, ML + 2, y)
 
       font('normal', 8.5)
       ink(C.ink)
-      txt(safe(d.granularTaskName || d.granularTaskId), ML + 7, y)
+      txt(safe(d.granularTaskName || d.granularTaskId), ML + idW + 2, y)
 
       // Status tag (right)
-      if (d.workTaskStatus) {
-        const dotC = STATUS_DOT[d.workTaskStatus] || C.muted
+      const taskStatus = d.workTaskStatus || d.status
+      if (taskStatus) {
+        const dotC = STATUS_DOT[taskStatus] || C.muted
         fill(dotC)
         doc.circle(PW - MR - 20, y - 1.5, 1.2, 'F')
         font('normal', 7)
         ink(dotC)
-        txt((TASK_LABEL[d.workTaskStatus] || d.workTaskStatus).replace('_', ' '), PW - MR - 17, y)
+        txt((TASK_LABEL[taskStatus] || taskStatus).replace(/_/g, ' '), PW - MR - 17, y)
       }
       y += 6
     })
@@ -486,6 +493,6 @@ export async function generateBriefPdf(campaign) {
   txt(`Confidential  •  Generated ${fmtDateTime(new Date())}`, ML, PH - 9)
   txt(`Page ${total} of ${total}`, PW - MR, PH - 9, { align: 'right' })
 
-  const slug = (campaign.taskTypeName || 'Campaign').replace(/[^a-zA-Z0-9]+/g, '-')
+  const slug = (campaign.businessObjective || 'Campaign').replace(/[^a-zA-Z0-9]+/g, '-')
   doc.save(`Brief-${campaign.campaignId}-${slug}.pdf`)
 }

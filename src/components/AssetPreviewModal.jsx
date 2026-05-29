@@ -274,7 +274,7 @@ export default function AssetPreviewModal({ taskId, taskName, currentUserId, can
     setAssets(prev => prev.filter(a => a.assetId !== assetId))
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="w-full max-w-lg max-h-[88vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden">
 
         {/* Header */}

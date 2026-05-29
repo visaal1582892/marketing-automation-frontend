@@ -7,6 +7,7 @@ import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
 import Pagination from '../../components/Pagination'
 import useDebounce from '../../hooks/useDebounce'
+import BackToMaster from '../../components/admin/BackToMaster'
 
 const BASE = '/admin/users'
 const SKILL_LEVELS = ['JUNIOR', 'SENIOR']
@@ -504,6 +505,7 @@ export default function UserManagementPage() {
 
   return (
     <div className="space-y-3">
+      <BackToMaster />
       {/* ── Toolbar ── */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">

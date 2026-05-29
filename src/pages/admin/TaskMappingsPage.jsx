@@ -7,6 +7,8 @@ import Modal from '../../components/Modal'
 import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
+import BackToMaster from '../../components/admin/BackToMaster'
+import { TableStatusRow } from '../../components/dataTable'
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
@@ -140,10 +142,10 @@ function RoleTaskTab() {
       </div>
 
       <section className="rounded-lg bg-white shadow-sm ring-1 ring-slate-200/70">
-        <div className="hidden overflow-x-auto sm:block">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-50/70 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <div className="hidden w-full overflow-x-auto sm:block">
+          <table className="w-full min-w-full text-sm">
+            <thead className="bg-slate-50">
+              <tr className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <th className="w-20 px-4 py-2.5">ID</th>
                 <th className="w-48 px-4 py-2.5">Role</th>
                 <th className="px-4 py-2.5">Granular Task</th>
@@ -159,11 +161,11 @@ function RoleTaskTab() {
                 <th />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
-                <tr><td colSpan="5" className="px-4 py-12 text-center text-slate-500">Loading…</td></tr>
+                <TableStatusRow colSpan={5} className="py-12">Loading…</TableStatusRow>
               ) : rows.length === 0 ? (
-                <tr><td colSpan="5" className="px-4 py-12 text-center text-slate-500">No matching records.</td></tr>
+                <TableStatusRow colSpan={5} className="py-12">No matching records.</TableStatusRow>
               ) : rows.map((row) => (
                 <RoleTaskRow key={row.mappingId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} />
               ))}
@@ -862,6 +864,7 @@ export default function TaskMappingsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
+      <BackToMaster />
       {/* Page header */}
       <header className="flex items-center gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-brand-100">

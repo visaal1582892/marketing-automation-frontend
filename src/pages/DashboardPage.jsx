@@ -319,7 +319,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
               { to: '/admin/users',               icon: 'users',      label: 'User Management',   desc: 'Add or edit user accounts'      },
-              { to: '/admin/master/departments',   icon: 'building',   label: 'Master Data',       desc: 'Departments, roles, types…'     },
+              { to: '/admin/master',               icon: 'cog',        label: 'Master',            desc: 'Config, mappings, master data…' },
               { to: '/admin/granular-tasks',       icon: 'list',       label: 'Granular Tasks',    desc: 'Configure task definitions'     },
               { to: '/admin/role-task-mappings',   icon: 'shield',     label: 'Role → Task Map',   desc: 'Routing rules per role'         },
             ].map(({ to, icon, label, desc }) => (

@@ -1,4 +1,4 @@
-ï»¿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import managerApi from '../../api/manager'
 import campaignsApi from '../../api/campaigns'
@@ -8,7 +8,7 @@ import RequestBriefDrawer, { RequestSummaryCard } from '../../components/Request
 import AppSelect from '../../components/AppSelect'
 
 /**
- * Module 2-B â€” Manager Intervention queue.
+ * Module 2-B — Manager Intervention queue.
  * Lists campaigns paused at PENDING_INTERVENTION (full team capacity) and
  * lets the manager retry routing, force-assign a specific user, or reject.
  */
@@ -47,7 +47,7 @@ export default function InterventionPage() {
       showToast('Routing retried.', 'success')
       load()
     } catch (e) {
-      const msg = e?.response?.data?.message || 'Retry failed â€” capacity is still full?'
+      const msg = e?.response?.data?.message || 'Retry failed — capacity is still full?'
       showToast(msg, 'error')
     } finally {
       setBusyId(null)
@@ -75,7 +75,7 @@ export default function InterventionPage() {
         userId: Number(overrideForm.userId),
         granularTaskId: overrideForm.granularTaskId || null,
       })
-      showToast('Override applied â€” task assigned.', 'success')
+      showToast('Override applied — task assigned.', 'success')
       setOverride(null)
       load()
     } catch (e) {
@@ -122,7 +122,7 @@ export default function InterventionPage() {
       </div>
 
       {loading ? (
-        <p className="text-center text-slate-400 py-12 text-sm">Loadingâ€¦</p>
+        <p className="text-center text-slate-400 py-12 text-sm">Loading…</p>
       ) : campaigns.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white py-14 text-center">
           <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
@@ -192,7 +192,7 @@ function InterventionCard({ campaign, busy, onRetry, onOverride, onReject, onVie
         <div className="flex-1 min-w-[240px]">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono text-slate-400">#{campaign.campaignId}</span>
-            <span className="text-sm font-semibold text-slate-800">{campaign.taskTypeName}</span>
+            <span className="text-sm font-semibold text-slate-800">{campaign.businessObjective || '—'}</span>
             <PriorityBadge v={campaign.priority} />
             {campaign.flaggedInconsistency && (
               <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200">
@@ -201,7 +201,7 @@ function InterventionCard({ campaign, busy, onRetry, onOverride, onReject, onVie
             )}
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            Requested by {campaign.requestorName} â€¢ {campaign.departmentName}
+            Requested by {campaign.requestorName} • {campaign.departmentName}
           </div>
           {campaign.routingNotes && (
             <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 p-2 text-xs text-amber-800">
@@ -253,7 +253,7 @@ function OverrideModal({ campaign, users, form, setForm, saving, onCancel, onCon
   const deliverables = (campaign.deliverables || [])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold text-slate-900">Force-assign deliverable</h3>
@@ -291,8 +291,8 @@ function OverrideModal({ campaign, users, form, setForm, saving, onCancel, onCon
           <AppSelect
             value={form.userId ? String(form.userId) : ''}
             onChange={v => setForm({ ...form, userId: v })}
-            options={candidates.map(u => ({ value: String(u.userId), label: `${u.fullName} â€” ${u.roleName || 'â€”'} (${u.currentActiveTasks ?? 0} active tasks)` }))}
-            placeholder="Select userâ€¦"
+            options={candidates.map(u => ({ value: String(u.userId), label: `${u.fullName} — ${u.roleName || '—'} (${u.currentActiveTasks ?? 0} active tasks)` }))}
+            placeholder="Select user…"
           />
           <p className="mt-1 text-xs text-amber-600">
             This will assign the task even if the user is at max capacity.
@@ -311,7 +311,7 @@ function OverrideModal({ campaign, users, form, setForm, saving, onCancel, onCon
             disabled={saving}
             className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition disabled:opacity-60"
           >
-            {saving ? 'Assigningâ€¦' : 'Confirm assign'}
+            {saving ? 'Assigning…' : 'Confirm assign'}
           </button>
         </div>
       </div>
@@ -321,7 +321,7 @@ function OverrideModal({ campaign, users, form, setForm, saving, onCancel, onCon
 
 function RejectModal({ campaign, reason, setReason, saving, onCancel, onConfirm, onViewBrief }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold text-slate-900">Reject paused campaign</h3>
@@ -354,7 +354,7 @@ function RejectModal({ campaign, reason, setReason, saving, onCancel, onConfirm,
         <div className="flex justify-end gap-3 pt-1">
           <button onClick={onCancel} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">Cancel</button>
           <button onClick={onConfirm} disabled={saving} className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 transition disabled:opacity-60">
-            {saving ? 'Rejectingâ€¦' : 'Confirm reject'}
+            {saving ? 'Rejecting…' : 'Confirm reject'}
           </button>
         </div>
       </div>
@@ -364,5 +364,5 @@ function RejectModal({ campaign, reason, setReason, saving, onCancel, onConfirm,
 
 function PriorityBadge({ v }) {
   const m = { HIGH: 'bg-red-50 text-red-700 ring-red-200', MEDIUM: 'bg-yellow-50 text-yellow-700 ring-yellow-200', LOW: 'bg-green-50 text-green-700 ring-green-200' }
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || 'â€”'}</span>
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || '—'}</span>
 }

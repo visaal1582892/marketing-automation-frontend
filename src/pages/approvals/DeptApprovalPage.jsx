@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { useToast } from '../../components/Toast'
@@ -78,7 +78,7 @@ export default function DeptApprovalPage() {
     try {
       if (action === 'approve') {
         await campaignsApi.deptApprove(selected.campaignId)
-        showToast('Request approved — sent to Marketing Head.', 'success')
+        showToast('Request approved � sent to Marketing Head.', 'success')
       } else {
         if (!reason.trim()) { showToast('Please provide a rejection reason.', 'error'); setSaving(false); return }
         await campaignsApi.deptReject(selected.campaignId, reason)
@@ -98,7 +98,7 @@ export default function DeptApprovalPage() {
 
   const roleLabel = isHead ? 'Department Head' : 'Regional Manager'
   const scope     = isHead
-    ? `Showing requests from your department (${user?.department || '—'}) awaiting your approval.`
+    ? `Showing requests from your department (${user?.department || '�'}) awaiting your approval.`
     : 'Showing requests from departments without a designated Head, awaiting your approval.'
 
   return (
@@ -127,7 +127,7 @@ export default function DeptApprovalPage() {
 
       {tab === 'pending' && (
         loading ? (
-          <p className="text-center text-slate-400 py-12 text-sm">Loading…</p>
+          <p className="text-center text-slate-400 py-12 text-sm">Loading�</p>
         ) : pending.length === 0 ? (
           <EmptyState />
         ) : (
@@ -160,9 +160,9 @@ export default function DeptApprovalPage() {
           </div>
 
           {loadingHistory ? (
-            <p className="text-center text-slate-400 py-12 text-sm">Loading history…</p>
+            <p className="text-center text-slate-400 py-12 text-sm">Loading history�</p>
           ) : filteredHistory.length === 0 ? (
-            <EmptyState message="No decisions yet — campaigns you approve or reject will appear here." />
+            <EmptyState message="No decisions yet � campaigns you approve or reject will appear here." />
           ) : (
             <HistoryTable
               campaigns={filteredHistory}
@@ -206,7 +206,7 @@ export default function DeptApprovalPage() {
   )
 }
 
-// ─── Pending queue table ──────────────────────────────────────────────────────
+// --- Pending queue table ------------------------------------------------------
 
 function PendingTable({ campaigns, onAction, onViewBrief }) {
   return (
@@ -215,7 +215,7 @@ function PendingTable({ campaigns, onAction, onViewBrief }) {
       <table className="min-w-[900px] divide-y divide-slate-200 text-sm sm:min-w-full">
         <thead className="bg-slate-50">
           <tr>
-            {['#', 'Requirement', 'Requestor', 'Department', 'Objective', 'Priority', 'Submitted', 'Actions'].map((h) => (
+            {['#', 'Objective', 'Requestor', 'Department', 'Campaign Type', 'Priority', 'Submitted', 'Actions'].map((h) => (
               <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
             ))}
           </tr>
@@ -224,10 +224,10 @@ function PendingTable({ campaigns, onAction, onViewBrief }) {
           {campaigns.map((c) => (
             <tr key={c.campaignId} className="hover:bg-slate-50/60 transition">
               <td className="px-4 py-3 text-slate-500 font-mono text-xs">#{c.campaignId}</td>
-              <td className="px-4 py-3 font-medium text-slate-800">{c.taskTypeName || '—'}</td>
+              <td className="px-4 py-3 font-medium text-slate-800">{c.businessObjective || '�'}</td>
               <td className="px-4 py-3 text-slate-600">{c.requestorName}</td>
-              <td className="px-4 py-3 text-slate-600">{c.departmentName || '—'}</td>
-              <td className="px-4 py-3 text-slate-500 text-xs">{fmtEnum(c.businessObjective)}</td>
+              <td className="px-4 py-3 text-slate-600">{c.departmentName || '�'}</td>
+              <td className="px-4 py-3 text-slate-500 text-xs">{c.campaignTypeName || '�'}</td>
               <td className="px-4 py-3"><PriorityBadge v={c.priority} /></td>
               <td className="px-4 py-3 text-slate-500 text-xs">{fmtDateTime(c.createdAt)}</td>
               <td className="px-4 py-3">
@@ -252,7 +252,7 @@ function PendingTable({ campaigns, onAction, onViewBrief }) {
   )
 }
 
-// ─── History table (re-used by Marketing page too) ────────────────────────────
+// --- History table (re-used by Marketing page too) ----------------------------
 
 export function HistoryTable({ campaigns, stage, onViewBrief }) {
   const decisionField = stage === 'marketing' ? 'marketingDecision' : 'deptDecision'
@@ -275,17 +275,17 @@ export function HistoryTable({ campaigns, stage, onViewBrief }) {
               <td className="px-4 py-3 text-slate-500 font-mono text-xs">#{c.campaignId}</td>
               <td className="px-4 py-3 font-medium text-slate-800">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span>{c.taskTypeName || '—'}</span>
+                  <span>{c.businessObjective || '�'}</span>
                   <PriorityBadge v={c.priority} />
                 </div>
               </td>
               <td className="px-4 py-3 text-slate-600">{c.requestorName}</td>
-              <td className="px-4 py-3 text-slate-600">{c.departmentName || '—'}</td>
+              <td className="px-4 py-3 text-slate-600">{c.departmentName || '�'}</td>
               <td className="px-4 py-3"><DecisionBadge v={c[decisionField]} /></td>
               <td className="px-4 py-3 text-slate-500 text-xs">{fmtDateTime(c[timestampField])}</td>
               <td className="px-4 py-3 text-slate-600 text-xs max-w-[300px]">
                 {c[decisionField] === 'REJECTED'
-                  ? <span className="text-red-700 whitespace-pre-wrap">{c.rejectionReason || '—'}</span>
+                  ? <span className="text-red-700 whitespace-pre-wrap">{c.rejectionReason || '�'}</span>
                   : <StatusBadge v={c.status} />}
               </td>
               <td className="px-4 py-3">
@@ -306,11 +306,11 @@ export function HistoryTable({ campaigns, stage, onViewBrief }) {
   )
 }
 
-// ─── Shared approval modal ────────────────────────────────────────────────────
+// --- Shared approval modal ----------------------------------------------------
 
 export function ActionModal({ title, campaign, action, reason, setReason, onConfirm, onCancel, saving, onViewBrief, approveNote }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold text-slate-900">{title}</h3>
@@ -340,7 +340,7 @@ export function ActionModal({ title, campaign, action, reason, setReason, onConf
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Provide a clear reason for rejection…"
+              placeholder="Provide a clear reason for rejection�"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm
                 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500 resize-none"
             />
@@ -367,7 +367,7 @@ export function ActionModal({ title, campaign, action, reason, setReason, onConf
               action === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
             }`}
           >
-            {saving ? 'Saving…' : action === 'approve' ? 'Confirm Approve' : 'Confirm Reject'}
+            {saving ? 'Saving�' : action === 'approve' ? 'Confirm Approve' : 'Confirm Reject'}
           </button>
         </div>
       </div>
@@ -375,7 +375,7 @@ export function ActionModal({ title, campaign, action, reason, setReason, onConf
   )
 }
 
-// ─── Shared helpers / mini components ────────────────────────────────────────
+// --- Shared helpers / mini components ----------------------------------------
 
 export function EmptyState({ message = 'No pending requests in your queue.' }) {
   return (
@@ -442,7 +442,7 @@ export function DecisionBadge({ v }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>
       {v && <Icon name={icon[v]} className="h-3 w-3" />}
-      {label[v] || '—'}
+      {label[v] || '�'}
     </span>
   )
 }
@@ -469,16 +469,16 @@ function StatusBadge({ v }) {
     REJECTED:                   'Rejected',
   }
   const cls = STYLES[v] || 'bg-slate-100 text-slate-600'
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{LABELS[v] || v || '—'}</span>
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{LABELS[v] || v || '�'}</span>
 }
 
 function PriorityBadge({ v }) {
   const m = { HIGH: 'bg-red-50 text-red-700 ring-red-200', MEDIUM: 'bg-yellow-50 text-yellow-700 ring-yellow-200', LOW: 'bg-green-50 text-green-700 ring-green-200' }
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || '—'}</span>
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || '�'}</span>
 }
 
 function fmtDateTime(d) {
-  if (!d) return '—'
+  if (!d) return '�'
   return new Date(d).toLocaleString('en-IN', {
     day:    '2-digit',
     month:  'short',
@@ -487,4 +487,4 @@ function fmtDateTime(d) {
     minute: '2-digit',
   })
 }
-function fmtEnum(v) { return v ? v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—' }
+function fmtEnum(v) { return v ? v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '�' }

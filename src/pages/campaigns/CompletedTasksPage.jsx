@@ -13,6 +13,25 @@ import AssetPreviewModal from '../../components/AssetPreviewModal'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import { useAuth } from '../../auth/AuthContext'
 import useDebounce from '../../hooks/useDebounce'
+import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
+
+const COMPLETED_TABLE_COLS = [116, 116, 208, 156, 176, 140, 272]
+const completedCellCls = 'min-w-0 overflow-hidden px-4 py-3'
+
+/** Sticky Actions column — solid bg so fixed column obvious */
+const ACTIONS_STICKY_HEADER = 'sticky right-0 z-30 bg-slate-100'
+const ACTIONS_STICKY_BODY = 'sticky right-0 z-[1] bg-slate-50'
+const COMPLETED_TABLE_MIN_WIDTH = COMPLETED_TABLE_COLS.reduce((s, w) => s + w, 0)
+
+const filterWrapCls = 'min-w-0 w-full [&_.app-select__control]:!min-h-[28px] [&_.app-select__control]:!h-[28px]'
+
+function FilterCell({ children }) {
+  return (
+    <td className="min-w-0 bg-slate-50 px-3 pb-2 pt-1 align-top">
+      {children != null ? <div className="min-w-0 w-full">{children}</div> : null}
+    </td>
+  )
+}
 
 function fmtDate(iso) {
   return iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
@@ -112,99 +131,92 @@ export default function CompletedTasksPage() {
     placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-300 focus:border-brand-400`
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col gap-2">
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Completed Tasks</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Deliverables you have approved. Add followup tasks to any campaign if more work is needed.
-          </p>
+      {/* ── Controls bar ── */}
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker
+            from={fDateFrom} to={fDateTo}
+            onChange={({ from, to }) => { setFDateFrom(from); setFDateTo(to) }}
+            placeholder="All dates"
+          />
+          {!loading && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 border border-green-200 px-2.5 py-1 text-xs font-semibold text-green-700">
+              <Icon name="check" className="h-3.5 w-3.5" />
+              {tasks.length} approved task{tasks.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
-        {!loading && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 border border-green-200 px-3 py-1.5 text-sm font-semibold text-green-700">
-            <Icon name="check" className="h-4 w-4" />
-            {tasks.length} approved task{tasks.length !== 1 ? 's' : ''}
-          </span>
+        {hasFilters && (
+          <button onClick={clearAll}
+            className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50 transition">
+            <Icon name="x" className="h-3 w-3" /> Clear filters
+          </button>
         )}
       </div>
 
-      {!loading && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <DateRangePicker
-              from={fDateFrom} to={fDateTo}
-              onChange={({ from, to }) => { setFDateFrom(from); setFDateTo(to) }}
-              placeholder="All dates"
-            />
-            <span className="text-xs text-slate-400">{filtered.length} task{filtered.length !== 1 ? 's' : ''}</span>
-          </div>
-          {hasFilters && (
-            <button onClick={clearAll}
-              className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50 transition">
-              <Icon name="x" className="h-3 w-3" /> Clear filters
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="w-20 px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign</th>
-                <th className="w-28 px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task ID</th>
-                <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task Name</th>
-                <th className="w-36 px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task Type</th>
-                <th className="w-36 px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Completed By</th>
-                <th className="w-28 px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Completed At</th>
-                <th className="w-40 px-3 pt-3 pb-1 text-right font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Actions</th>
+      <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+        <div className="w-full flex-1 overflow-auto">
+          <table
+            className={DATA_TABLE_CLASS}
+            style={dataTableStyle(COMPLETED_TABLE_MIN_WIDTH)}
+          >
+            <DataTableColGroup widths={COMPLETED_TABLE_COLS} />
+            <thead className="sticky top-0 z-20 bg-slate-50">
+              <tr className="bg-slate-50">
+                <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign</th>
+                <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task ID</th>
+                <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task Name</th>
+                <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task Type</th>
+                <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Completed By</th>
+                <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Completed At</th>
+                <th className={`${ACTIONS_STICKY_HEADER} min-w-0 border-b border-slate-200 px-4 pb-1 pt-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-600 whitespace-nowrap`}>Actions</th>
               </tr>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <td className="px-2 pb-2 pt-1">
+              <tr className="border-b border-slate-200">
+                <FilterCell>
                   <input value={fCampaign} onChange={e => setFCampaign(e.target.value)} placeholder="Search…" className={colCls} />
-                </td>
-                <td className="px-2 pb-2 pt-1">
+                </FilterCell>
+                <FilterCell>
                   <input value={fTaskId} onChange={e => setFTaskId(e.target.value)} placeholder="Search…" className={colCls} />
-                </td>
-                <td className="px-2 pb-2 pt-1">
-                  <AppSelect value={fTaskName} onChange={setFTaskName} options={allTaskNames} placeholder="All" size="sm" isSearchable menuPortal />
-                </td>
-                <td className="px-2 pb-2 pt-1">
-                  <AppSelect value={fTaskType} onChange={setFTaskType} options={allTaskTypes} placeholder="All" size="sm" isSearchable menuPortal />
-                </td>
-                <td className="px-2 pb-2 pt-1">
+                </FilterCell>
+                <FilterCell>
+                  <div className={filterWrapCls}>
+                    <AppSelect className="w-full" value={fTaskName} onChange={setFTaskName} options={allTaskNames} placeholder="All" size="sm" isSearchable menuPortal />
+                  </div>
+                </FilterCell>
+                <FilterCell>
+                  <div className={filterWrapCls}>
+                    <AppSelect className="w-full" value={fTaskType} onChange={setFTaskType} options={allTaskTypes} placeholder="All" size="sm" isSearchable menuPortal />
+                  </div>
+                </FilterCell>
+                <FilterCell>
                   <input value={fCompletedBy} onChange={e => setFCompletedBy(e.target.value)} placeholder="Search…" className={colCls} />
-                </td>
-                <td className="px-2 pb-2 pt-1" />
-                <td className="px-2 pb-2 pt-1" />
+                </FilterCell>
+                <FilterCell />
+                <td className={`${ACTIONS_STICKY_HEADER} min-w-0 border-b border-slate-200 px-2 pb-2 pt-1`} />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
-                <tr>
-                  <td colSpan={7} className="py-14 text-center">
-                    <span className="inline-flex items-center gap-2 text-sm text-slate-400">
-                      <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-brand-500" />
-                      Loading…
-                    </span>
-                  </td>
-                </tr>
+                <TableStatusRow colSpan={7}>
+                  <span className="inline-flex items-center gap-2 text-sm text-slate-400">
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-brand-500" />
+                    Loading…
+                  </span>
+                </TableStatusRow>
               ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-14 text-center">
-                    <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
-                    <p className="text-sm text-slate-500">
-                      {hasFilters ? 'No tasks match the current filters.' : 'No completed tasks yet.'}
-                    </p>
-                    {hasFilters && (
-                      <button onClick={clearAll} className="mt-2 text-xs text-brand-600 hover:underline">
-                        Clear filters
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                <TableStatusRow colSpan={7}>
+                  <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
+                  <p className="text-sm text-slate-500">
+                    {hasFilters ? 'No tasks match the current filters.' : 'No completed tasks yet.'}
+                  </p>
+                  {hasFilters && (
+                    <button onClick={clearAll} className="mt-2 text-xs text-brand-600 hover:underline">
+                      Clear filters
+                    </button>
+                  )}
+                </TableStatusRow>
               ) : filtered.map(t => (
                 <CompletedTaskRow
                   key={t.taskId}
@@ -217,7 +229,7 @@ export default function CompletedTasksPage() {
             </tbody>
           </table>
         </div>
-        <div className="border-t border-slate-100 bg-slate-50 px-4 py-1">
+        <div className="shrink-0 border-t border-slate-100 bg-slate-50 px-4 py-1">
           <Pagination
             page={page} totalPages={totalPages} totalElements={totalElements}
             pageSize={PAGE_SIZE} onPageChange={setPage} loading={loading}
@@ -260,44 +272,53 @@ export default function CompletedTasksPage() {
 // ─── Memoized table row ───────────────────────────────────────────────────────
 
 const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, onViewAssets, onViewBrief, onFollowup }) {
+  const completedLabel = fmtDate(t.requestorApprovedAt || t.managerApprovedAt)
   return (
     <tr className="hover:bg-slate-50/70 transition">
-      <td className="px-3 py-3">
+      <td className={completedCellCls}>
         <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">
           {t.campaignId}
         </span>
       </td>
-      <td className="px-3 py-3">
+      <td className={completedCellCls}>
         <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">
           {t.taskId}
         </span>
       </td>
-      <td className="px-3 py-3 font-medium text-slate-800">
-        {t.granularTaskName || t.taskTypeName || '—'}
+      <td className={`${completedCellCls} font-medium text-slate-800`}>
+        <span className="block truncate" title={t.granularTaskName || t.taskTypeName}>
+          {t.granularTaskName || t.taskTypeName || '—'}
+        </span>
       </td>
-      <td className="px-3 py-3 text-slate-600">
+      <td className={`${completedCellCls} text-slate-600`}>
         {t.taskTypeName
-          ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{t.taskTypeName}</span>
+          ? <span className="inline-block max-w-full truncate rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600" title={t.taskTypeName}>{t.taskTypeName}</span>
           : '—'}
       </td>
-      <td className="px-3 py-3 text-slate-600">{t.assigneeName || '—'}</td>
-      <td className="px-3 py-3 text-slate-500">{fmtDate(t.requestorApprovedAt || t.managerApprovedAt)}</td>
-      <td className="px-3 py-3">
-        <div className="flex items-center gap-2 justify-end">
+      <td className={`${completedCellCls} text-slate-600`}>
+        <span className="block truncate" title={t.assigneeName}>{t.assigneeName || '—'}</span>
+      </td>
+      <td className={`${completedCellCls} whitespace-nowrap text-slate-500`}>
+        <span className="block truncate" title={completedLabel !== '—' ? completedLabel : undefined}>
+          {completedLabel}
+        </span>
+      </td>
+      <td className={`${completedCellCls} ${ACTIONS_STICKY_BODY}`}>
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           <button onClick={() => onViewBrief(t)}
-            className="flex items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 transition"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 transition"
             title="View campaign brief">
             <Icon name="eye" className="h-3.5 w-3.5" /> Brief
           </button>
           <button onClick={() => onViewAssets(t)}
-            className="flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-brand-200 bg-brand-50 px-2 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition"
             title="View submitted assets">
             <Icon name="fileText" className="h-3.5 w-3.5" /> Assets
           </button>
           <button onClick={() => onFollowup(t)}
-            className="flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
             title="Add followup tasks to this campaign">
-            <Icon name="plus" className="h-3.5 w-3.5" /> Followup Task
+            <Icon name="plus" className="h-3.5 w-3.5" /> Followup
           </button>
         </div>
       </td>
@@ -358,9 +379,16 @@ function FollowupTaskModal({ task, onClose, onSuccess }) {
             taskTypeName: typeMap[String(t.taskTypeId)] || t.taskTypeName || '',
           }))
       )
-      const campTypeIds = new Set(parseJsonArr(campRes.data.taskTypeId))
-      setLockedTypeIds(campTypeIds)
-      setSelectedTypeIds(new Set(campTypeIds))
+      // Derive task types from the campaign's existing deliverables (task_type_id no longer stored on campaign)
+      const deliverableTaskIds = new Set((campRes.data.deliverables || []).map(d => String(d.granularTaskId)))
+      const campTypeIds = new Set(
+        (granTasks || [])
+          .filter(t => deliverableTaskIds.has(String(t.taskId)))
+          .map(t => String(t.taskTypeId || ''))
+          .filter(Boolean)
+      )
+      setLockedTypeIds(new Set()) // Task type is filter only — no locking
+      setSelectedTypeIds(new Set()) // Do not auto-populate task type filter
       const assets = assetsRes?.data || []
       setCompletedTaskAssets(Array.isArray(assets) ? assets : [])
       setPhase('form')
@@ -379,7 +407,9 @@ function FollowupTaskModal({ task, onClose, onSuccess }) {
   }, [])
 
   // ── Derived ─────────────────────────────────────────────────────────────────
-  const filteredByType = allGranularTasks.filter(t => selectedTypeIds.has(t.taskTypeId))
+  const filteredByType = selectedTypeIds.size === 0
+    ? allGranularTasks
+    : allGranularTasks.filter(t => selectedTypeIds.has(t.taskTypeId))
   const taskDropList   = filteredByType.filter(t =>
     t.taskName.toLowerCase().includes(taskSearch.toLowerCase()) ||
     t.taskTypeName.toLowerCase().includes(taskSearch.toLowerCase())
@@ -499,7 +529,7 @@ function FollowupTaskModal({ task, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
       {/*
         Layout: header + dropdowns stay outside the scroll container so absolute
         dropdown panels are never clipped. Only the task-cards section scrolls.

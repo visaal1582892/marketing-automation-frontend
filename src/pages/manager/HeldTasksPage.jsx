@@ -1,4 +1,4 @@
-ï»¿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import managerApi from '../../api/manager'
 import { useToast } from '../../components/Toast'
@@ -54,7 +54,7 @@ export default function HeldTasksPage() {
         <div>
           <h2 className="text-xl font-bold text-slate-900">Held Tasks</h2>
           <p className="mt-0.5 text-sm text-slate-500">
-            Custom "Other" tasks await manual assignment Â· Capacity-held tasks can be auto-routed.
+            Custom "Other" tasks await manual assignment · Capacity-held tasks can be auto-routed.
           </p>
         </div>
         <button onClick={load} disabled={loading}
@@ -70,13 +70,13 @@ export default function HeldTasksPage() {
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 flex items-center gap-2">
           <Icon name="pause" className="h-4 w-4 text-amber-600" />
           <span className="text-sm font-semibold text-amber-700">
-            {loading ? 'â€¦' : regularTasks.length} capacity-held
+            {loading ? '…' : regularTasks.length} capacity-held
           </span>
         </div>
         <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 flex items-center gap-2">
           <Icon name="edit" className="h-4 w-4 text-violet-600" />
           <span className="text-sm font-semibold text-violet-700">
-            {loading ? 'â€¦' : otherTasks.length} awaiting manual assign
+            {loading ? '…' : otherTasks.length} awaiting manual assign
           </span>
         </div>
       </div>
@@ -84,7 +84,7 @@ export default function HeldTasksPage() {
       {loading ? (
         <div className="rounded-xl border border-slate-200 bg-white py-14 text-center">
           <Icon name="refresh" className="mx-auto h-8 w-8 text-slate-300 mb-3 animate-spin" />
-          <p className="text-sm text-slate-400">Loading held tasksâ€¦</p>
+          <p className="text-sm text-slate-400">Loading held tasks…</p>
         </div>
       ) : tasks.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white py-16 text-center">
@@ -97,14 +97,14 @@ export default function HeldTasksPage() {
       ) : (
         <div className="space-y-6">
 
-          {/* â”€â”€ Custom "Other" tasks â€” manual assign only â”€â”€ */}
+          {/* -- Custom "Other" tasks — manual assign only -- */}
           {otherTasks.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <div className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-100">
                   <Icon name="edit" className="h-3.5 w-3.5 text-violet-600" />
                 </div>
-                <h3 className="text-sm font-semibold text-slate-800">Custom Tasks â€” Manual Assignment Required</h3>
+                <h3 className="text-sm font-semibold text-slate-800">Custom Tasks — Manual Assignment Required</h3>
                 <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
                   {otherTasks.length}
                 </span>
@@ -127,7 +127,7 @@ export default function HeldTasksPage() {
             </div>
           )}
 
-          {/* â”€â”€ Capacity-held regular tasks â€” auto-route â”€â”€ */}
+          {/* -- Capacity-held regular tasks — auto-route -- */}
           {regularTasks.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
@@ -191,7 +191,7 @@ function HeldTaskCard({ task: t, busy, isOther, onUnhold, onAssign, onViewBrief 
     <div className={`rounded-xl border bg-white shadow-sm hover:shadow-md transition-shadow ${borderCls}`}>
       <div className="flex flex-wrap items-start justify-between gap-3 p-4">
 
-        {/* Left â€” task info */}
+        {/* Left — task info */}
         <div className="flex-1 min-w-[220px]">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono text-slate-400">#{t.taskId}</span>
@@ -234,11 +234,11 @@ function HeldTaskCard({ task: t, busy, isOther, onUnhold, onAssign, onViewBrief 
           </div>
           <div className="mt-1.5 text-xs text-slate-400">
             Campaign #{t.campaignId}
-            {t.requestorName && <> Â· Requested by {t.requestorName}</>}
+            {t.requestorName && <> · Requested by {t.requestorName}</>}
           </div>
         </div>
 
-        {/* Right â€” actions */}
+        {/* Right — actions */}
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={onViewBrief}
             className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs
@@ -268,7 +268,7 @@ function HeldTaskCard({ task: t, busy, isOther, onUnhold, onAssign, onViewBrief 
                            font-medium text-emerald-700 hover:bg-emerald-100 transition
                            disabled:opacity-60 flex items-center gap-1.5">
                 {busy
-                  ? <><Icon name="refresh" className="h-3.5 w-3.5 animate-spin" /> Re-routingâ€¦</>
+                  ? <><Icon name="refresh" className="h-3.5 w-3.5 animate-spin" /> Re-routing…</>
                   : <><Icon name="check" className="h-3.5 w-3.5" /> Unhold &amp; Route</>}
               </button>
             </>
@@ -280,7 +280,7 @@ function HeldTaskCard({ task: t, busy, isOther, onUnhold, onAssign, onViewBrief 
 }
 
 // ---------------------------------------------------------------------------
-// AssignTaskModal â€” fetch eligible users and pick one
+// AssignTaskModal — fetch eligible users and pick one
 // ---------------------------------------------------------------------------
 
 function AssignTaskModal({ task, onClose, onSuccess }) {
@@ -316,7 +316,7 @@ function AssignTaskModal({ task, onClose, onSuccess }) {
   const isOther = task.granularTaskId === 'TASK-OTHER'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl flex flex-col">
 
         {/* Header */}
@@ -325,7 +325,7 @@ function AssignTaskModal({ task, onClose, onSuccess }) {
             <h3 className="text-sm font-bold text-slate-900">Assign Task</h3>
             <p className="mt-0.5 text-xs text-slate-500">
               {isOther
-                ? 'This is a custom task â€” choose the right team member to handle it.'
+                ? 'This is a custom task — choose the right team member to handle it.'
                 : 'Manually assign this task instead of auto-routing.'}
             </p>
           </div>
@@ -342,8 +342,8 @@ function AssignTaskModal({ task, onClose, onSuccess }) {
           </p>
           <p className="text-xs text-slate-500">
             Campaign #{task.campaignId}
-            {task.requestorName && <> Â· {task.requestorName}</>}
-            {task.taskTypeName && <> Â· {task.taskTypeName}</>}
+            {task.requestorName && <> · {task.requestorName}</>}
+            {task.taskTypeName && <> · {task.taskTypeName}</>}
           </p>
         </div>
 
@@ -358,7 +358,7 @@ function AssignTaskModal({ task, onClose, onSuccess }) {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
               </svg>
-              <span className="text-sm">Loadingâ€¦</span>
+              <span className="text-sm">Loading…</span>
             </div>
           ) : users.length === 0 ? (
             <div className="rounded-lg border border-slate-200 bg-slate-50 py-6 text-center">
@@ -404,7 +404,7 @@ function AssignTaskModal({ task, onClose, onSuccess }) {
               <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-              </svg> Assigningâ€¦</>
+              </svg> Assigning…</>
             ) : (
               <><Icon name="check" className="h-4 w-4" /> Assign Task</>
             )}
@@ -427,7 +427,7 @@ function PriorityBadge({ v }) {
   }
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>
-      {v || 'â€”'}
+      {v || '—'}
     </span>
   )
 }

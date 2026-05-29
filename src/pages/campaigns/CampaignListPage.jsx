@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback, memo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import AppSelect from '../../components/AppSelect'
+import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
 import DateRangePicker from '../../components/DateRangePicker'
 import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
@@ -12,6 +13,7 @@ import api from '../../api/client'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import useDebounce from '../../hooks/useDebounce'
+import LocationMultiSelect from '../../components/LocationMultiSelect'
 
 // ─── Status / Priority helpers ────────────────────────────────────────────────
 
@@ -691,14 +693,6 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   // Work tasks loaded from detail API (list-view campaigns don't carry workTasks)
   const [detailWorkTasks, setDetailWorkTasks] = useState(campaign.workTasks || [])
 
-  const workTaskByGranularId = useMemo(() => {
-    const map = {}
-    for (const wt of detailWorkTasks) {
-      if (wt.granularTaskId && !map[wt.granularTaskId]) map[wt.granularTaskId] = wt
-    }
-    return map
-  }, [detailWorkTasks])
-
   // Files – existing (with optional remove) + new uploads
   // existingFiles is populated from the detail API on mount (list-view campaign has no fileUrls)
   const [existingFiles, setExistingFiles] = useState([])
@@ -720,23 +714,35 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
     })
   }
 
-  const [confirmDeleteTask,  setConfirmDeleteTask]  = useState(null) // { specId, name }
-  const [deletingTaskSpecId, setDeletingTaskSpecId] = useState(null)
-  // Local copy so we can remove tasks from UI without a round-trip
-  const [localDeliverables,  setLocalDeliverables]  = useState(campaign.deliverables || [])
+  // Staged task deletions — applied on Save (not immediately sent to server)
+  const [pendingTaskDeletions, setPendingTaskDeletions] = useState(new Set())
+  // Local copy of non-cancelled work tasks so we can remove tasks from UI without a round-trip
+  const [localWorkTasks, setLocalWorkTasks] = useState(
+    () => (campaign.workTasks || detailWorkTasks || []).filter(t => t.status !== 'CANCELLED')
+  )
   // Deletion state — campaign
   const [confirmDeleteCampaign, setConfirmDeleteCampaign] = useState(false)
   const [deletingCampaign,      setDeletingCampaign]      = useState(false)
 
   const DELETABLE_STATUSES = new Set(['ASSIGNED', 'HELD', 'ACCEPTED'])
-  const canDeleteTask = (d) => !d.workTaskStatus || DELETABLE_STATUSES.has(d.workTaskStatus)
-  const canDeleteCampaign = localDeliverables.every(d => canDeleteTask(d))
+  const canDeleteTask = (t) => !t.status || DELETABLE_STATUSES.has(t.status)
+  const canDeleteCampaign = localWorkTasks.every(t => canDeleteTask(t) || pendingTaskDeletions.has(t.taskId))
+
+  const toggleTaskDeletion = (taskId) => {
+    setPendingTaskDeletions(prev => {
+      const next = new Set(prev)
+      if (next.has(taskId)) next.delete(taskId); else next.add(taskId)
+      return next
+    })
+  }
 
   // Form state
   const [form, setForm] = useState({
     departmentId:           campaign.departmentId || '',
     businessObjective:      '',
     businessObjectiveOther: '',
+    storeId:                campaign.storeId        || '',
+    contactNumber:          campaign.contactNumber  || '',
       taskTypeId:             [],
     audienceTypeIds:        [],
     audienceTypeOther:      '',
@@ -765,11 +771,9 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   const [targetLocations, setTargetLocations] = useState(() => {
     try { const p = JSON.parse(campaign.targetLocation || '[]'); return Array.isArray(p) ? p : [] } catch { return [] }
   })
-  const [locInput, setLocInput] = useState('')
 
-  // Normalize to strings — granularTaskId from the API may be a number; t.taskId below is also
-  // a number, so comparing them directly works, but being explicit avoids future surprises.
-  const existingIds    = useMemo(() => new Set(localDeliverables.map(d => String(d.granularTaskId))), [localDeliverables])
+  // Track which granular task types are already in the campaign (to filter the "Add Tasks" picker)
+  const existingIds = useMemo(() => new Set(localWorkTasks.map(t => String(t.granularTaskId))), [localWorkTasks])
   const masterLoadedRef = useRef(false)
 
   // Load master data + existing campaign files
@@ -799,8 +803,14 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
           }))
         )
         // Populate work tasks and deliverables from detail (list-view doesn't include them)
-        if (c.workTasks?.length) setDetailWorkTasks(c.workTasks)
+        if (c.workTasks?.length) {
+          setDetailWorkTasks(c.workTasks)
+          setLocalWorkTasks(c.workTasks.filter(t => t.status !== 'CANCELLED'))
+        }
         if (c.deliverables?.length) setLocalDeliverables(c.deliverables)
+        // Sync plain-text fields that list-view campaign object may not carry
+        if (c.storeId       != null) setForm(prev => ({ ...prev, storeId:       c.storeId }))
+        if (c.contactNumber != null) setForm(prev => ({ ...prev, contactNumber: c.contactNumber }))
       }).catch(() => {}),
     ]).catch(() => {}).finally(() => setLoadingMaster(false))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -834,7 +844,6 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
     setForm(prev => ({
       ...prev,
       businessObjective: biz.selected, businessObjectiveOther: biz.other,
-      taskTypeId:        parseJsonArr(campaign.taskTypeId),
       offerTypeId:       off.selected, offerTypeOther:         off.other,
       supportingProof:   sp.selected,  supportingProofOther:   sp.other,
       budgetTier:        bgt.selected, budgetTierOther:        bgt.other,
@@ -883,27 +892,26 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   })
 
   // Existing task question helpers
-  const toggleExistingTask = async (granularTaskId) => {
-    if (expandedTask === granularTaskId) { setExpandedTask(null); return }
-    setExpandedTask(granularTaskId)
+  const toggleExistingTask = async (taskId, granularTaskId) => {
+    if (expandedTask === taskId) { setExpandedTask(null); return }
+    setExpandedTask(taskId)
 
-    // Load questions if not already cached
+    // Load questions if not already cached for this granular task type
     if (!existingTaskQs[granularTaskId]) {
       setLoadingExistQs(prev => ({ ...prev, [granularTaskId]: true }))
       try {
         const qs = await granularTasksApi.getQuestions(granularTaskId)
         setExistingTaskQs(prev => ({ ...prev, [granularTaskId]: qs || [] }))
 
-        // Pre-fill existing answers if we have the work task ID
-        const wt = workTaskByGranularId[granularTaskId]
-        if (wt?.taskId && qs?.length > 0 && !existingTaskAns[wt.taskId]) {
+        // Pre-fill existing answers
+        if (taskId && qs?.length > 0 && !existingTaskAns[taskId]) {
           try {
-            const rawAnswers = await tasksApi.getAnswers(wt.taskId)
+            const rawAnswers = await tasksApi.getAnswers(taskId)
             const answerMap = {}
             for (const a of (rawAnswers?.data || [])) {
               answerMap[a.questionId] = a.answerValue ?? a.answer ?? ''
             }
-            setExistingTaskAns(prev => ({ ...prev, [wt.taskId]: answerMap }))
+            setExistingTaskAns(prev => ({ ...prev, [taskId]: answerMap }))
           } catch { /* answers optional — start blank */ }
         }
       } catch {
@@ -911,6 +919,16 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
       } finally {
         setLoadingExistQs(prev => ({ ...prev, [granularTaskId]: false }))
       }
+    } else if (taskId && !existingTaskAns[taskId]) {
+      // Questions already loaded — just load answers for this specific task
+      try {
+        const rawAnswers = await tasksApi.getAnswers(taskId)
+        const answerMap = {}
+        for (const a of (rawAnswers?.data || [])) {
+          answerMap[a.questionId] = a.answerValue ?? a.answer ?? ''
+        }
+        setExistingTaskAns(prev => ({ ...prev, [taskId]: answerMap }))
+      } catch { /* answers optional */ }
     }
   }
 
@@ -1031,8 +1049,19 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
         }
       }
     }
+    if (!form.contactNumber?.trim()) {
+      showToast('Contact Number is required.', 'error')
+      return
+    }
     setSaving(true)
     try {
+      // Apply staged task deletions first
+      for (const taskId of pendingTaskDeletions) {
+        await campaignsApi.deleteTask(campaign.campaignId, taskId)
+        setLocalWorkTasks(prev => prev.filter(t => t.taskId !== taskId))
+      }
+      setPendingTaskDeletions(new Set())
+
       const resolve     = (val, other) => val === 'Other' ? (other?.trim() || null) : (val || null)
       const resolveArr  = (arr, other) => {
         const r = arr.filter(v => v !== 'Other')
@@ -1053,21 +1082,11 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
           ...(fileUrls.length > 0 && { fileUrls, fileOriginalNames: fileNames }),
         }
       })
-      // Derive task types from actual deliverables (existing + newly added), not from the filter.
-      // Normalize taskId comparisons to strings — object keys are always strings, t.taskId may be a number.
-      const derivedTaskTypeIds = [...new Set([
-        ...localDeliverables
-          .map(d => availableTasks.find(t => String(t.taskId) === String(d.granularTaskId))?.taskTypeId)
-          .filter(Boolean).map(String),
-        ...Object.keys(newTaskSelections)
-          .map(tid => availableTasks.find(t => String(t.taskId) === tid)?.taskTypeId)
-          .filter(Boolean).map(String),
-      ])]
-
       const payload = {
         departmentId:      form.departmentId || null,
+        storeId:           form.storeId?.trim()       || null,
+        contactNumber:     form.contactNumber?.trim() || null,
         businessObjective: resolve(form.businessObjective, form.businessObjectiveOther),
-        taskTypeId:        derivedTaskTypeIds.length > 0 ? derivedTaskTypeIds : null,
         audienceTypeId:    resolveArr(form.audienceTypeIds, form.audienceTypeOther),
         language:          resolveArr(form.languages, form.languageOther),
         hasOffer:          form.hasOffer,
@@ -1117,19 +1136,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
     } finally { setSaving(false) }
   }
 
-  const handleDeleteTask = async (specId, taskName) => {
-    setDeletingTaskSpecId(specId)
-    try {
-      await campaignsApi.deleteTask(campaign.campaignId, specId)
-      setLocalDeliverables(prev => prev.filter(d => d.specId !== specId))
-      showToast(`Task "${taskName}" removed.`, 'success')
-    } catch (err) {
-      showToast(err?.response?.data?.message || 'Failed to delete task.', 'error')
-    } finally {
-      setDeletingTaskSpecId(null)
-      setConfirmDeleteTask(null)
-    }
-  }
+  // Task deletion is now staged — actual API call happens in handleSave
 
   const handleDeleteCampaign = async () => {
     setDeletingCampaign(true)
@@ -1157,7 +1164,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
   const removedCount = existingFiles.filter(f => f.removed).length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[92vh]">
 
         {/* ── Header ── */}
@@ -1225,31 +1232,37 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                     )}
                   </div>
                   <div>
-                    <FieldLabel>Task Type</FieldLabel>
+                    <FieldLabel>Task Type <span className="text-slate-400 font-normal">(filter only)</span></FieldLabel>
                     <EditMultiSelect values={form.taskTypeId}
                       onToggle={v => toggleMulti('taskTypeId', v)}
                       options={taskTypes} />
                   </div>
                   <div>
                     <FieldLabel>Target Locations</FieldLabel>
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {targetLocations.map(loc => (
-                        <span key={loc} className="inline-flex items-center gap-1 rounded-full bg-brand-100 text-brand-700 px-2.5 py-0.5 text-xs font-medium">
-                          {loc}
-                          <button type="button" onClick={() => setTargetLocations(p => p.filter(l => l !== loc))}
-                            className="ml-0.5 rounded-full hover:bg-brand-200 p-0.5 transition"><Icon name="x" className="h-2.5 w-2.5" /></button>
-                        </span>
-                      ))}
-                    </div>
-                    <input className={inputCls} value={locInput} onChange={e => setLocInput(e.target.value)}
-                      placeholder="Type a location and press Enter…"
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && locInput.trim()) {
-                          e.preventDefault()
-                          setTargetLocations(p => [...new Set([...p, locInput.trim()])])
-                          setLocInput('')
-                        }
-                      }} />
+                    <LocationMultiSelect
+                      selected={targetLocations}
+                      onChange={setTargetLocations}
+                      visibleLimit={3}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <FieldLabel>Store ID</FieldLabel>
+                    <input className={inputCls} value={form.storeId}
+                      onChange={e => setField('storeId', e.target.value)}
+                      placeholder="Enter store ID…" />
+                  </div>
+                  <div>
+                    <FieldLabel>Contact Number <span className="text-red-500">*</span></FieldLabel>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={10}
+                      className={`${inputCls} ${!form.contactNumber?.trim() ? 'border-red-300 focus:ring-red-200 focus:border-red-400' : ''}`}
+                      value={form.contactNumber}
+                      onChange={e => setField('contactNumber', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      placeholder="Enter contact number…" />
                   </div>
                 </div>
               </SectionCard>
@@ -1380,23 +1393,21 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
               {/* 5 – Tasks */}
               <SectionCard id="tasks" title="Tasks" icon="checkSquare" accent="sky">
                 {/* Existing tasks — expandable to view/edit task questions */}
-                {localDeliverables.length > 0 && (
+                {localWorkTasks.length > 0 && (
                   <div>
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                       Existing Tasks
-                      <span className="ml-1 normal-case font-normal text-slate-400">· click a task to edit its answers · only un-started tasks can be deleted</span>
+                      <span className="ml-1 normal-case font-normal text-slate-400">· click to edit answers · trash = mark for deletion · restore to undo · applied on Save</span>
                     </p>
                     <div className="space-y-2">
-                      {localDeliverables.map(d => {
+                      {localWorkTasks.map(d => {
                         const deletable      = canDeleteTask(d)
-                        const isDeleting     = deletingTaskSpecId === d.specId
-                        const confirmingThis = confirmDeleteTask?.specId === d.specId
+                        const markedDelete   = pendingTaskDeletions.has(d.taskId)
                         const taskName       = d.granularTaskName || d.granularTaskId
-                        const statusLabel    = d.workTaskStatus ? d.workTaskStatus.replace('_', ' ') : 'PENDING'
-                        const isExpanded     = expandedTask === d.granularTaskId
-                        const wt             = workTaskByGranularId[d.granularTaskId]
+                        const statusLabel    = d.status ? d.status.replace(/_/g, ' ') : 'PENDING'
+                        const isExpanded     = !markedDelete && expandedTask === d.taskId
                         const qs             = existingTaskQs[d.granularTaskId] || []
-                        const ans            = wt ? (existingTaskAns[wt.taskId] || {}) : {}
+                        const ans            = existingTaskAns[d.taskId] || {}
                         const loadingQ       = loadingExistQs[d.granularTaskId]
 
                         const statusColors = {
@@ -1410,72 +1421,72 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                           COMPLETED:            'text-green-600 bg-green-50',
                           CANCELLED:            'text-slate-500 bg-slate-100',
                         }
-                        const statusCls = statusColors[d.workTaskStatus] || 'text-slate-500 bg-slate-100'
+                        const statusCls = statusColors[d.status] || 'text-slate-500 bg-slate-100'
 
                         return (
-                          <div key={d.specId || d.granularTaskId}
+                          <div key={d.taskId}
                             className={`rounded-xl border-2 transition ${
-                              isExpanded     ? 'border-sky-300 bg-sky-50/30'
-                              : confirmingThis ? 'border-red-300 bg-red-50'
+                              markedDelete   ? 'border-red-300 bg-red-50 opacity-60'
+                              : isExpanded   ? 'border-sky-300 bg-sky-50/30'
                               : 'border-slate-200 bg-white hover:border-sky-200'
                             }`}>
                             {/* Task header row */}
                             <div className="flex items-center gap-2 px-3 py-2">
                               {/* Expand/collapse toggle */}
                               <button type="button"
-                                onClick={() => !confirmingThis && toggleExistingTask(d.granularTaskId)}
+                                onClick={() => !markedDelete && toggleExistingTask(d.taskId, d.granularTaskId)}
                                 className="flex items-center gap-2 flex-1 text-left min-w-0"
-                                title="Click to view / edit task-specific questions">
+                                title={markedDelete ? 'Marked for deletion' : 'Click to view / edit task-specific questions'}>
                                 <Icon
                                   name="chevron"
                                   className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
                                 />
-                                <span className="text-sm text-slate-700 font-medium truncate">{taskName}</span>
+                                <span className={`text-xs font-semibold shrink-0 ${markedDelete ? 'line-through text-red-400' : 'text-brand-700'}`}>{d.taskId}</span>
+                                <span className={`text-sm font-medium truncate ${markedDelete ? 'line-through text-red-400' : 'text-slate-700'}`}>{taskName}</span>
+                                {markedDelete && (
+                                  <span className="text-xs text-red-500 font-medium shrink-0">· Will be deleted on save</span>
+                                )}
                               </button>
 
-                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0 ${statusCls} ${d.workTaskStatus === 'HELD' ? 'animate-pulse ring-1 ring-amber-400' : ''}`}>
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0 ${statusCls} ${d.status === 'HELD' ? 'animate-pulse ring-1 ring-amber-400' : ''}`}>
                                 {statusLabel}
                               </span>
 
-                              {confirmingThis ? (
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span className="text-xs text-red-600 font-medium">Delete this task?</span>
-                                  <button type="button" disabled={isDeleting}
-                                    onClick={() => handleDeleteTask(d.specId, taskName)}
-                                    className="flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition">
-                                    {isDeleting
-                                      ? <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
-                                      : <Icon name="trash" className="h-3 w-3" />}
-                                    Yes, delete
+                              {deletable ? (
+                                markedDelete ? (
+                                  <button type="button"
+                                    onClick={() => toggleTaskDeletion(d.taskId)}
+                                    title="Restore task"
+                                    className="shrink-0 flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
+                                    <Icon name="refresh" className="h-3 w-3" />
+                                    Restore
                                   </button>
-                                  <button type="button" onClick={() => setConfirmDeleteTask(null)}
-                                    className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 transition">
-                                    Cancel
+                                ) : (
+                                  <button type="button"
+                                    onClick={() => toggleTaskDeletion(d.taskId)}
+                                    title="Mark task for deletion"
+                                    className="shrink-0 rounded-full p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition">
+                                    <Icon name="trash" className="h-3.5 w-3.5" />
                                   </button>
-                                </div>
+                                )
                               ) : (
-                                <button type="button"
-                                  disabled={!deletable}
-                                  onClick={() => deletable && setConfirmDeleteTask({ specId: d.specId, name: taskName })}
-                                  title={deletable ? 'Delete this task' : `Cannot delete — task is ${statusLabel}`}
-                                  className={`shrink-0 rounded-full p-1.5 transition ${deletable
-                                    ? 'text-slate-400 hover:text-red-500 hover:bg-red-50'
-                                    : 'text-slate-200 cursor-not-allowed'}`}>
+                                <span title={`Cannot delete — task is ${statusLabel}`}
+                                  className="shrink-0 rounded-full p-1.5 text-slate-200 cursor-not-allowed">
                                   <Icon name="trash" className="h-3.5 w-3.5" />
-                                </button>
+                                </span>
                               )}
                             </div>
 
                             {/* Expandable questionnaire + files panel */}
                             {isExpanded && (() => {
                               const READONLY_STATUSES = new Set(['COMPLETED','IN_PROGRESS','MANAGER_QC_REVIEW','REQUESTOR_QC_REVIEW','REWORK','ACCEPTED'])
-                              const isReadOnly = wt && READONLY_STATUSES.has(wt.status)
+                              const isReadOnly = READONLY_STATUSES.has(d.status)
                               return (
                                 <div className="border-t border-sky-200 px-4 pb-4 pt-3 space-y-4 bg-sky-50/20">
                                   {isReadOnly && (
                                     <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                                       <Icon name="lock" className="h-3.5 w-3.5 shrink-0" />
-                                      Read-only — task is {d.workTaskStatus?.replace(/_/g,' ')}. Editing not allowed.
+                                      Read-only — task is {d.status?.replace(/_/g,' ')}. Editing not allowed.
                                     </div>
                                   )}
 
@@ -1493,16 +1504,13 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                                       <p className="text-xs text-slate-400 italic">No task-specific questions for this task type.</p>
                                     ) : (
                                       <>
-                                        <p className="text-xs text-sky-700 font-medium">
-                                          Task-specific answers
-                                          {wt ? '' : <span className="text-slate-400 font-normal"> (work task not yet assigned)</span>}
-                                        </p>
+                                        <p className="text-xs text-sky-700 font-medium">Task-specific answers</p>
                                         {qs.map(q => (
                                           <TaskQuestion
                                             key={q.questionId}
                                             q={q}
-                                            answer={wt ? ans[q.questionId] : ''}
-                                            onChange={isReadOnly ? undefined : (v => wt && updateExistingTaskAnswer(wt.taskId, q.questionId, v))}
+                                            answer={ans[q.questionId] ?? ''}
+                                            onChange={isReadOnly ? undefined : (v => updateExistingTaskAnswer(d.taskId, q.questionId, v))}
                                             readOnly={isReadOnly}
                                           />
                                         ))}
@@ -1511,23 +1519,21 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                                   </div>
 
                                   {/* Task-level reference files */}
-                                  {wt && (
-                                    <div className="pt-3 border-t border-sky-200">
-                                      <TaskFilesPanel
-                                        workTask={wt}
-                                        campaign={campaign}
-                                        readOnly={isReadOnly}
-                                        onChanged={async () => {
-                                          try {
-                                            const res = await campaignsApi.getById(campaign.campaignId)
-                                            if (res.data?.workTasks) setDetailWorkTasks(res.data.workTasks)
-                                          } catch { /* ignore */ }
-                                        }}
-                                        markedUrls={isReadOnly ? [] : [...(taskFileRemovals[wt.taskId] || [])]}
-                                        onToggleRemoval={isReadOnly ? undefined : ((url) => toggleTaskFileRemoval(wt.taskId, url))}
-                                      />
-                                    </div>
-                                  )}
+                                  <div className="pt-3 border-t border-sky-200">
+                                    <TaskFilesPanel
+                                      workTask={d}
+                                      campaign={campaign}
+                                      readOnly={isReadOnly}
+                                      onChanged={async () => {
+                                        try {
+                                          const res = await campaignsApi.getById(campaign.campaignId)
+                                          if (res.data?.workTasks) setDetailWorkTasks(res.data.workTasks)
+                                        } catch { /* ignore */ }
+                                      }}
+                                      markedUrls={isReadOnly ? [] : [...(taskFileRemovals[d.taskId] || [])]}
+                                      onToggleRemoval={isReadOnly ? undefined : ((url) => toggleTaskFileRemoval(d.taskId, url))}
+                                    />
+                                  </div>
                                 </div>
                               )
                             })()}
@@ -1838,6 +1844,12 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                   new file{newFiles.filter(f => f.url).length !== 1 ? 's' : ''} to upload
                 </span>
               )}
+              {pendingTaskDeletions.size > 0 && (
+                <span className="flex items-center gap-1.5 text-red-500">
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">{pendingTaskDeletions.size}</span>
+                  task{pendingTaskDeletions.size !== 1 ? 's' : ''} to delete
+                </span>
+              )}
               {removedCount > 0 && (
                 <span className="flex items-center gap-1.5 text-red-500">
                   <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">{removedCount}</span>
@@ -1896,6 +1908,10 @@ const fmtRequestorDate = (iso) =>
 
 const ROW_TERMINAL = ['COMPLETED', 'REJECTED', 'CANCELLED']
 
+const REQUEST_TABLE_COLS = [128, 112, 132, 92, 124, 52, 248]
+const REQUEST_TABLE_MIN_WIDTH = REQUEST_TABLE_COLS.reduce((s, w) => s + w, 0)
+const requestorCellCls = 'min-w-0 overflow-hidden px-4 py-3'
+
 // ─── Memoised table row for RequestorCampaignView ────────────────────────────
 
 const CampaignRow = memo(function CampaignRow({
@@ -1917,15 +1933,14 @@ const CampaignRow = memo(function CampaignRow({
 
   return (
     <tr className={`transition hover:bg-slate-50/70 ${hasUnansweredComments ? 'bg-sky-50/40' : ''}`}>
-      <td className="px-3 py-3">
+      <td className={requestorCellCls}>
         <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{c.campaignId}</span>
       </td>
-      <td className="px-3 py-3 font-medium text-slate-800">{c.taskTypeName || '—'}</td>
-      <td className="px-3 py-3"><PriorityBadge priority={c.priority} /></td>
-      <td className="px-3 py-3">
+      <td className={requestorCellCls}><PriorityBadge priority={c.priority} /></td>
+      <td className={requestorCellCls}>
         <CampaignStatusBadge status={c.status} />
       </td>
-      <td className="px-3 py-3 text-slate-600">
+      <td className={`${requestorCellCls} text-slate-600`}>
         <div className="flex items-center gap-2 flex-wrap">
           {taskCount === 0
             ? <span className="italic text-slate-400">None yet</span>
@@ -1951,10 +1966,10 @@ const CampaignRow = memo(function CampaignRow({
           )}
         </div>
       </td>
-      <td className="px-3 py-3 text-slate-500">{fmtRequestorDate(c.createdAt)}</td>
+      <td className={`${requestorCellCls} text-slate-500`}>{fmtRequestorDate(c.createdAt)}</td>
 
       {/* Bookmark toggle */}
-      <td className="px-1 py-3 text-center">
+      <td className="min-w-0 px-2 py-3 text-center">
         <button
           onClick={(e) => onToggleBookmark(e, c.campaignId)}
           disabled={bookmarkingId === c.campaignId}
@@ -1972,18 +1987,22 @@ const CampaignRow = memo(function CampaignRow({
         </button>
       </td>
 
-      <td className="px-3 py-3">
-        <div className="flex items-center gap-2">
-          <button onClick={() => onViewBrief(c.campaignId)}
-            className="flex items-center gap-1 text-brand-600 hover:text-brand-800 text-xs font-medium whitespace-nowrap">
+      <td className={`${requestorCellCls} text-right`}>
+        <div className="flex flex-wrap items-center justify-end gap-1.5 pr-1">
+          <button
+            type="button"
+            onClick={() => onViewBrief(c.campaignId)}
+            className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-800"
+          >
             <Icon name="eye" className="h-3.5 w-3.5" /> Brief
           </button>
-          {/* Clone */}
           <button
+            type="button"
             onClick={(e) => onClone(e, c.campaignId)}
             title="Clone this request"
-            className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition">
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-200 px-2 py-0.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+          >
+            <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
               <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
             </svg>
@@ -1991,11 +2010,13 @@ const CampaignRow = memo(function CampaignRow({
           </button>
           {canEdit && (
             <button
+              type="button"
               onClick={() => onEdit(c)}
               disabled={isLoading}
               title={isLoading ? 'Loading…' : 'Edit campaign'}
-              className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-medium whitespace-nowrap border border-slate-200 rounded px-2 py-0.5 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
-              <Icon name="edit" className="h-3.5 w-3.5" /> Edit
+              className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-200 px-2 py-0.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Icon name="edit" className="h-3.5 w-3.5 shrink-0" /> Edit
             </button>
           )}
         </div>
@@ -2006,7 +2027,7 @@ const CampaignRow = memo(function CampaignRow({
 
 // ─── Requestor campaign-level view ───────────────────────────────────────────
 
-function RequestorCampaignView({ onTotalChange }) {
+function RequestorCampaignView({ onTotalChange, onNewRequest }) {
   const navigate  = useNavigate()
   const location  = useLocation()
   const toast     = useToast()
@@ -2134,6 +2155,7 @@ function RequestorCampaignView({ onTotalChange }) {
 
   const colFilterCls = `w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-600
     placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-300 focus:border-brand-400`
+  const filterWrapCls = 'min-w-0 w-full [&_.app-select__control]:!min-h-[28px] [&_.app-select__control]:!h-[28px]'
 
   const filtered = campaigns   // server already filtered; keep variable name for template compatibility
 
@@ -2147,31 +2169,41 @@ function RequestorCampaignView({ onTotalChange }) {
   ]
 
   return (
-    <div className="space-y-3">
-      {/* Tabs */}
-      <div className="flex items-center gap-2 flex-wrap border-b border-slate-200 pb-3">
-        {tabs.map(tab => (
+    <div className="h-full flex flex-col gap-2">
+      {/* Tabs + New Request */}
+      <div className="shrink-0 flex items-center justify-between gap-2 flex-wrap border-b border-slate-200 pb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition ring-1 ${
+                activeTab === tab.id
+                  ? 'bg-brand-600 text-white ring-brand-600 shadow-sm'
+                  : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {tab.label}
+              <span className={`rounded-full px-1.5 py-px text-[10px] font-bold ${
+                activeTab === tab.id ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-500'
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+        {onNewRequest && (
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition ring-1 ${
-              activeTab === tab.id
-                ? 'bg-brand-600 text-white ring-brand-600 shadow-sm'
-                : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
-            }`}
+            onClick={onNewRequest}
+            className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 transition"
           >
-            {tab.label}
-            <span className={`rounded-full px-1.5 py-px text-[10px] font-bold ${
-              activeTab === tab.id ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-500'
-            }`}>
-              {tab.count}
-            </span>
+            <Icon name="plus" className="h-3.5 w-3.5" /> New Request
           </button>
-        ))}
+        )}
       </div>
 
       {/* Date range + row count + clear */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <DateRangePicker
             from={fDateFrom}
@@ -2190,72 +2222,68 @@ function RequestorCampaignView({ onTotalChange }) {
         )}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="w-20 px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign</th>
-                  <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task Type</th>
-                  <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Priority</th>
-                  <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Status</th>
-                  <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Tasks</th>
-                  <th className="px-3 pt-3 pb-1 text-left font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Submitted</th>
-                  <th className="px-3 pt-3 pb-1 w-8" title="Bookmark" />
-                  <th className="px-3 pt-3 pb-1" />
+      <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div className="w-full flex-1 overflow-auto">
+            <table
+              className={DATA_TABLE_CLASS}
+              style={dataTableStyle(REQUEST_TABLE_MIN_WIDTH)}
+            >
+              <DataTableColGroup widths={REQUEST_TABLE_COLS} />
+              <thead className="sticky top-0 z-20 bg-slate-50">
+                <tr className="bg-slate-50">
+                  <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign</th>
+                  <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Priority</th>
+                  <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Status</th>
+                  <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Tasks</th>
+                  <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Submitted</th>
+                  <th className="min-w-0 border-b border-slate-100 px-2 pb-1 pt-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500" title="Bookmark">★</th>
+                  <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">
+                    Actions
+                  </th>
                 </tr>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <td className="px-2 pb-2 pt-1">
+                <tr className="border-b border-slate-200">
+                  <td className="min-w-0 bg-slate-50 px-3 pb-2 pt-1 align-top">
                     <input value={fCampaign} onChange={e => setFCampaign(e.target.value)} placeholder="Filter…" className={colFilterCls} />
                   </td>
-                  <td className="px-2 pb-2 pt-1">
-                    <AppSelect
-                      value={fTaskType}
-                      onChange={setFTaskType}
-                      options={allTaskTypes.map(n => ({ value: n, label: n }))}
-                      placeholder="All"
-                      size="sm"
-                      isSearchable
-                      menuPortal
-                    />
+                  <td className="min-w-0 bg-slate-50 px-3 pb-2 pt-1 align-top">
+                    <div className={filterWrapCls}>
+                      <AppSelect className="w-full" value={fPriority} onChange={setFPriority} options={PRIORITY_OPTS} placeholder="All" size="sm" isSearchable menuPortal />
+                    </div>
                   </td>
-                  <td className="px-2 pb-2 pt-1">
-                    <AppSelect value={fPriority} onChange={setFPriority} options={PRIORITY_OPTS} placeholder="All" size="sm" isSearchable menuPortal />
+                  <td className="min-w-0 bg-slate-50 px-3 pb-2 pt-1 align-top">
+                    <div className={filterWrapCls}>
+                      <AppSelect className="w-full" value={fStatus} onChange={setFStatus} options={STATUS_OPTS.map(v => ({ value: v, label: CAMPAIGN_STATUS_LABELS[v] || v }))} placeholder="All" size="sm" isSearchable menuPortal />
+                    </div>
                   </td>
-                  <td className="px-2 pb-2 pt-1">
-                    <AppSelect value={fStatus} onChange={setFStatus} options={STATUS_OPTS.map(v => ({ value: v, label: CAMPAIGN_STATUS_LABELS[v] || v }))} placeholder="All" size="sm" isSearchable menuPortal />
-                  </td>
-                  <td className="px-2 pb-2 pt-1" />
-                  <td className="px-2 pb-2 pt-1" />
-                  <td className="px-2 pb-2 pt-1" />
-                  <td className="px-2 pb-2 pt-1" />
+                  <td className="min-w-0 bg-slate-50 px-3 pb-2 pt-1" />
+                  <td className="min-w-0 bg-slate-50 px-3 pb-2 pt-1" />
+                  <td className="min-w-0 bg-slate-50 px-2 pb-2 pt-1" />
+                  <td className="min-w-0 bg-slate-50 px-3 pb-2 pt-1" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 bg-white">
                 {loading ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center">
-                      <span className="inline-flex items-center gap-2 text-sm text-slate-400">
-                        <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                        </svg>
-                        Loading…
-                      </span>
-                    </td>
-                  </tr>
+                  <TableStatusRow colSpan={7}>
+                    <span className="inline-flex items-center gap-2 text-sm text-slate-400">
+                      <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                      </svg>
+                      Loading…
+                    </span>
+                  </TableStatusRow>
                 ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-14 text-center">
-                      <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
-                      <p className="text-sm text-slate-500">No requests found.</p>
-                      {hasFilters && (
-                        <button onClick={clearAll} className="mt-2 text-xs text-brand-600 hover:underline">
-                          Clear filters
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+                  <TableStatusRow colSpan={7}>
+                    <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
+                    <p className="text-sm text-slate-500">
+                      {activeTab === 'bookmarked' ? 'No bookmarked requests yet.' : 'No requests found.'}
+                    </p>
+                    {hasFilters && (
+                      <button onClick={clearAll} className="mt-2 text-xs text-brand-600 hover:underline">
+                        Clear filters
+                      </button>
+                    )}
+                  </TableStatusRow>
                 ) : filtered.map((c) => (
                   <CampaignRow
                     key={c.campaignId}
@@ -2270,7 +2298,8 @@ function RequestorCampaignView({ onTotalChange }) {
                 ))}
               </tbody>
             </table>
-          <div className="border-t border-slate-100 bg-slate-50 px-4 py-1">
+          </div>
+          <div className="shrink-0 border-t border-slate-100 bg-slate-50 px-4 py-1">
             <Pagination
               page={page}
               totalPages={totalPages}
@@ -2280,7 +2309,6 @@ function RequestorCampaignView({ onTotalChange }) {
               loading={loading}
             />
           </div>
-          </div>
         </div>
 
       {/* Brief drawer */}
@@ -2288,6 +2316,18 @@ function RequestorCampaignView({ onTotalChange }) {
         <RequestBriefDrawer
           campaignId={briefId}
           onClose={() => setBriefId(null)}
+          onCommentAnswered={({ campaignId, hasUnansweredComments }) => {
+            setCampaigns(prev => prev.map(c =>
+              c.campaignId === campaignId ? { ...c, hasUnansweredComments } : c
+            ))
+          }}
+          onCampaignChanged={(updated) => {
+            setCampaigns(prev => prev.map(c =>
+              c.campaignId === updated.campaignId
+                ? { ...c, hasUnansweredComments: !!updated.hasUnansweredComments }
+                : c
+            ))
+          }}
         />
       )}
 
@@ -2313,7 +2353,6 @@ function CampaignTableView({ campaigns, loading, onRefresh, refreshing }) {
     const q = search.toLowerCase()
     return (
       !q ||
-      c.taskTypeName?.toLowerCase().includes(q) ||
       c.requestorName?.toLowerCase().includes(q) ||
       c.departmentName?.toLowerCase().includes(q) ||
       c.status?.toLowerCase().includes(q)
@@ -2346,7 +2385,7 @@ function CampaignTableView({ campaigns, loading, onRefresh, refreshing }) {
             <table className="min-w-[760px] divide-y divide-slate-200 text-sm sm:min-w-full">
               <thead className="bg-slate-50">
                 <tr>
-                  {['#', 'Task Type', 'Requestor', 'Department', 'Priority', 'Status', ''].map((h) => (
+                  {['#', 'Requestor', 'Department', 'Priority', 'Status', ''].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                       {h}
                     </th>
@@ -2359,7 +2398,6 @@ function CampaignTableView({ campaigns, loading, onRefresh, refreshing }) {
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{c.campaignId}</span>
                     </td>
-                    <td className="px-4 py-3 font-medium text-slate-800">{c.taskTypeName || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{c.requestorName || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{c.departmentName || '—'}</td>
                     <td className="px-4 py-3"><PriorityBadge priority={c.priority} /></td>
@@ -2432,10 +2470,10 @@ export default function CampaignListPage() {
   }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="space-y-5">
+    <div className="h-full flex flex-col gap-2">
       {/* Success banner */}
       {successBanner && (
-        <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+        <div className="shrink-0 flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
           <svg className="h-5 w-5 shrink-0 text-green-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
           </svg>
@@ -2446,57 +2484,41 @@ export default function CampaignListPage() {
         </div>
       )}
 
-      {/* Page header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">
-            {isRequestor ? 'My Requests' : 'Marketing Requests'}
-          </h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            {isRequestor
-              ? `${requestorTotal} campaign${requestorTotal !== 1 ? 's' : ''} submitted`
-              : `${campaigns.length} total request${campaigns.length !== 1 ? 's' : ''}`
-            }
-          </p>
+      {/* Action bar — non-requestors only (requestor gets New Request inside tabs row) */}
+      {!isRequestor && (
+        <div className="shrink-0 flex items-center justify-end gap-2">
+          <button
+            onClick={() => load(true)}
+            disabled={refreshing || loading}
+            title="Refresh"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
+          >
+            <svg className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
         </div>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          {!isRequestor && (
-            <button
-              onClick={() => load(true)}
-              disabled={refreshing || loading}
-              title="Refresh"
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 transition disabled:opacity-50 sm:flex-none"
-            >
-              <svg className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {refreshing ? 'Refreshing…' : 'Refresh'}
-            </button>
-          )}
-          {!isCreator && (
-            <button
-              onClick={() => navigate('/campaigns/new')}
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 transition sm:flex-none"
-            >
-              <Icon name="plus" className="h-4 w-4" /> New Request
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* View */}
-      {isRequestor ? (
-        <RequestorCampaignView onTotalChange={setRequestorTotal} />
-      ) : loading ? (
-        <p className="text-sm text-slate-400 py-8 text-center">Loading…</p>
-      ) : (
-        <CampaignTableView
-          campaigns={campaigns}
-          loading={loading}
-          onRefresh={() => load(true)}
-          refreshing={refreshing}
-        />
-      )}
+      <div className="flex-1 min-h-0 h-full">
+        {isRequestor ? (
+          <RequestorCampaignView
+            onTotalChange={setRequestorTotal}
+            onNewRequest={!isCreator ? () => navigate('/campaigns/new') : null}
+          />
+        ) : loading ? (
+          <p className="text-sm text-slate-400 py-8 text-center">Loading…</p>
+        ) : (
+          <CampaignTableView
+            campaigns={campaigns}
+            loading={loading}
+            onRefresh={() => load(true)}
+            refreshing={refreshing}
+          />
+        )}
+      </div>
     </div>
   )
 }

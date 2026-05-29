@@ -348,7 +348,7 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
   const tones  = { APPROVE: 'bg-green-600 hover:bg-green-700', REWORK: 'bg-amber-600 hover:bg-amber-700' }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white shadow-xl overflow-y-auto max-h-[92vh] flex flex-col">
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">

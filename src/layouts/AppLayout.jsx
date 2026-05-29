@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { MASTER_RESOURCES } from '../api/masterData'
 import Icon from '../components/Icon'
 import Logo from '../components/Logo'
 import Modal from '../components/Modal'
@@ -130,7 +129,7 @@ function ChangePasswordModal({ open, onClose }) {
 
 const TOP_NAV = [
   { to: '/dashboard',    label: 'Dashboard',      icon: 'dashboard'  },
-  { to: '/campaigns',    label: 'Requests',        icon: 'fileText'   },
+  { to: '/campaigns',    label: 'My Requests',     icon: 'fileText'   },
   { to: '/my-tasks',     label: 'My Tasks',        icon: 'clipboard'  },
   { to: '/collaborations', label: 'Collaborations', icon: 'users'     },
 ]
@@ -144,7 +143,6 @@ export default function AppLayout() {
   const [hovered, setHovered]           = useState(false)
   const [mobileOpen, setMobileOpen]     = useState(false)
   const [menuOpen, setMenuOpen]         = useState(false)
-  const [masterOpen, setMasterOpen]     = useState(true)
   const [managerOpen, setManagerOpen]   = useState(true)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
   // Admin alone does NOT get Manager Tools — Marketing Manager or Procurement Manager role is required.
@@ -160,7 +158,6 @@ export default function AppLayout() {
 
   // Auto-expand groups based on current URL
   useEffect(() => {
-    if (location.pathname.startsWith('/admin'))   setMasterOpen(true)
     if (location.pathname.startsWith('/manager')) setManagerOpen(true)
   }, [location.pathname])
 
@@ -174,15 +171,19 @@ export default function AppLayout() {
   const collapsed    = !hovered
   const sidebarWidth = hovered ? 'w-64' : 'w-[72px]'
   const padded       = 'lg:pl-[72px]'
+  // Expanded sidebar overlaps main header — sit above header, still below modals
+  const sidebarZ     = hovered || mobileOpen ? 'z-dropdown' : 'z-sidebar'
 
   const navHeader = useMemo(() => {
-    if (location.pathname.startsWith('/admin/master'))             return 'Master Data'
+    if (location.pathname === '/admin/master')                     return 'Master'
+    if (location.pathname.startsWith('/admin/master/'))            return 'Master Data'
     if (location.pathname.startsWith('/admin/granular-tasks'))     return 'Granular Tasks'
     if (location.pathname.startsWith('/admin/task-mappings')) return 'Task Mappings'
     if (location.pathname.startsWith('/admin/questions'))           return 'Question Library'
     if (location.pathname.startsWith('/admin/qc-routing'))                  return 'QC Routing'
     if (location.pathname.startsWith('/admin/notification-templates'))      return 'Notification Templates'
-    if (location.pathname.startsWith('/admin/campaign-specifications'))     return 'Campaign Specifications'
+    if (location.pathname.startsWith('/admin/campaign-mappings/vertical-type')) return 'Vertical → Type'
+    if (location.pathname.startsWith('/admin/campaign-mappings/type-format'))   return 'Type → Format'
     if (location.pathname.startsWith('/admin/users'))              return 'User Management'
     if (location.pathname.startsWith('/campaigns/new'))            return 'New Marketing Request'
     if (location.pathname.startsWith('/campaigns/completed'))      return 'Completed Tasks'
@@ -193,7 +194,6 @@ export default function AppLayout() {
     if (location.pathname.startsWith('/manager/task-management'))  return 'Task Management'
     if (location.pathname.startsWith('/manager/qc-review'))        return 'Manager QC Review Queue'
     if (location.pathname.startsWith('/requestor-qc-review'))     return 'Requestor QC Review'
-    if (location.pathname.startsWith('/manager/reports'))          return 'Time & Efficiency Reports'
     if (location.pathname === '/dashboard')                        return 'Dashboard'
     return 'Marketing Automation'
   }, [location.pathname])
@@ -204,7 +204,7 @@ export default function AppLayout() {
       <aside
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        className={`fixed inset-y-0 left-0 z-40 ${sidebarWidth} flex flex-col
+        className={`fixed inset-y-0 left-0 ${sidebarZ} ${sidebarWidth} flex flex-col
                     border-r border-slate-100 bg-white
                     transition-all duration-200
                     ${hovered ? 'shadow-xl shadow-slate-200/60' : ''}
@@ -293,14 +293,6 @@ export default function AppLayout() {
                 onNavigate={() => setMobileOpen(false)}
               />
               <SidebarLink
-                to="/manager/reports"
-                label="Time Reports"
-                icon="trendingUp"
-                collapsed={collapsed}
-                nested
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <SidebarLink
                 to="/manager/analytics"
                 label="Analytics"
                 icon="barChart"
@@ -311,82 +303,14 @@ export default function AppLayout() {
             </SidebarGroup>
           )}
 
-          {isAdmin && (
-            <SidebarGroup
-              label="Master Data"
+          {(isAdmin || isMarketingManager || isProcurementManager) && (
+            <SidebarLink
+              to="/admin/master"
+              label="Master"
               icon="cog"
               collapsed={collapsed}
-              open={masterOpen}
-              onToggle={() => setMasterOpen((o) => !o)}
-            >
-              {MASTER_RESOURCES.map((r) => (
-                <SidebarLink
-                  key={r.slug}
-                  to={`/admin/master/${r.slug}`}
-                  label={r.label}
-                  icon={r.icon}
-                  collapsed={collapsed}
-                  nested
-                  onNavigate={() => setMobileOpen(false)}
-                />
-              ))}
-              <SidebarLink
-                to="/admin/granular-tasks"
-                label="Granular Tasks"
-                icon="list"
-                collapsed={collapsed}
-                nested
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <SidebarLink
-                to="/admin/task-mappings"
-                label="Task Mappings"
-                icon="shield"
-                collapsed={collapsed}
-                nested
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <SidebarLink
-                to="/admin/questions"
-                label="Question Library"
-                icon="clipboard"
-                collapsed={collapsed}
-                nested
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <SidebarLink
-                to="/admin/qc-routing"
-                label="QC Routing"
-                icon="shield"
-                collapsed={collapsed}
-                nested
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <SidebarLink
-                to="/admin/notification-templates"
-                label="Notification Templates"
-                icon="bell"
-                collapsed={collapsed}
-                nested
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <SidebarLink
-                to="/admin/campaign-specifications"
-                label="Campaign Specs"
-                icon="tag"
-                collapsed={collapsed}
-                nested
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <SidebarLink
-                to="/admin/users"
-                label="Users"
-                icon="users"
-                collapsed={collapsed}
-                nested
-                onNavigate={() => setMobileOpen(false)}
-              />
-            </SidebarGroup>
+              onNavigate={() => setMobileOpen(false)}
+            />
           )}
         </nav>
 
@@ -413,9 +337,9 @@ export default function AppLayout() {
       )}
 
       {/* ============ MAIN COLUMN ============ */}
-      <div className={`flex min-h-screen flex-col transition-[padding] duration-200 ${padded}`}>
+      <div className={`flex h-screen flex-col transition-[padding] duration-200 ${padded}`}>
         {/* Header */}
-        <header className="sticky top-0 z-20 flex h-[60px] items-center justify-between
+        <header className="sticky top-0 z-header flex h-[60px] items-center justify-between
                            border-b border-slate-100 bg-white/95 px-4 backdrop-blur-sm
                            shadow-[0_1px_3px_0_rgb(0,0,0,0.04)] sm:px-6">
           <div className="flex min-w-0 items-center gap-2">
@@ -456,8 +380,8 @@ export default function AppLayout() {
 
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-xl
+                <div className="fixed inset-0 z-dropdown" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 z-dropdown mt-2 w-60 overflow-hidden rounded-xl
                                 border border-slate-100 bg-white shadow-xl shadow-slate-200/50">
                   <div className="flex items-center gap-2.5 border-b border-slate-100 px-3 py-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full
@@ -501,8 +425,10 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          <Outlet />
+        <main className="flex flex-1 min-h-0 flex-col overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <Outlet />
+          </div>
         </main>
       </div>
 

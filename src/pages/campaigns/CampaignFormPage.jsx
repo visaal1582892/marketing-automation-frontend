@@ -10,6 +10,7 @@ import AppSelect from '../../components/AppSelect'
 import tasksApi from '../../api/tasks'
 import Icon from '../../components/Icon'
 import campaignSpecsApi from '../../api/campaignSpecs'
+import LocationMultiSelect from '../../components/LocationMultiSelect'
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
 
@@ -846,160 +847,7 @@ function CampaignFilesSection({ files, onFilesChange, uploading, setUploading })
   )
 }
 
-// ─── Location multi-select (OpenStreetMap Nominatim — free, no key needed) ────
-
-function useNominatim() {
-  const timerRef = useRef(null)
-  const search = (q, setSuggestions, setLoading, setOpen) => {
-    if (!q || q.length < 3) { setSuggestions([]); setOpen(false); return }
-    setLoading(true)
-    fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&countrycodes=in&limit=10&format=json&addressdetails=1`,
-      { headers: { 'Accept-Language': 'en' } }
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        const seen  = new Set()
-        const items = []
-        for (const item of data) {
-          const a = item.address || {}
-          const parts = [
-            a.city || a.town || a.village || a.county || a.district || a.suburb,
-            a.state_district,
-            a.state,
-          ].filter(Boolean)
-          const label = [...new Set(parts)].join(', ') || item.display_name
-          if (!seen.has(label)) { seen.add(label); items.push(label) }
-        }
-        setSuggestions(items)
-        setOpen(items.length > 0)
-      })
-      .catch(() => setSuggestions([]))
-      .finally(() => setLoading(false))
-  }
-  const debounced = (q, ...args) => {
-    clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => search(q, ...args), 400)
-  }
-  return debounced
-}
-
-function LocationMultiSelect({ selected, onChange, hasError }) {
-  const [query,       setQuery]       = useState('')
-  const [suggestions, setSuggestions] = useState([])
-  const [open,        setOpen]        = useState(false)
-  const [loading,     setLoading]     = useState(false)
-  const [expanded,    setExpanded]    = useState(false)
-  const ref     = useRef(null)
-  const searchNominatim = useNominatim()
-
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const handleInput = (e) => {
-    const q = e.target.value
-    setQuery(q)
-    searchNominatim(q, setSuggestions, setLoading, setOpen)
-  }
-
-  const pick = (label) => {
-    if (!selected.includes(label)) onChange([...selected, label])
-    setQuery('')
-    setSuggestions([])
-    setOpen(false)
-  }
-
-  const remove = (label) => onChange(selected.filter((s) => s !== label))
-
-  const VISIBLE_LIMIT = 2
-  const visible = expanded ? selected : selected.slice(0, VISIBLE_LIMIT)
-  const hiddenCount = selected.length - VISIBLE_LIMIT
-
-  return (
-    <div ref={ref} className="relative">
-      {/* Selected tags — compact: show first 2, collapse the rest */}
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2 items-center">
-          {visible.map((loc) => (
-            <span key={loc}
-              className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-0.5
-                text-xs font-medium text-brand-800 ring-1 ring-brand-200">
-              <Icon name="mapPin" className="h-3 w-3 shrink-0 text-brand-500" />
-              <span className="max-w-[120px] truncate">{loc}</span>
-              <button type="button" onClick={() => remove(loc)}
-                className="ml-0.5 text-brand-500 hover:text-red-500 transition">
-                <Icon name="x" className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-          {!expanded && hiddenCount > 0 && (
-            <button type="button" onClick={() => setExpanded(true)}
-              className="inline-flex items-center rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white hover:bg-brand-700 transition">
-              +{hiddenCount} more
-            </button>
-          )}
-          {expanded && hiddenCount > 0 && (
-            <button type="button" onClick={() => setExpanded(false)}
-              className="text-xs text-slate-400 hover:text-slate-600 transition">
-              Show less
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Search input */}
-      <div className="relative">
-        <Icon name="mapPin" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-        {loading && (
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-brand-400"
-            fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-          </svg>
-        )}
-        <input
-          value={query}
-          onChange={handleInput}
-          onFocus={() => { if (suggestions.length > 0) setOpen(true) }}
-          placeholder={selected.length === 0 ? 'Search city, district or state…' : 'Add another location…'}
-          className={`w-full rounded-lg border pl-9 pr-9 py-2 text-sm text-slate-800
-            placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 transition
-            ${hasError && selected.length === 0
-              ? 'border-red-400 focus:border-red-500 focus:ring-red-100'
-              : 'border-slate-300 focus:border-brand-500 focus:ring-brand-200'}`}
-        />
-      </div>
-
-      {open && suggestions.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
-          <div className="max-h-56 overflow-y-auto py-1">
-            {suggestions.map((label, idx) => {
-              const alreadyAdded = selected.includes(label)
-              return (
-                <button key={idx} type="button" onClick={() => !alreadyAdded && pick(label)}
-                  disabled={alreadyAdded}
-                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 text-sm text-left transition
-                    ${alreadyAdded ? 'opacity-40 cursor-not-allowed' : 'hover:bg-brand-50 hover:text-brand-700'}`}>
-                  <span className="flex items-center gap-2">
-                    <Icon name="mapPin" className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                    <span className="text-slate-700">{label}</span>
-                  </span>
-                  {alreadyAdded && <span className="text-xs text-slate-400">Added</span>}
-                </button>
-              )
-            })}
-          </div>
-          <div className="border-t border-slate-100 px-3 py-1.5 flex items-center gap-1.5">
-            <span className="text-xs text-slate-400">Powered by OpenStreetMap</span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+// LocationMultiSelect is imported from src/components/LocationMultiSelect.jsx
 
 // ─── Main form ────────────────────────────────────────────────────────────────
 
@@ -1044,6 +892,8 @@ export default function CampaignFormPage() {
     businessVerticalId:      '',
     businessTypeId:          '',
     storeFormatTypeId:       '',
+    storeId:                 '',
+    contactNumber:           '',
     taskTypeId:              [],
     audienceTypeIds:         [],
     audienceTypeOther:       '',
@@ -1162,26 +1012,42 @@ export default function CampaignFormPage() {
       .then(res => {
         const c = res.data
         if (!c) return
-        const parseArr = (v) => { try { const p = JSON.parse(v); if (Array.isArray(p)) return p } catch {} return [] }
+        const parseArr = (v) => {
+          if (Array.isArray(v)) return v.map(String)
+          if (v == null || v === '') return []
+          try {
+            const p = JSON.parse(v)
+            if (Array.isArray(p)) return p.map(String)
+          } catch { /* plain string or legacy format */ }
+          return []
+        }
+        const idOrEmpty = (id) => (id != null && id !== '' ? String(id) : '')
+
         setForm(prev => ({
           ...prev,
-          departmentId:           c.departmentId           || prev.departmentId,
-          businessObjective:      c.businessObjectiveId    || c.businessObjective || '',
-          taskTypeId:             parseArr(c.taskTypeId),
+          departmentId:           idOrEmpty(c.departmentId) || prev.departmentId,
+          businessObjective:      idOrEmpty(c.businessObjectiveId),
+          campaignTypeId:         idOrEmpty(c.campaignTypeId),
+          businessVerticalId:     idOrEmpty(c.businessVerticalId),
+          businessTypeId:         idOrEmpty(c.businessTypeId),
+          storeFormatTypeId:      idOrEmpty(c.storeFormatTypeId),
+          storeId:                c.storeId                || '',
+          contactNumber:          c.contactNumber          || '',
           audienceTypeIds:        parseArr(c.audienceTypeId),
           languages:              parseArr(c.languageIds),
           hasOffer:               c.hasOffer               || 'NO',
-          offerTypeId:            c.offerTypeId            || '',
+          offerTypeId:            idOrEmpty(c.offerTypeId),
           keyMessage:             c.keyMessage             || '',
-          supportingProof:        c.supportingProofId      || c.supportingProof || '',
+          supportingProof:        idOrEmpty(c.supportingProofId),
           tones:                  parseArr(c.toneIds),
           priority:               c.priority               || 'MEDIUM',
-          budgetTier:             c.budgetTierId           || c.budgetTier || '',
+          budgetTier:             idOrEmpty(c.budgetTierId),
           vendorRequired:         c.vendorRequired         || 'NO',
           vendorTypeIds:          parseArr(c.vendorTypeIds),
-          kpiType:                c.kpiTypeId              || c.kpiType || '',
-          expectedOutput:         c.expectedOutputId       || c.expectedOutput || '',
+          kpiType:                idOrEmpty(c.kpiTypeId),
+          expectedOutput:         idOrEmpty(c.expectedOutputId),
         }))
+
         if (c.targetLocation) {
           try {
             const locs = JSON.parse(c.targetLocation)
@@ -1190,22 +1056,49 @@ export default function CampaignFormPage() {
             if (c.targetLocation) setTargetLocations([c.targetLocation])
           }
         }
-        if (Array.isArray(c.deliverables) && c.deliverables.length > 0) {
-          const preDeliverables = {}
-          c.deliverables.forEach((d) => {
-            if (d.granularTaskId) {
-              preDeliverables[d.granularTaskId] = {
-                granularTaskId: d.granularTaskId,
-                questionnaire: {},
+
+        const workTasks = Array.isArray(c.workTasks) ? c.workTasks : []
+        const preDeliverables = {}
+        const deliverableRows = (Array.isArray(c.deliverables) && c.deliverables.length > 0)
+          ? c.deliverables
+          : workTasks.filter(wt => wt.granularTaskId && wt.status !== 'CANCELLED')
+
+        deliverableRows.forEach((d) => {
+          const gid = d.granularTaskId
+          if (!gid) return
+          const wt = workTasks.find(t => String(t.granularTaskId) === String(gid))
+          const questionnaire = {}
+          if (Array.isArray(wt?.questionnaire)) {
+            wt.questionnaire.forEach((q) => {
+              if (q.questionId != null && q.answerValue != null && String(q.answerValue).trim() !== '') {
+                questionnaire[q.questionId] = q.answerValue
               }
-            }
-          })
+            })
+          }
+          preDeliverables[gid] = { granularTaskId: gid, questionnaire }
+        })
+        if (Object.keys(preDeliverables).length > 0) {
           setDeliverables(preDeliverables)
         }
       })
       .catch(() => showToast('Failed to load source campaign for cloning.', 'error'))
       .finally(() => setCloneLoading(false))
   }, [cloneSourceId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // After clone deliverables + granular-task list load, pre-select task-type filters
+  useEffect(() => {
+    if (!cloneSourceId || loadingTasks) return
+    const gids = Object.keys(deliverables)
+    if (gids.length === 0 || allAvailableTasks.length === 0) return
+    const typeIds = [...new Set(
+      gids
+        .map(gid => allAvailableTasks.find(t => String(t.taskId) === String(gid))?.taskTypeId)
+        .filter(Boolean)
+        .map(String),
+    )]
+    if (typeIds.length === 0) return
+    setForm(prev => (prev.taskTypeId.length > 0 ? prev : { ...prev, taskTypeId: typeIds }))
+  }, [cloneSourceId, loadingTasks, allAvailableTasks, deliverables]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const deliverableTaskIdsKey = Object.keys(deliverables).sort().join('|')
 
@@ -1348,9 +1241,7 @@ export default function CampaignFormPage() {
     if (!form.businessVerticalId) e.businessVerticalId = 'Required'
     if (form.businessVerticalId && businessTypeOpts.length > 0 && !form.businessTypeId)   e.businessTypeId   = 'Required'
     if (form.businessTypeId    && storeFormatOpts.length > 0 && !form.storeFormatTypeId) e.storeFormatTypeId = 'Required'
-
-    // Section 2
-    if (form.taskTypeId.length === 0) e.taskTypeId = 'Select at least one task type'
+    if (!form.contactNumber?.trim()) e.contactNumber = 'Required'
 
     // Section 3
     if (form.audienceTypeIds.length === 0) e.audienceTypeIds = 'Select at least one audience type'
@@ -1455,15 +1346,6 @@ export default function CampaignFormPage() {
         return result.length > 0 ? result : null
       }
 
-      // Derive task types from the actually-selected deliverables (not from the filter dropdown).
-      // Object keys are strings; t.taskId may be a number — compare as strings.
-      const derivedTaskTypeIds = [...new Set(
-        Object.keys(deliverables)
-          .map(tid => allAvailableTasks.find(t => String(t.taskId) === tid)?.taskTypeId)
-          .filter(Boolean)
-          .map(String)
-      )]
-
       const payload = {
         departmentId:        form.departmentId || null,
         businessObjective:   resolve(form.businessObjective, form.businessObjectiveOther),
@@ -1471,7 +1353,8 @@ export default function CampaignFormPage() {
         businessVerticalId:  form.businessVerticalId  || null,
         businessTypeId:      form.businessTypeId      || null,
         storeFormatTypeId:   form.storeFormatTypeId   || null,
-        taskTypeId:        derivedTaskTypeIds.length > 0 ? derivedTaskTypeIds : null,
+        storeId:             form.storeId?.trim()    || null,
+        contactNumber:       form.contactNumber?.trim() || null,
         // multi-select fields — sent as JSON arrays to the backend List<String> fields
         audienceTypeId:    resolveMultiArr(form.audienceTypeIds, form.audienceTypeOther),
         language:          resolveMultiArr(form.languages,       form.languageOther),
@@ -1682,9 +1565,48 @@ export default function CampaignFormPage() {
 
           <Divider />
 
-          {/* Task Type — end of Campaign Specifications */}
-          <FormGroup label="Task Type" required error={errors.taskTypeId}
-            hint="Select one or more task types — only matching tasks will appear in Deliverables">
+          {/* Store ID + Contact Number */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormGroup label="Store ID" error={errors.storeId}>
+              <input
+                type="text"
+                name="storeId"
+                value={form.storeId}
+                onChange={handleChange}
+                placeholder="Enter store ID"
+                className={`w-full rounded-lg border px-3 py-2 text-sm bg-white shadow-sm transition
+                  focus:outline-none focus:ring-2 focus:ring-brand-200
+                  ${errors.storeId
+                    ? 'border-red-400 focus:border-red-400'
+                    : 'border-slate-300 focus:border-brand-500'}`}
+              />
+            </FormGroup>
+            <FormGroup label="Contact Number" required error={errors.contactNumber}>
+              <input
+                type="text"
+                name="contactNumber"
+                value={form.contactNumber}
+                onChange={e => {
+                  const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                  handleChange({ target: { name: 'contactNumber', value: digits } })
+                }}
+                placeholder="Enter contact number"
+                maxLength={10}
+                inputMode="numeric"
+                className={`w-full rounded-lg border px-3 py-2 text-sm bg-white shadow-sm transition
+                  focus:outline-none focus:ring-2 focus:ring-brand-200
+                  ${errors.contactNumber
+                    ? 'border-red-400 focus:border-red-400'
+                    : 'border-slate-300 focus:border-brand-500'}`}
+              />
+            </FormGroup>
+          </div>
+
+          <Divider />
+
+          {/* Task Type — filter only, not stored on campaign */}
+          <FormGroup label="Task Type" error={errors.taskTypeId}
+            hint="Filter tasks by type — select to narrow the Deliverables list">
             <GenericMultiSelect
               name="taskTypeId"
               values={form.taskTypeId}

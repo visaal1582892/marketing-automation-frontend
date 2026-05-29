@@ -181,6 +181,7 @@ export default function AppSelect({
   isSearchable = false,
   isMulti = false,
   menuPortal = false,
+  className = '',
   /** Max chips shown before "+N more" — multi mode only. Default 2. */
   maxMultiValues = 2,
 }) {
@@ -231,6 +232,7 @@ export default function AppSelect({
         }}
         menuPortalTarget={menuPortal ? document.body : undefined}
         menuPosition={menuPortal ? 'fixed' : undefined}
+        className={className}
         classNamePrefix="app-select"
       />
     )
@@ -256,6 +258,7 @@ export default function AppSelect({
       styles={styles}
       menuPortalTarget={menuPortal ? document.body : undefined}
       menuPosition={menuPortal ? 'fixed' : undefined}
+      className={className}
       classNamePrefix="app-select"
     />
   )

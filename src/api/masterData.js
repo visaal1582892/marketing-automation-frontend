@@ -117,6 +117,16 @@ export const questionApi = {
   list: () => api.get('/admin/questions').then((r) => r.data),
 
   /** Paged + filtered list for admin Question Library table. Returns PagedResponse. */
-  listPaged: ({ questionText, page = 0, size = 20 } = {}) =>
-    api.get('/admin/questions', { params: { questionText, page, size } }).then((r) => r.data),
+  listPaged: ({
+    questionId,
+    questionText,
+    fieldType,
+    required,
+    granularTaskId,
+    page = 0,
+    size = 20,
+  } = {}) =>
+    api.get('/admin/questions', {
+      params: { questionId, questionText, fieldType, required, granularTaskId, page, size },
+    }).then((r) => r.data),
 }

@@ -8,13 +8,27 @@ import { useAuth } from '../auth/AuthContext'
 import { useToast } from './Toast'
 import { printBrief } from '../utils/printBrief'
 
+/** Drop answered comment from local campaign snapshot; recompute badge flags. */
+function campaignAfterCommentAnswered(campaign, taskId, commentId) {
+  if (!campaign) return campaign
+  const workTasks = (campaign.workTasks || []).map(t => {
+    if (String(t.taskId) !== String(taskId)) return t
+    const activeComments = (t.activeComments || []).filter(
+      c => String(c.commentId) !== String(commentId),
+    )
+    return { ...t, activeComments, hasActiveComments: activeComments.length > 0 }
+  })
+  const hasUnansweredComments = workTasks.some(t => (t.activeComments || []).length > 0)
+  return { ...campaign, workTasks, hasUnansweredComments }
+}
+
 /**
  * Full-screen brief viewer — replaced the old slide-in drawer.
  * Shown wherever a complete request context is needed (QC, My Tasks,
  * campaign list, interventions, etc.).
  */
 export default function RequestBriefDrawer({
-  campaignId, onClose, onCampaignChanged, filterTaskId,
+  campaignId, onClose, onCampaignChanged, onCommentAnswered, filterTaskId,
 }) {
   const [campaign, setCampaign] = useState(null)
   const [loading,  setLoading]  = useState(true)
@@ -39,18 +53,32 @@ export default function RequestBriefDrawer({
 
   const [markingCommentId, setMarkingCommentId] = useState(null)
   const handleMarkAnswered = useCallback(async (taskId, commentId) => {
+    if (!campaign?.campaignId) return
     setMarkingCommentId(commentId)
     try {
       await tasksApi.markCommentAnswered(taskId, commentId)
+      const patched = campaignAfterCommentAnswered(campaign, taskId, commentId)
+      setCampaign(patched)
+      const task = patched.workTasks?.find(t => String(t.taskId) === String(taskId))
+      onCommentAnswered?.({
+        campaignId: patched.campaignId,
+        taskId,
+        commentId,
+        hasActiveComments: !!task?.hasActiveComments,
+        hasUnansweredComments: !!patched.hasUnansweredComments,
+      })
       const res = await campaignsApi.getById(campaign.campaignId)
       setCampaign(res.data)
       onCampaignChanged?.(res.data)
+      toast.success?.('Comment marked as answered.')
     } catch (e) {
       toast.error?.(e?.response?.data?.message || 'Failed to mark comment as answered.')
     } finally {
       setMarkingCommentId(null)
     }
-  }, [campaign, onCampaignChanged, toast]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [campaign, onCampaignChanged, onCommentAnswered, toast])
+
+  const [locExpanded, setLocExpanded] = useState(false)
 
   // ── Slide-in / slide-out animation ────────────────────────────────────────
   const [visible, setVisible] = useState(false)
@@ -150,13 +178,13 @@ export default function RequestBriefDrawer({
       <div
         aria-hidden="true"
         onClick={handleClose}
-        className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-300"
+        className="fixed inset-0 z-modal bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-300"
         style={{ opacity: isOpen ? 1 : 0, pointerEvents: isOpen ? 'auto' : 'none' }}
       />
 
       {/* ── Sliding panel ── */}
       <div
-        className="fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-slate-50 shadow-2xl overflow-hidden"
+        className="fixed inset-y-0 right-0 z-modal flex w-full flex-col bg-slate-50 shadow-2xl overflow-hidden"
         style={{
           transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
           transition: 'transform 310ms cubic-bezier(0.32, 0.72, 0, 1)',
@@ -193,7 +221,7 @@ export default function RequestBriefDrawer({
                   <PriorityBadge v={c?.priority} />
                 )}
                 <span className="text-sm font-semibold text-slate-800 truncate hidden sm:block">
-                  {c.taskTypeName}
+                  {c.businessObjective || ''}
                 </span>
               </div>
             )}
@@ -253,7 +281,7 @@ export default function RequestBriefDrawer({
                         Campaign Brief
                       </p>
                       <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">
-                        {c.taskTypeName || 'Request Brief'}
+                        {c.businessObjective || 'Request Brief'}
                       </h1>
                       <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-white/55">
                         {c.requestorName && <span>{c.requestorName}</span>}
@@ -282,12 +310,31 @@ export default function RequestBriefDrawer({
                         {c.businessObjective}
                       </span>
                     )}
-                    {fmtTargetLocation(c.targetLocation) && (
+                    {parseLocations(c.targetLocation).length > 0 && (() => {
+                      const locs = parseLocations(c.targetLocation)
+                      return (
+                        <span className="text-xs text-white/60">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
+                            Location
+                          </span>
+                          {locs[0]}{locs.length > 1 && <span className="text-white/40"> +{locs.length - 1}</span>}
+                        </span>
+                      )
+                    })()}
+                    {c.storeId && (
                       <span className="text-xs text-white/60">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
-                          Location
+                          Store ID
                         </span>
-                        {fmtTargetLocation(c.targetLocation)}
+                        {c.storeId}
+                      </span>
+                    )}
+                    {c.contactNumber && (
+                      <span className="text-xs text-white/60">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
+                          Contact
+                        </span>
+                        {c.contactNumber}
                       </span>
                     )}
                   </div>
@@ -317,10 +364,45 @@ export default function RequestBriefDrawer({
               {/* ── Approval trail ── */}
               <ApprovalTrail c={c} />
 
+              {/* ── Target Locations (full-width) ── */}
+              {parseLocations(c.targetLocation).length > 0 && (() => {
+                const locs = parseLocations(c.targetLocation)
+                const SHOW = 4
+                return (
+                  <BriefCard title="Target Locations" icon="mapPin" accent="brand">
+                    <div className="flex flex-wrap gap-2">
+                      {(locExpanded ? locs : locs.slice(0, SHOW)).map(loc => (
+                        <span key={loc}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 text-brand-700
+                            px-3 py-1 text-xs font-medium ring-1 ring-brand-200">
+                          <Icon name="mapPin" className="h-3 w-3 shrink-0 text-brand-400" />
+                          {loc}
+                        </span>
+                      ))}
+                      {!locExpanded && locs.length > SHOW && (
+                        <button type="button" onClick={() => setLocExpanded(true)}
+                          className="inline-flex items-center rounded-full bg-slate-100 text-slate-500
+                            px-3 py-1 text-xs font-medium hover:bg-slate-200 transition">
+                          +{locs.length - SHOW} more
+                        </button>
+                      )}
+                      {locExpanded && locs.length > SHOW && (
+                        <button type="button" onClick={() => setLocExpanded(false)}
+                          className="inline-flex items-center rounded-full bg-slate-100 text-slate-500
+                            px-3 py-1 text-xs font-medium hover:bg-slate-200 transition">
+                          Show less
+                        </button>
+                      )}
+                    </div>
+                  </BriefCard>
+                )
+              })()}
+
               {/* ── 3-column info sections ── */}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <BriefCard title="Campaign Overview" icon="fileText" accent="blue">
-                  <DetailRow label="Task Type" value={c.taskTypeName} />
+                  {c.storeId       && <DetailRow label="Store ID"       value={c.storeId} />}
+                  {c.contactNumber && <DetailRow label="Contact Number" value={c.contactNumber} />}
                   <DetailRow label="Audience Type"    value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
                   <DetailRow label="Language"         value={fmtMultiValue(c.language)} />
                   <DetailRow label="Tone / Style"     value={fmtMultiValue(c.tone)} />
@@ -391,13 +473,13 @@ export default function RequestBriefDrawer({
               {c.deliverables?.length > 0 && (
                 <BriefCard title={`Deliverables (${c.deliverables.length})`} icon="checkSquare" accent="slate">
                   <div className="flex flex-wrap gap-2">
-                    {c.deliverables.map((d, i) => (
-                      <div key={d.specId ?? i}
+                    {c.deliverables.map((d) => (
+                      <div key={d.taskId ?? d.granularTaskId}
                         className="inline-flex items-center gap-2 rounded-xl border border-slate-200
                                    bg-white px-3 py-1.5">
-                        <span className="flex h-4 w-4 items-center justify-center rounded-full
-                                         bg-brand-100 text-[10px] font-bold text-brand-700">
-                          {i + 1}
+                        <span className="flex items-center justify-center rounded-full
+                                         bg-brand-100 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 whitespace-nowrap">
+                          {d.taskId}
                         </span>
                         <span className="text-xs font-medium text-slate-700">
                           {d.granularTaskName || d.granularTaskId}
@@ -436,6 +518,12 @@ export default function RequestBriefDrawer({
                               <span className="text-sm font-bold text-slate-900">
                                 {t.granularTaskName || 'Task'}
                               </span>
+                              {t.taskTypeName && (
+                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5
+                                                 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">
+                                  {t.taskTypeName}
+                                </span>
+                              )}
                               <TaskBadge status={t.status} />
                               {t.autoGenerated && <AutoGeneratedBadge />}
                               {t.reworkCount > 0 && (
@@ -551,7 +639,7 @@ export default function RequestBriefDrawer({
                             </div>
                           )}
 
-                          {t.latestReworkComment && t.status === 'REWORK' && (() => {
+                          {['REWORK', 'IN_PROGRESS', 'ASSIGNED', 'HELD'].includes(t.status) && t.latestReworkComment && (() => {
                             const isRequestor = t.latestReworkSource === 'REQUESTOR_REWORK'
                             return (
                               <div className={`rounded-xl border px-4 py-3 ${isRequestor ? 'border-purple-200 bg-purple-50' : 'border-orange-200 bg-orange-50'}`}>
@@ -613,7 +701,6 @@ export function RequestSummaryCard({ campaign }) {
     <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-700 space-y-1.5 ring-1 ring-slate-200">
       <div className="flex items-center gap-2 flex-wrap">
         <IdChip value={campaign.campaignId} />
-        <span className="font-semibold text-slate-800">{campaign.taskTypeName || '—'}</span>
         <PriorityBadge v={campaign.priority} />
         {campaign.flaggedInconsistency && (
           <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5
@@ -902,7 +989,7 @@ function TaskBadge({ status }) {
 // ─── Requestor rework modal ───────────────────────────────────────────────────
 function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClose, submitting }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl flex flex-col">
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-100">
           <div>
@@ -1159,6 +1246,15 @@ function fmtTargetLocation(raw) {
     if (Array.isArray(p)) return p.join(', ')
   } catch { /* not JSON */ }
   return raw
+}
+
+function parseLocations(raw) {
+  if (!raw) return []
+  try {
+    const p = JSON.parse(raw)
+    if (Array.isArray(p)) return p.filter(Boolean)
+  } catch { /* not JSON */ }
+  return raw ? [raw] : []
 }
 
 function AutoGeneratedBadge() {

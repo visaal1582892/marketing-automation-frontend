@@ -7,6 +7,8 @@ import Modal from '../../components/Modal'
 import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
+import BackToMaster from '../../components/admin/BackToMaster'
+import { TableStatusRow } from '../../components/dataTable'
 
 const FIELD_TYPES = [
   { value: 'TEXT',        label: 'Short Text' },
@@ -35,12 +37,23 @@ export default function QuestionMasterPage() {
   const [page,          setPage]          = useState(0)
   const [refreshSeed,   setRefreshSeed]   = useState(0)
 
-  const [fText, setFText] = useState('')
+  const [fQuestionId, setFQuestionId] = useState('')
+  const [fText,       setFText]       = useState('')
+  const [fFieldType,  setFFieldType]  = useState('')
+  const [fRequired,   setFRequired]   = useState('')
+  const [fMappedTask, setFMappedTask] = useState('')
 
-  const dText = useDebounce(fText, 400)
+  const dQuestionId = useDebounce(fQuestionId, 400)
+  const dText       = useDebounce(fText, 400)
+
+  const requiredParam = fRequired === 'required' ? true
+    : fRequired === 'optional' ? false
+    : undefined
 
   // Reset page on filter change
-  useEffect(() => { setPage(0) }, [dText]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setPage(0)
+  }, [dQuestionId, dText, fFieldType, fRequired, fMappedTask]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const BLANK_FORM = {
     questionText:    '',
@@ -64,7 +77,15 @@ export default function QuestionMasterPage() {
   useEffect(() => {
     let alive = true
     setLoading(true)
-    questionApi.listPaged({ questionText: dText || undefined, page, size: PAGE_SIZE })
+    questionApi.listPaged({
+      questionId:     dQuestionId || undefined,
+      questionText:   dText || undefined,
+      fieldType:      fFieldType || undefined,
+      required:       requiredParam,
+      granularTaskId: fMappedTask || undefined,
+      page,
+      size: PAGE_SIZE,
+    })
       .then((res) => {
         if (!alive) return
         setRows(res.content ?? [])
@@ -75,7 +96,7 @@ export default function QuestionMasterPage() {
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dText, page, refreshSeed])
+  }, [dQuestionId, dText, fFieldType, fRequired, fMappedTask, page, refreshSeed])
 
   const openCreate = () => { setEditing(null); setForm(BLANK_FORM); setModalOpen(true) }
 
@@ -150,6 +171,7 @@ export default function QuestionMasterPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
+      <BackToMaster />
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg
@@ -178,9 +200,9 @@ export default function QuestionMasterPage() {
       </header>
 
       <section className="rounded-lg bg-white shadow-sm ring-1 ring-slate-200/70">
-        <div className="hidden overflow-x-auto sm:block">
-          <table className="w-full text-sm">
-            <thead>
+        <div className="hidden w-full overflow-x-auto sm:block">
+          <table className="w-full min-w-full text-sm">
+            <thead className="bg-slate-50">
               <tr className="bg-slate-50/70 text-left text-xs font-semibold uppercase
                               tracking-wider text-slate-500">
                 <th className="w-36 px-4 py-2.5">Question ID</th>
@@ -191,17 +213,51 @@ export default function QuestionMasterPage() {
                 <th className="w-24 px-4 py-2.5 text-right">Actions</th>
               </tr>
               <tr className="border-y border-slate-100 bg-slate-50/40">
-                <th className="px-4 py-2" colSpan={2}>
-                  <FilterInput value={fText} onChange={setFText} placeholder="Search question text…" icon="search" />
+                <th className="px-4 py-2">
+                  <FilterInput value={fQuestionId} onChange={setFQuestionId} placeholder="Search ID…" icon="search" />
                 </th>
-                <th colSpan={4} />
+                <th className="px-4 py-2">
+                  <FilterInput value={fText} onChange={setFText} placeholder="Search question…" icon="search" />
+                </th>
+                <th className="px-4 py-2">
+                  <FilterSelect
+                    value={fFieldType}
+                    onChange={setFFieldType}
+                    placeholder="All types"
+                    options={[{ value: '', label: 'All types' }, ...FIELD_TYPES]}
+                  />
+                </th>
+                <th className="px-4 py-2">
+                  <FilterSelect
+                    value={fRequired}
+                    onChange={setFRequired}
+                    placeholder="All"
+                    options={[
+                      { value: '', label: 'All' },
+                      { value: 'required', label: 'Required' },
+                      { value: 'optional', label: 'Optional' },
+                    ]}
+                  />
+                </th>
+                <th className="px-4 py-2">
+                  <FilterSelect
+                    value={fMappedTask}
+                    onChange={setFMappedTask}
+                    placeholder="All tasks"
+                    options={[
+                      { value: '', label: 'All tasks' },
+                      ...granularTasks.map(t => ({ value: String(t.taskId), label: t.taskName })),
+                    ]}
+                  />
+                </th>
+                <th className="px-4 py-2" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
-                <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">Loading…</td></tr>
+                <TableStatusRow colSpan={6} className="py-12">Loading…</TableStatusRow>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">No matching questions.</td></tr>
+                <TableStatusRow colSpan={6} className="py-12">No matching questions.</TableStatusRow>
               ) : (
                 rows.map((q) => (
                   <QuestionRow key={q.questionId} question={q} onEdit={handleEditRow} onDelete={handleDeleteRow} />
@@ -216,8 +272,36 @@ export default function QuestionMasterPage() {
         </div>
 
         <div className="block divide-y divide-slate-100 sm:hidden">
-          <div className="space-y-2 p-3">
-            <FilterInput value={fText} onChange={setFText} placeholder="Search…" icon="search" />
+          <div className="grid gap-2 p-3 sm:grid-cols-2">
+            <FilterInput value={fQuestionId} onChange={setFQuestionId} placeholder="Search ID…" icon="search" />
+            <FilterInput value={fText} onChange={setFText} placeholder="Search question…" icon="search" />
+            <FilterSelect
+              value={fFieldType}
+              onChange={setFFieldType}
+              placeholder="All types"
+              options={[{ value: '', label: 'All types' }, ...FIELD_TYPES]}
+            />
+            <FilterSelect
+              value={fRequired}
+              onChange={setFRequired}
+              placeholder="All"
+              options={[
+                { value: '', label: 'All' },
+                { value: 'required', label: 'Required' },
+                { value: 'optional', label: 'Optional' },
+              ]}
+            />
+            <div className="sm:col-span-2">
+              <FilterSelect
+                value={fMappedTask}
+                onChange={setFMappedTask}
+                placeholder="All tasks"
+                options={[
+                  { value: '', label: 'All tasks' },
+                  ...granularTasks.map(t => ({ value: String(t.taskId), label: t.taskName })),
+                ]}
+              />
+            </div>
           </div>
           {loading ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">Loading…</div>
@@ -411,8 +495,19 @@ function FilterInput({ value, onChange, placeholder, icon }) {
   )
 }
 
-function FilterSelect({ value, onChange, options }) {
-  return <AppSelect value={value} onChange={onChange} options={options} size="sm" isClearable={false} isSearchable menuPortal />
+function FilterSelect({ value, onChange, options, placeholder }) {
+  return (
+    <AppSelect
+      value={value}
+      onChange={(v) => onChange(v ?? '')}
+      options={options}
+      placeholder={placeholder}
+      size="sm"
+      isClearable
+      isSearchable
+      menuPortal
+    />
+  )
 }
 
 function RowActions({ onEdit, onDelete }) {

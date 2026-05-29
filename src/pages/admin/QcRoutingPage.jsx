@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import qcRoutingApi from '../../api/qcRouting'
 import Icon from '../../components/Icon'
 import { useToast } from '../../components/Toast'
+import BackToMaster from '../../components/admin/BackToMaster'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,7 @@ export default function QcRoutingPage() {
 
   return (
     <div className="mx-auto max-w-5xl pb-12 space-y-6">
+      <BackToMaster />
 
       {/* ── Page header ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
