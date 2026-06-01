@@ -49,6 +49,15 @@ export default function DashboardPage() {
   const [loading,              setLoading]              = useState(true)
   const [trend,                setTrend]                = useState(null)
 
+  // Campaign summary for the requestor dashboard KPI cards
+  const [campaignSummary, setCampaignSummary] = useState({
+    total: 0,
+    completed: 0,
+    rejected: 0,
+    cancelled: 0,
+    active: 0,
+  })
+
   useEffect(() => {
     let alive = true
     setLoading(true)
@@ -64,7 +73,7 @@ export default function DashboardPage() {
 
     Promise.all([
       // Requestor: just first page is enough for the array (used for task-level status filters)
-      need(showRequestWidgets, () => campaignsApi.list().then(r => r.data)),
+      need(showRequestWidgets, () => campaignsApi.dashboardSummary().then(r => r.data)),
       // Requestor: total completed tasks count (size=1 — only totalElements needed)
       need(showRequestWidgets, () => campaignsApi.completedTasks({ page: 0, size: 1 }).then(r => r.data?.totalElements ?? 0)),
       // Worker: per-status counts via size=1 so totalElements is accurate for all statuses,
@@ -87,7 +96,13 @@ export default function DashboardPage() {
       need(showOpsWidgets,     () => managerApi.dashboardTrend().then(r => r.data)),
     ]).then(([cs, completedTasks, openData, qcData, doneData, ts, qc, rework, inProgress, completed, assigned, held, cancelled, trendData]) => {
       if (!alive) return
-      setCampaigns(toArr(cs))
+      setCampaignSummary(cs ?? {
+        total: 0,
+        completed: 0,
+        rejected: 0,
+        cancelled: 0,
+        active: 0,
+      })
       setCompletedTasksCount(completedTasks ?? 0)
 
       // Worker counts from accurate totalElements (not filtered from a single page)
@@ -122,15 +137,7 @@ export default function DashboardPage() {
   // Worker KPI aliases (counts come from accurate totalElements, not from a filtered page)
   const taskCounts = workerCounts
 
-  const myRequestCounts = useMemo(() => {
-    const my = campaigns
-    return {
-      total:     my.length,
-      completed: my.filter(c => c.status === 'COMPLETED').length,
-      rejected:  my.filter(c => c.status === 'REJECTED').length,
-      cancelled: my.filter(c => c.status === 'CANCELLED').length,
-    }
-  }, [campaigns])
+  const myRequestCounts = campaignSummary
 
   // ── Derived analytics for card detail lines ───────────────────────────────
   const mgrQcCount = opsQcTasks.filter(t => t.status === 'MANAGER_QC_REVIEW').length
@@ -145,7 +152,7 @@ export default function DashboardPage() {
   const workerTotal = workerCounts.open + workerCounts.qc + workerCounts.done
   const workerPct  = (n) => workerTotal > 0 ? Math.min(100, Math.round(n / workerTotal * 100)) : 0
 
-  const reqActive = Math.max(0, myRequestCounts.total - myRequestCounts.completed - myRequestCounts.rejected - myRequestCounts.cancelled)
+  const reqActive = myRequestCounts.active
   const reqPct    = (n) => myRequestCounts.total > 0 ? Math.min(100, Math.round(n / myRequestCounts.total * 100)) : 0
 
   return (

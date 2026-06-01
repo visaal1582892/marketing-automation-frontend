@@ -99,6 +99,9 @@ const campaignsApi = {
    */
   cloneCampaign: (id) => api.post(`${BASE}/${id}/clone`),
 
+  /** Aggregated campaign status counts for the caller's own campaigns. */
+  dashboardSummary: () => api.get(`${BASE}/dashboard-summary`),
+
 }
 
 /** Returns granular tasks relevant to a requirement type (for form Section 5). */
