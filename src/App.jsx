@@ -127,7 +127,7 @@ export default function App() {
               <Route
                 path="/requestor-qc-review"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager']}>
                     <RequestorQcReviewPage />
                   </ProtectedRoute>
                 }
@@ -141,11 +141,11 @@ export default function App() {
                 }
               />
 
-              {/* ── Admin: Master Data ── */}
+              {/* ── Admin: Master Data — Admin role only ── */}
               <Route
                 path="/admin/master"
                 element={
-                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Admin']}>
                     <MasterHubPage />
                   </ProtectedRoute>
                 }
@@ -153,7 +153,7 @@ export default function App() {
               <Route
                 path="/admin/master/:slug"
                 element={
-                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Admin']}>
                     <MasterTablePage />
                   </ProtectedRoute>
                 }
@@ -161,7 +161,7 @@ export default function App() {
               <Route
                 path="/admin/granular-tasks"
                 element={
-                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Admin']}>
                     <GranularTaskPage />
                   </ProtectedRoute>
                 }
@@ -169,7 +169,7 @@ export default function App() {
               <Route
                 path="/admin/task-mappings"
                 element={
-                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Admin']}>
                     <TaskMappingsPage />
                   </ProtectedRoute>
                 }
@@ -177,7 +177,7 @@ export default function App() {
               <Route
                 path="/admin/users"
                 element={
-                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Admin']}>
                     <UserManagementPage />
                   </ProtectedRoute>
                 }
@@ -185,7 +185,7 @@ export default function App() {
               <Route
                 path="/admin/questions"
                 element={
-                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Admin']}>
                     <QuestionMasterPage />
                   </ProtectedRoute>
                 }
@@ -201,7 +201,7 @@ export default function App() {
               <Route
                 path="/admin/notification-templates"
                 element={
-                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Admin']}>
                     <NotificationTemplatesPage />
                   </ProtectedRoute>
                 }
@@ -209,7 +209,7 @@ export default function App() {
               <Route
                 path="/admin/campaign-mappings/vertical-type"
                 element={
-                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Admin']}>
                     <VerticalTypeMappingPage />
                   </ProtectedRoute>
                 }
@@ -217,7 +217,7 @@ export default function App() {
               <Route
                 path="/admin/campaign-mappings/type-format"
                 element={
-                  <ProtectedRoute requireRole={['Admin', 'Marketing Manager']}>
+                  <ProtectedRoute requireRole={['Admin']}>
                     <TypeFormatMappingPage />
                   </ProtectedRoute>
                 }

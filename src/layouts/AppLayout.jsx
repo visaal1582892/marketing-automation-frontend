@@ -303,7 +303,7 @@ export default function AppLayout() {
             </SidebarGroup>
           )}
 
-          {(isAdmin || isMarketingManager || isProcurementManager) && (
+          {isAdmin && (
             <SidebarLink
               to="/admin/master"
               label="Master"
