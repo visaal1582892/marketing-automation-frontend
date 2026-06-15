@@ -199,13 +199,24 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
+  const buildPayload = () => ({
+    fullName:      form.fullName,
+    email:         form.email,
+    departmentId:  form.departmentId || null,
+    designationId: form.designationId || null,
+    roleIds:       form.roleIds,
+    skillLevel:    form.skillLevel,
+    status:        form.status || 'ACTIVE',
+  })
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
+      const payload = buildPayload()
       const saved = isEdit
-        ? await usersApi.update(initial.userId, form)
-        : await usersApi.create(form)
+        ? await usersApi.update(initial.userId, payload)
+        : await usersApi.create(payload)
       toast.success(`User ${isEdit ? 'updated' : 'created'} successfully.`)
       onSaved(saved)
       onClose()
