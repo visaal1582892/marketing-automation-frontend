@@ -3,6 +3,7 @@
  * Builds the PDF directly from data — no HTML/CSS rendering.
  */
 import { jsPDF } from 'jspdf'
+import { formatTargetLocations } from './targetLocations'
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 const C = {
@@ -30,9 +31,8 @@ const safeMulti = v => {
   return String(v).split(',').map(s => s.trim()).filter(Boolean).join(', ') || '—'
 }
 const safeLocation = raw => {
-  if (!raw) return '—'
-  try { const p = JSON.parse(raw); if (Array.isArray(p)) return p.join(', ') } catch {}
-  return raw
+  const formatted = formatTargetLocations(raw)
+  return formatted || '—'
 }
 const fmtDate = d => d
   ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })

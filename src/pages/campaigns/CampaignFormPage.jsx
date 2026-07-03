@@ -10,7 +10,8 @@ import AppSelect from '../../components/AppSelect'
 import tasksApi from '../../api/tasks'
 import Icon from '../../components/Icon'
 import campaignSpecsApi from '../../api/campaignSpecs'
-import LocationMultiSelect from '../../components/LocationMultiSelect'
+import MapplsLocationMultiSelect from '../../components/MapplsLocationMultiSelect'
+import { parseTargetLocations, serializeTargetLocations } from '../../utils/targetLocations'
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
 
@@ -847,8 +848,6 @@ function CampaignFilesSection({ files, onFilesChange, uploading, setUploading })
   )
 }
 
-// LocationMultiSelect is imported from src/components/LocationMultiSelect.jsx
-
 // ─── Main form ────────────────────────────────────────────────────────────────
 
 export default function CampaignFormPage() {
@@ -1049,12 +1048,7 @@ export default function CampaignFormPage() {
         }))
 
         if (c.targetLocation) {
-          try {
-            const locs = JSON.parse(c.targetLocation)
-            if (Array.isArray(locs)) setTargetLocations(locs)
-          } catch {
-            if (c.targetLocation) setTargetLocations([c.targetLocation])
-          }
+          setTargetLocations(parseTargetLocations(c.targetLocation))
         }
 
         const workTasks = Array.isArray(c.workTasks) ? c.workTasks : []
@@ -1370,7 +1364,7 @@ export default function CampaignFormPage() {
           ? resolveMultiArr(form.vendorTypeIds, form.vendorTypeOther) : null,
         kpiType:           resolve(form.kpiType, form.kpiTypeOther),
         expectedOutput:    resolve(form.expectedOutput, form.expectedOutputOther),
-        targetLocation:    JSON.stringify(targetLocations),
+        targetLocation:    serializeTargetLocations(targetLocations),
         fileUrls:          campaignFiles.filter(f => f.url).map(f => f.url),
         fileOriginalNames: campaignFiles.filter(f => f.url).map(f => f.name || f.url.split('/').pop()),
         taskSpecs:  Object.values(deliverables).map((d) => {
@@ -1621,14 +1615,15 @@ export default function CampaignFormPage() {
         {/* ── Card 1b: Location + Audience ── */}
         <Card>
           <FormGroup label="Target Location(s)" required error={errors.targetLocations}
-            hint="Search cities, districts or states — multiple allowed">
+            hint="Search states, cities, districts or localities — multiple allowed">
             <div data-has-error={!!errors.targetLocations || undefined}>
-              <LocationMultiSelect
-                selected={targetLocations}
+              <MapplsLocationMultiSelect
+                value={targetLocations}
                 onChange={(locs) => {
                   setTargetLocations(locs)
                   if (errors.targetLocations) setErrors((prev) => ({ ...prev, targetLocations: '' }))
                 }}
+                placeholder="Search state, city, district or locality…"
                 hasError={!!errors.targetLocations}
               />
             </div>

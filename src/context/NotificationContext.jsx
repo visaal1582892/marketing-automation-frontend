@@ -2,21 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useNavigate } from 'react-router-dom'
 import { Client } from '@stomp/stompjs'
 import { tokenStorage } from '../api/client'
+import { buildWsUrl } from '../config/backendUrl'
 import { notificationsApi } from '../api/notifications'
 import { useAuth } from '../auth/AuthContext'
 import { useToast } from '../components/Toast'
 
 const NotificationContext = createContext(null)
-
-function buildWsUrl() {
-  const raw = (import.meta.env.VITE_API_BASE_URL || 'https://exemplify-kinsman-prison.ngrok-free.dev/')
-  // const raw = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/')
-    .trim()
-    .replace(/\/+$/, '')
-    .replace(/\/api$/, '')
-  if (!raw.startsWith('http://') && !raw.startsWith('https://')) return null
-  return raw.replace(/^http/, 'ws') + '/ws'
-}
 
 /** Request browser notification permission — returns the final permission state. */
 async function requestBrowserPermission() {

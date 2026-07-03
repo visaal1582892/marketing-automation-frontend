@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback, memo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
+import { Rights } from '../../constants/rights'
 import AppSelect from '../../components/AppSelect'
 import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
 import DateRangePicker from '../../components/DateRangePicker'
@@ -13,7 +14,8 @@ import api from '../../api/client'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import useDebounce from '../../hooks/useDebounce'
-import LocationMultiSelect from '../../components/LocationMultiSelect'
+import MapplsLocationMultiSelect from '../../components/MapplsLocationMultiSelect'
+import { parseTargetLocations, serializeTargetLocations } from '../../utils/targetLocations'
 
 // ─── Status / Priority helpers ────────────────────────────────────────────────
 
@@ -768,9 +770,9 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
     expectedOutputOther:    '',
   })
 
-  const [targetLocations, setTargetLocations] = useState(() => {
-    try { const p = JSON.parse(campaign.targetLocation || '[]'); return Array.isArray(p) ? p : [] } catch { return [] }
-  })
+  const [targetLocations, setTargetLocations] = useState(() =>
+    parseTargetLocations(campaign.targetLocation),
+  )
 
   // Track which granular task types are already in the campaign (to filter the "Add Tasks" picker)
   const existingIds = useMemo(() => new Set(localWorkTasks.map(t => String(t.granularTaskId))), [localWorkTasks])
@@ -1100,7 +1102,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
         vendorType:        form.vendorRequired === 'YES' ? resolveArr(form.vendorTypeIds, form.vendorTypeOther) : null,
         kpiType:           resolve(form.kpiType, form.kpiTypeOther),
         expectedOutput:    resolve(form.expectedOutput, form.expectedOutputOther),
-        targetLocation:    JSON.stringify(targetLocations),
+        targetLocation:    serializeTargetLocations(targetLocations),
         newTaskSpecs:      newTaskSpecs.length > 0 ? newTaskSpecs : undefined,
         newFileUrls:          newFiles.filter(f => f.url).map(f => f.url),
         newFileOriginalNames: newFiles.filter(f => f.url).map(f => f.name || f.url.split('/').pop()),
@@ -1239,9 +1241,10 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                   </div>
                   <div>
                     <FieldLabel>Target Locations</FieldLabel>
-                    <LocationMultiSelect
-                      selected={targetLocations}
+                    <MapplsLocationMultiSelect
+                      value={targetLocations}
                       onChange={setTargetLocations}
+                      placeholder="Search state, city, district or locality…"
                       visibleLimit={3}
                     />
                   </div>
@@ -2424,7 +2427,7 @@ function CampaignTableView({ campaigns, loading, onRefresh, refreshing }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CampaignListPage() {
-  const { isRequestor, hasAnyRole } = useAuth()
+  const { hasRight } = useAuth()
   const toast     = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
   const navigate  = useNavigate()
@@ -2440,14 +2443,15 @@ export default function CampaignListPage() {
       : null
   )
 
-  const isCreator = hasAnyRole('Marketing Creator')
+  const canCreateCampaign = hasRight(Rights.CREATE_CAMPAIGN)
+  const isRequestorView = hasRight(Rights.VIEW_OWN_CAMPAIGNS)
 
   const load = async (silent = false) => {
     if (silent) setRefreshing(true)
     else setLoading(true)
 
     try {
-      if (!isRequestor) {
+      if (!isRequestorView) {
         // Non-requestor path: load all campaigns (manager / admin view)
         const res = await campaignsApi.list()
         const list = res.data?.content || res.data || []
@@ -2485,7 +2489,7 @@ export default function CampaignListPage() {
       )}
 
       {/* Action bar — non-requestors only (requestor gets New Request inside tabs row) */}
-      {!isRequestor && (
+      {!isRequestorView && (
         <div className="shrink-0 flex items-center justify-end gap-2">
           <button
             onClick={() => load(true)}
@@ -2503,10 +2507,10 @@ export default function CampaignListPage() {
 
       {/* View */}
       <div className="flex-1 min-h-0 h-full">
-        {isRequestor ? (
+        {isRequestorView ? (
           <RequestorCampaignView
             onTotalChange={setRequestorTotal}
-            onNewRequest={!isCreator ? () => navigate('/campaigns/new') : null}
+            onNewRequest={canCreateCampaign ? () => navigate('/campaigns/new') : null}
           />
         ) : loading ? (
           <p className="text-sm text-slate-400 py-8 text-center">Loading…</p>

@@ -5,17 +5,25 @@ import { useAuth } from './AuthContext'
  * Wrap any route that should only render for authenticated users.
  *
  * Props:
- *   requireRole      – single role string OR array of allowed roles
- *   excludeRole      – single role string OR array of roles that CANNOT access
- *   requireWorkerRole – when true, only users who hold at least one execution
- *                       (worker) role are allowed, even if they also hold a
- *                       manager/admin role (multi-role aware)
+ *   requireRole       – single role string OR array (legacy; ignored when rights props set)
+ *   requireRight      – single right string (must hold)
+ *   requireAnyRight   – right string OR array — pass if user holds ANY
+ *   excludeRole       – role(s) that CANNOT access
+ *   requireWorkerRole – deprecated; equivalent to requireRight VIEW_MY_TASKS
+ *   fallback          – redirect target when denied (default /dashboard)
  *
- * Multi-role aware: a user passes the requireRole check if they hold ANY of
- * their roles that matches any entry in the allowed list.
+ * When requireRight / requireAnyRight is set, only rights are checked (no role bypass).
  */
-export default function ProtectedRoute({ children, requireRole, excludeRole, requireWorkerRole }) {
-  const { isAuthenticated, user, loading, isWorker } = useAuth()
+export default function ProtectedRoute({
+  children,
+  requireRole,
+  requireRight,
+  requireAnyRight,
+  excludeRole,
+  requireWorkerRole,
+  fallback = '/dashboard',
+}) {
+  const { isAuthenticated, user, loading, hasRight, hasAnyRight } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -30,16 +38,30 @@ export default function ProtectedRoute({ children, requireRole, excludeRole, req
     return <Navigate to="/login" replace state={{ from: location }} />
   }
 
-  // All roles the current user holds, lower-cased for comparison.
   const userRoles = (user?.roles ?? []).map(r => r.toLowerCase())
+  const hasRightsGate = Boolean(requireRight || requireAnyRight || requireWorkerRole)
 
-  if (requireRole) {
+  if (requireRight && !hasRight(requireRight)) {
+    return <Navigate to={fallback} replace />
+  }
+
+  if (requireAnyRight) {
+    const required = Array.isArray(requireAnyRight) ? requireAnyRight : [requireAnyRight]
+    if (!hasAnyRight(...required)) {
+      return <Navigate to={fallback} replace />
+    }
+  }
+
+  if (requireWorkerRole && !hasRight('VIEW_MY_TASKS')) {
+    return <Navigate to={fallback} replace />
+  }
+
+  if (!hasRightsGate && requireRole) {
     const allowed = Array.isArray(requireRole)
       ? requireRole.map(r => r.toLowerCase())
       : [requireRole.toLowerCase()]
-    // Pass if the user holds at least one of the allowed roles.
     if (!allowed.some(r => userRoles.includes(r))) {
-      return <Navigate to="/dashboard" replace />
+      return <Navigate to={fallback} replace />
     }
   }
 
@@ -47,14 +69,9 @@ export default function ProtectedRoute({ children, requireRole, excludeRole, req
     const excluded = Array.isArray(excludeRole)
       ? excludeRole.map(r => r.toLowerCase())
       : [excludeRole.toLowerCase()]
-    // Block if the user holds any of the excluded roles.
     if (excluded.some(r => userRoles.includes(r))) {
-      return <Navigate to="/dashboard" replace />
+      return <Navigate to={fallback} replace />
     }
-  }
-
-  if (requireWorkerRole && !isWorker) {
-    return <Navigate to="/dashboard" replace />
   }
 
   return children

@@ -1,14 +1,17 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
+import { Rights } from '../../constants/rights'
 import Icon from '../../components/Icon'
 import { MASTER_HUB_SECTIONS, getAccentStyle } from '../../config/masterHubConfig'
 
 export default function MasterHubPage() {
-  const { isAdmin } = useAuth()
+  const { hasRight } = useAuth()
 
   const sections = MASTER_HUB_SECTIONS.map(section => ({
     ...section,
-    items: section.items.filter(item => !item.adminOnly || isAdmin),
+    items: section.items.filter(item =>
+      !item.adminOnly || hasRight(Rights.MANAGE_QC_ROUTING),
+    ),
   })).filter(section => section.items.length > 0)
 
   return (

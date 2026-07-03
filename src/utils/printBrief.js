@@ -6,6 +6,8 @@
  * Users can print to paper OR "Save as PDF" from the browser dialog.
  */
 
+import { formatTargetLocations } from './targetLocations'
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const safe = v => (v == null || v === '') ? '—' : String(v)
 
@@ -15,12 +17,8 @@ const safeMulti = v => {
 }
 
 const safeLocation = raw => {
-  if (!raw) return '—'
-  try {
-    const p = JSON.parse(raw)
-    if (Array.isArray(p)) return p.join(', ')
-  } catch { /* not JSON */ }
-  return raw
+  const formatted = formatTargetLocations(raw)
+  return formatted || '—'
 }
 
 const fmtDate = d =>

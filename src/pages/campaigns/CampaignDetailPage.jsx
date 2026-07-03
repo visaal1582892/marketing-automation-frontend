@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import campaignsApi from '../../api/campaigns'
 import { useAuth } from '../../auth/AuthContext'
+import { Rights } from '../../constants/rights'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
 import { printBrief } from '../../utils/printBrief'
+import { formatTargetLocations } from '../../utils/targetLocations'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
 
 const STATUS_STYLES = {
@@ -41,7 +43,7 @@ export default function CampaignDetailPage() {
   const location   = useLocation()
   const toast      = useToast()
   const showToast  = (m, t = 'info') => toast[t]?.(m)
-  const { user, isAdmin, isRequestor, isMarketingManager } = useAuth()
+  const { user, hasRight } = useAuth()
 
   const [c, setC] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -92,7 +94,10 @@ export default function CampaignDetailPage() {
   // request rework on an already-completed task.
   const myUserId = user?.userId ?? user?.id
   const isOwnerOfCampaign = user && c && myUserId != null && Number(c.requestorId) === Number(myUserId)
-  const canRequestRework = !isMarketingManager && (isAdmin || isOwnerOfCampaign)
+  const canRequestRework = hasRight(Rights.REQUEST_REQUESTOR_REWORK) &&
+    !hasRight(Rights.REVIEW_MANAGER_QC) &&
+    isOwnerOfCampaign &&
+    myUserId != null
 
   // Bookmark
   const [bookmarked, setBookmarked]   = useState(false)
@@ -169,7 +174,7 @@ export default function CampaignDetailPage() {
             {bookmarked ? 'Bookmarked' : 'Bookmark'}
           </button>
           {/* Clone */}
-          {(isRequestor || isAdmin) && (
+          {hasRight(Rights.CLONE_OWN_CAMPAIGN) && (
             <button
               onClick={handleClone}
               disabled={cloning}
@@ -552,14 +557,8 @@ function PriorityBadge({ v }) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Parses target_location (stored as JSON array or plain string) into readable text. */
 function fmtTargetLocation(raw) {
-  if (!raw) return ''
-  try {
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed)) return parsed.join(', ')
-  } catch { /* fall through */ }
-  return raw
+  return formatTargetLocations(raw)
 }
 
 /**

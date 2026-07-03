@@ -1,31 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Client } from '@stomp/stompjs'
 import { tokenStorage } from '../api/client'
+import { buildWsUrl } from '../config/backendUrl'
 
 const MAX_RETRIES  = 4
 const BASE_DELAY   = 3_000   // 3 s → 6 s → 12 s → 24 s
 const MAX_DELAY    = 30_000  // cap at 30 s
-
-/**
- * Derives the backend WebSocket URL from VITE_API_BASE_URL.
- *
- * Returns null when the env var is a relative URL (e.g. "/api" used for a
- * Vercel rewrite proxy) because relative URLs cannot be upgraded to an
- * absolute WebSocket URL — attempting it would silently connect to the
- * frontend host instead of the backend.
- */
-function buildWsUrl() {
-  const raw = (import.meta.env.VITE_API_BASE_URL || 'https://exemplify-kinsman-prison.ngrok-free.dev/')
-  //  const raw = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/')
-    .trim()
-    .replace(/\/+$/, '')
-    .replace(/\/api$/, '')
-
-  // Relative URLs (start with "/") cannot be turned into a valid ws(s):// URL.
-  if (!raw.startsWith('http://') && !raw.startsWith('https://')) return null
-
-  return raw.replace(/^http/, 'ws') + '/ws'
-}
 
 /**
  * Real-time chat hook using STOMP over native WebSocket.

@@ -11,6 +11,7 @@ import AssetPanel from '../../components/AssetPanel'
 import AppSelect from '../../components/AppSelect'
 import Pagination from '../../components/Pagination'
 import { useAuth } from '../../auth/AuthContext'
+import { Rights } from '../../constants/rights'
 
 /**
  * Module 3 — Employee Dashboard.
@@ -24,8 +25,8 @@ export default function MyTasksPage() {
   const navigate = useNavigate()
   const toast    = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
-  const { hasRole, user } = useAuth()
-  const isGraphicDesigner = hasRole('Graphic Designer')
+  const { user, hasRight } = useAuth()
+  const canRequestSupportingContent = hasRight(Rights.REQUEST_SUPPORTING_CONTENT)
 
   const VALID_FILTERS = ['OPEN', 'QC', 'DONE', 'HELD', 'CANCELLED', 'ALL']
   const initialFilter = () => {
@@ -432,7 +433,7 @@ export default function MyTasksPage() {
                   onWorkerUnhold={() => workerUnhold(t)}
                   onCommentAnswered={() => refresh()}
                   onCollaborate={() => handleCollaborate(t)}
-                  isGraphicDesigner={isGraphicDesigner}
+                  isGraphicDesigner={canRequestSupportingContent}
                   onRequestContent={() => requestContent(t)}
                   requestingContent={requestingContentId === t.taskId}
                 />
@@ -518,12 +519,8 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
   const isHeld       = task.status === 'HELD'
   // Self-held tasks (the worker put themselves on hold) have active comments.
   const isSelfHeld   = isHeld && task.activeComments?.length > 0
-  // Queue rule: up to 3 tasks can be started simultaneously.
-  // REWORK tasks may be started from anywhere in the queue (they are urgent
-  // corrections) — they only respect the 3-task cap.
-  // ASSIGNED tasks still follow the position rule: only the top
-  // (3 − inFlight) slots get a Start button.
-  const canStart = !hasInFlight && ((isAssigned && isNextUp) || isRework)
+  // Queue rule: max 3 tasks IN_PROGRESS at once; any ASSIGNED/REWORK may start when under cap.
+  const canStart = isNextUp
   const isLocked = (isAssigned || isRework) && !canStart
   // A task is "deactivated" when its parent campaign was rejected/completed
   // out from under it but the task row hasn't been swept to CANCELLED yet
@@ -628,11 +625,11 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
               title={
                 hasInFlight
                   ? 'You already have 3 tasks active. Complete one before starting another.'
-                  : 'Start one of the top tasks in your queue first.'
+                  : 'This task cannot be started right now.'
               }
             >
               <Icon name="lock" className="h-3.5 w-3.5" />
-              {hasInFlight ? 'Locked — 3 tasks active' : 'Locked — start a top task first'}
+              {hasInFlight ? 'Locked — 3 tasks active' : 'Locked'}
             </span>
           )}
           {isActiveWork && (

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { Rights } from '../constants/rights'
+import { ADMIN_CONFIG_RIGHTS, REQUESTOR_RIGHTS } from '../constants/navAccess'
 import campaignsApi from '../api/campaigns'
 import tasksApi from '../api/tasks'
 import managerApi from '../api/manager'
@@ -18,27 +20,17 @@ import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts'
  *   - Admin:                  same ops overview as Marketing Manager + admin quick-access links
  */
 export default function DashboardPage() {
-  const {
-    user, isAdmin, isRequestor, isMarketingManager, isHead, isRegionalManager, isWorker,
-  } = useAuth()
+  const { user, hasRight, hasAnyRight } = useAuth()
 
-  // Operational pipeline view — Marketing Manager only.
-  // Admin alone does NOT see this (consistent with sidebar isolation):
-  // they must also hold the Marketing Manager role.
-  const showOpsWidgets = isMarketingManager
+  const showOpsWidgets = hasRight(Rights.ACCESS_MANAGER_TOOLS)
 
-  // Admin-only extras (quick-access links to admin pages)
-  const showAdminExtras = isAdmin
+  const showAdminExtras = hasAnyRight(...ADMIN_CONFIG_RIGHTS)
 
-  // Worker widgets: anyone who holds at least one execution role, even if they
-  // also hold a manager/admin role (multi-role aware via isWorker).
-  const showWorkerWidgets = isWorker
+  const showWorkerWidgets = hasRight(Rights.VIEW_MY_TASKS)
 
-  // Request widgets: anyone who submits briefs (mirrors sidebar showRequests)
-  const showRequestWidgets = isRequestor || isHead || isRegionalManager
+  const showRequestWidgets = hasAnyRight(...REQUESTOR_RIGHTS)
 
-  // Whether to show the "New Request" CTA (same set of roles that can submit)
-  const canSubmitRequest = isRequestor || isHead || isRegionalManager
+  const canSubmitRequest = hasRight(Rights.CREATE_CAMPAIGN)
 
   const [campaigns,            setCampaigns]            = useState([])
   const [tasks,                setTasks]                = useState([])
@@ -180,7 +172,7 @@ export default function DashboardPage() {
         {/* Right: actions */}
         <div className="flex items-center gap-3">
           {/* QC queue shortcut — Marketing Manager only */}
-          {isMarketingManager && (
+          {hasRight(Rights.REVIEW_MANAGER_QC) && (
             <Link
               to="/manager/qc-review"
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200
@@ -517,8 +509,8 @@ function KpiCard({ to, tone = 'brand', icon, label, value, detail, progress, spa
 
         {/* Sparkline — compact, right-aligned */}
         {chartData.length > 1 && (
-          <div className="h-10 w-20 shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-10 w-20 shrink-0 min-w-[80px]">
+            <ResponsiveContainer width={80} height={40} minWidth={0}>
               <AreaChart data={chartData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id={`grad-${tone}`} x1="0" y1="0" x2="0" y2="1">

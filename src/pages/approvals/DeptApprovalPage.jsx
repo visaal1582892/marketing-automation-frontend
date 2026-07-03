@@ -7,7 +7,7 @@ import Icon from '../../components/Icon'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
 
 export default function DeptApprovalPage() {
-  const { user, isHead } = useAuth()
+  const { user } = useAuth()
   const toast            = useToast()
   const showToast        = (msg, type = 'info') => toast[type]?.(msg)
   const location         = useLocation()
@@ -78,7 +78,7 @@ export default function DeptApprovalPage() {
     try {
       if (action === 'approve') {
         await campaignsApi.deptApprove(selected.campaignId)
-        showToast('Request approved ó sent to Marketing Head.', 'success')
+        showToast('Request approved ù sent to Marketing Head.', 'success')
       } else {
         if (!reason.trim()) { showToast('Please provide a rejection reason.', 'error'); setSaving(false); return }
         await campaignsApi.deptReject(selected.campaignId, reason)
@@ -96,10 +96,8 @@ export default function DeptApprovalPage() {
     }
   }
 
-  const roleLabel = isHead ? 'Department Head' : 'Regional Manager'
-  const scope     = isHead
-    ? `Showing requests from your department (${user?.department || 'ó'}) awaiting your approval.`
-    : 'Showing requests from departments without a designated Head, awaiting your approval.'
+  const roleLabel = 'Regional Manager'
+  const scope     = 'Showing requests from departments awaiting your approval.'
 
   return (
     <div className="space-y-5">
@@ -127,7 +125,7 @@ export default function DeptApprovalPage() {
 
       {tab === 'pending' && (
         loading ? (
-          <p className="text-center text-slate-400 py-12 text-sm">LoadingÖ</p>
+          <p className="text-center text-slate-400 py-12 text-sm">Loadingù</p>
         ) : pending.length === 0 ? (
           <EmptyState />
         ) : (
@@ -160,9 +158,9 @@ export default function DeptApprovalPage() {
           </div>
 
           {loadingHistory ? (
-            <p className="text-center text-slate-400 py-12 text-sm">Loading historyÖ</p>
+            <p className="text-center text-slate-400 py-12 text-sm">Loading historyù</p>
           ) : filteredHistory.length === 0 ? (
-            <EmptyState message="No decisions yet ó campaigns you approve or reject will appear here." />
+            <EmptyState message="No decisions yet ù campaigns you approve or reject will appear here." />
           ) : (
             <HistoryTable
               campaigns={filteredHistory}
@@ -224,10 +222,10 @@ function PendingTable({ campaigns, onAction, onViewBrief }) {
           {campaigns.map((c) => (
             <tr key={c.campaignId} className="hover:bg-slate-50/60 transition">
               <td className="px-4 py-3 text-slate-500 font-mono text-xs">#{c.campaignId}</td>
-              <td className="px-4 py-3 font-medium text-slate-800">{c.businessObjective || 'ó'}</td>
+              <td className="px-4 py-3 font-medium text-slate-800">{c.businessObjective || 'ù'}</td>
               <td className="px-4 py-3 text-slate-600">{c.requestorName}</td>
-              <td className="px-4 py-3 text-slate-600">{c.departmentName || 'ó'}</td>
-              <td className="px-4 py-3 text-slate-500 text-xs">{c.campaignTypeName || 'ó'}</td>
+              <td className="px-4 py-3 text-slate-600">{c.departmentName || 'ù'}</td>
+              <td className="px-4 py-3 text-slate-500 text-xs">{c.campaignTypeName || 'ù'}</td>
               <td className="px-4 py-3"><PriorityBadge v={c.priority} /></td>
               <td className="px-4 py-3 text-slate-500 text-xs">{fmtDateTime(c.createdAt)}</td>
               <td className="px-4 py-3">
@@ -275,17 +273,17 @@ export function HistoryTable({ campaigns, stage, onViewBrief }) {
               <td className="px-4 py-3 text-slate-500 font-mono text-xs">#{c.campaignId}</td>
               <td className="px-4 py-3 font-medium text-slate-800">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span>{c.businessObjective || 'ó'}</span>
+                  <span>{c.businessObjective || 'ù'}</span>
                   <PriorityBadge v={c.priority} />
                 </div>
               </td>
               <td className="px-4 py-3 text-slate-600">{c.requestorName}</td>
-              <td className="px-4 py-3 text-slate-600">{c.departmentName || 'ó'}</td>
+              <td className="px-4 py-3 text-slate-600">{c.departmentName || 'ù'}</td>
               <td className="px-4 py-3"><DecisionBadge v={c[decisionField]} /></td>
               <td className="px-4 py-3 text-slate-500 text-xs">{fmtDateTime(c[timestampField])}</td>
               <td className="px-4 py-3 text-slate-600 text-xs max-w-[300px]">
                 {c[decisionField] === 'REJECTED'
-                  ? <span className="text-red-700 whitespace-pre-wrap">{c.rejectionReason || 'ó'}</span>
+                  ? <span className="text-red-700 whitespace-pre-wrap">{c.rejectionReason || 'ù'}</span>
                   : <StatusBadge v={c.status} />}
               </td>
               <td className="px-4 py-3">
@@ -340,7 +338,7 @@ export function ActionModal({ title, campaign, action, reason, setReason, onConf
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Provide a clear reason for rejectionÖ"
+              placeholder="Provide a clear reason for rejectionù"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm
                 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500 resize-none"
             />
@@ -367,7 +365,7 @@ export function ActionModal({ title, campaign, action, reason, setReason, onConf
               action === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
             }`}
           >
-            {saving ? 'SavingÖ' : action === 'approve' ? 'Confirm Approve' : 'Confirm Reject'}
+            {saving ? 'Savingù' : action === 'approve' ? 'Confirm Approve' : 'Confirm Reject'}
           </button>
         </div>
       </div>
@@ -442,7 +440,7 @@ export function DecisionBadge({ v }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>
       {v && <Icon name={icon[v]} className="h-3 w-3" />}
-      {label[v] || 'ó'}
+      {label[v] || 'ù'}
     </span>
   )
 }
@@ -469,16 +467,16 @@ function StatusBadge({ v }) {
     REJECTED:                   'Rejected',
   }
   const cls = STYLES[v] || 'bg-slate-100 text-slate-600'
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{LABELS[v] || v || 'ó'}</span>
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{LABELS[v] || v || 'ù'}</span>
 }
 
 function PriorityBadge({ v }) {
   const m = { HIGH: 'bg-red-50 text-red-700 ring-red-200', MEDIUM: 'bg-yellow-50 text-yellow-700 ring-yellow-200', LOW: 'bg-green-50 text-green-700 ring-green-200' }
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || 'ó'}</span>
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[v] || 'bg-slate-100 text-slate-600'}`}>{v || 'ù'}</span>
 }
 
 function fmtDateTime(d) {
-  if (!d) return 'ó'
+  if (!d) return 'ù'
   return new Date(d).toLocaleString('en-IN', {
     day:    '2-digit',
     month:  'short',
@@ -487,4 +485,4 @@ function fmtDateTime(d) {
     minute: '2-digit',
   })
 }
-function fmtEnum(v) { return v ? v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'ó' }
+function fmtEnum(v) { return v ? v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'ù' }

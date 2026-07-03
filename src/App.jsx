@@ -1,11 +1,17 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import ProtectedRoute from './auth/ProtectedRoute'
+import { Rights } from './constants/rights'
+import {
+  BUDGET_RIGHTS,
+  REQUESTOR_RIGHTS,
+} from './constants/navAccess'
 import { ToastProvider } from './components/Toast'
 import { NotificationProvider } from './context/NotificationContext'
 import AppLayout from './layouts/AppLayout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
+import UnauthorizedPage from './pages/UnauthorizedPage'
 import MasterHubPage from './pages/admin/MasterHubPage'
 import MasterTablePage from './pages/admin/MasterTablePage'
 import GranularTaskPage from './pages/admin/GranularTaskPage'
@@ -26,6 +32,8 @@ import ManagerQcReviewPage from './pages/manager/ManagerQcReviewPage'
 import RequestorQcReviewPage from './pages/campaigns/RequestorQcReviewPage'
 import TaskManagementPage from './pages/manager/TaskManagementPage'
 import AnalyticsPage from './pages/manager/AnalyticsPage'
+import BudgetPlanningPage from './pages/budget/BudgetPlanningPage'
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -43,17 +51,13 @@ export default function App() {
               }
             >
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-              {/* ── Campaigns ──
-                   The "Requests" list page and form are open to Requestors,
-                   Dept Heads, Regional Managers, and Admins — all of whom can
-                   now submit briefs directly (no approval gate). Requests are
-                   auto-routed to workers on creation.
-                   The detail page (/campaigns/:id) stays open for all users. */}
+              {/* ── Campaigns ── */}
               <Route
                 path="/campaigns"
                 element={
-                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager']}>
+                  <ProtectedRoute requireAnyRight={REQUESTOR_RIGHTS}>
                     <CampaignListPage />
                   </ProtectedRoute>
                 }
@@ -61,7 +65,7 @@ export default function App() {
               <Route
                 path="/campaigns/new"
                 element={
-                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager']}>
+                  <ProtectedRoute requireRight={Rights.CREATE_CAMPAIGN}>
                     <CampaignFormPage />
                   </ProtectedRoute>
                 }
@@ -69,29 +73,33 @@ export default function App() {
               <Route
                 path="/campaigns/completed"
                 element={
-                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager']}>
+                  <ProtectedRoute requireRight={Rights.VIEW_OWN_COMPLETED_TASKS}>
                     <CompletedTasksPage />
                   </ProtectedRoute>
                 }
               />
-              <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
+              <Route
+                path="/campaigns/:id"
+                element={
+                  <ProtectedRoute requireRight={Rights.VIEW_CAMPAIGN_DETAIL}>
+                    <CampaignDetailPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/campaigns/:id/edit"
                 element={
-                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager']}>
+                  <ProtectedRoute requireRight={Rights.EDIT_OWN_CAMPAIGN}>
                     <CampaignFormPage />
                   </ProtectedRoute>
                 }
               />
 
-              {/* ── My Tasks (Module 3 — Employee Dashboard) ──
-                   Only marketing-team workers (the people the routing engine
-                   actually assigns tasks to) ever have a queue to look at, so
-                   approvers, requestors and admin are explicitly excluded. */}
+              {/* ── Worker queue ── */}
               <Route
                 path="/my-tasks"
                 element={
-                  <ProtectedRoute requireWorkerRole>
+                  <ProtectedRoute requireRight={Rights.VIEW_MY_TASKS}>
                     <MyTasksPage />
                   </ProtectedRoute>
                 }
@@ -100,18 +108,19 @@ export default function App() {
                 path="/collaborations"
                 element={
                   <ProtectedRoute
-                    excludeRole={['Head', 'Regional Manager']}
+                    requireRight={Rights.ACCESS_COLLABORATIONS}
+                    excludeRole={['Regional Manager']}
                   >
                     <CollaborationsPage />
                   </ProtectedRoute>
                 }
               />
 
-              {/* ── Manager: Task Management / QC review / Reports ── */}
+              {/* ── Manager ops ── */}
               <Route
                 path="/manager/task-management"
                 element={
-                  <ProtectedRoute requireRole={['Marketing Manager', 'Procurement Manager']}>
+                  <ProtectedRoute requireRight={Rights.ACCESS_MANAGER_TOOLS}>
                     <TaskManagementPage />
                   </ProtectedRoute>
                 }
@@ -119,7 +128,7 @@ export default function App() {
               <Route
                 path="/manager/qc-review"
                 element={
-                  <ProtectedRoute requireRole={['Marketing Manager', 'Procurement Manager']}>
+                  <ProtectedRoute requireRight={Rights.REVIEW_MANAGER_QC}>
                     <ManagerQcReviewPage />
                   </ProtectedRoute>
                 }
@@ -127,7 +136,7 @@ export default function App() {
               <Route
                 path="/requestor-qc-review"
                 element={
-                  <ProtectedRoute requireRole={['Requestor', 'Head', 'Regional Manager']}>
+                  <ProtectedRoute requireRight={Rights.VIEW_REQUESTOR_QC_QUEUE}>
                     <RequestorQcReviewPage />
                   </ProtectedRoute>
                 }
@@ -135,17 +144,29 @@ export default function App() {
               <Route
                 path="/manager/analytics"
                 element={
-                  <ProtectedRoute requireRole={['Marketing Manager', 'Procurement Manager']}>
+                  <ProtectedRoute
+                    requireAnyRight={[Rights.VIEW_ANALYTICS_REPORTS, Rights.ACCESS_MANAGER_TOOLS]}
+                  >
                     <AnalyticsPage />
                   </ProtectedRoute>
                 }
               />
 
-              {/* ── Admin: Master Data — Admin role only ── */}
+              {/* ── Budget & Planning ── */}
+              <Route
+                path="/budget-planning"
+                element={
+                  <ProtectedRoute requireAnyRight={BUDGET_RIGHTS}>
+                    <BudgetPlanningPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* ── Admin config ── */}
               <Route
                 path="/admin/master"
                 element={
-                  <ProtectedRoute requireRole={['Admin']}>
+                  <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
                     <MasterHubPage />
                   </ProtectedRoute>
                 }
@@ -153,7 +174,7 @@ export default function App() {
               <Route
                 path="/admin/master/:slug"
                 element={
-                  <ProtectedRoute requireRole={['Admin']}>
+                  <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
                     <MasterTablePage />
                   </ProtectedRoute>
                 }
@@ -161,7 +182,7 @@ export default function App() {
               <Route
                 path="/admin/granular-tasks"
                 element={
-                  <ProtectedRoute requireRole={['Admin']}>
+                  <ProtectedRoute requireRight={Rights.MANAGE_GRANULAR_TASKS}>
                     <GranularTaskPage />
                   </ProtectedRoute>
                 }
@@ -169,7 +190,7 @@ export default function App() {
               <Route
                 path="/admin/task-mappings"
                 element={
-                  <ProtectedRoute requireRole={['Admin']}>
+                  <ProtectedRoute requireRight={Rights.MANAGE_ROUTING_CONFIG}>
                     <TaskMappingsPage />
                   </ProtectedRoute>
                 }
@@ -177,7 +198,7 @@ export default function App() {
               <Route
                 path="/admin/users"
                 element={
-                  <ProtectedRoute requireRole={['Admin']}>
+                  <ProtectedRoute requireRight={Rights.MANAGE_USERS}>
                     <UserManagementPage />
                   </ProtectedRoute>
                 }
@@ -185,7 +206,7 @@ export default function App() {
               <Route
                 path="/admin/questions"
                 element={
-                  <ProtectedRoute requireRole={['Admin']}>
+                  <ProtectedRoute requireRight={Rights.MANAGE_QUESTION_LIBRARY}>
                     <QuestionMasterPage />
                   </ProtectedRoute>
                 }
@@ -193,7 +214,7 @@ export default function App() {
               <Route
                 path="/admin/qc-routing"
                 element={
-                  <ProtectedRoute requireRole={['Admin']}>
+                  <ProtectedRoute requireRight={Rights.MANAGE_QC_ROUTING}>
                     <QcRoutingPage />
                   </ProtectedRoute>
                 }
@@ -201,7 +222,7 @@ export default function App() {
               <Route
                 path="/admin/notification-templates"
                 element={
-                  <ProtectedRoute requireRole={['Admin']}>
+                  <ProtectedRoute requireRight={Rights.MANAGE_NOTIFICATION_TEMPLATES}>
                     <NotificationTemplatesPage />
                   </ProtectedRoute>
                 }
@@ -209,7 +230,7 @@ export default function App() {
               <Route
                 path="/admin/campaign-mappings/vertical-type"
                 element={
-                  <ProtectedRoute requireRole={['Admin']}>
+                  <ProtectedRoute requireRight={Rights.MANAGE_CAMPAIGN_SPEC_MAPPINGS}>
                     <VerticalTypeMappingPage />
                   </ProtectedRoute>
                 }
@@ -217,7 +238,7 @@ export default function App() {
               <Route
                 path="/admin/campaign-mappings/type-format"
                 element={
-                  <ProtectedRoute requireRole={['Admin']}>
+                  <ProtectedRoute requireRight={Rights.MANAGE_CAMPAIGN_SPEC_MAPPINGS}>
                     <TypeFormatMappingPage />
                   </ProtectedRoute>
                 }

@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { Rights } from '../constants/rights'
+import {
+  BUDGET_RIGHTS,
+  MANAGER_NAV_LINKS,
+  REQUESTOR_RIGHTS,
+  canAccessNavItem,
+} from '../constants/navAccess'
+import HasRight from '../components/HasRight'
 import Icon from '../components/Icon'
 import Logo from '../components/Logo'
 import Modal from '../components/Modal'
@@ -128,14 +136,29 @@ function ChangePasswordModal({ open, onClose }) {
 }
 
 const TOP_NAV = [
-  { to: '/dashboard',    label: 'Dashboard',      icon: 'dashboard'  },
-  { to: '/campaigns',    label: 'My Requests',     icon: 'fileText'   },
-  { to: '/my-tasks',     label: 'My Tasks',        icon: 'clipboard'  },
-  { to: '/collaborations', label: 'Collaborations', icon: 'users'     },
+  { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+  {
+    to: '/campaigns',
+    label: 'My Requests',
+    icon: 'fileText',
+    anyRight: REQUESTOR_RIGHTS,
+  },
+  {
+    to: '/my-tasks',
+    label: 'My Tasks',
+    icon: 'clipboard',
+    right: Rights.VIEW_MY_TASKS,
+  },
+  {
+    to: '/collaborations',
+    label: 'Collaborations',
+    icon: 'users',
+    right: Rights.ACCESS_COLLABORATIONS,
+  },
 ]
 
 export default function AppLayout() {
-  const { user, logout, isAdmin, isHead, isRegionalManager, isMarketingManager, isProcurementManager, isRequestor, isWorker } = useAuth()
+  const { user, logout, hasRight, hasAnyRight } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -145,16 +168,21 @@ export default function AppLayout() {
   const [menuOpen, setMenuOpen]         = useState(false)
   const [managerOpen, setManagerOpen]   = useState(true)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
-  // Admin alone does NOT get Manager Tools — Marketing Manager or Procurement Manager role is required.
-  const showManagerTools = isMarketingManager || isProcurementManager
-  // "My Tasks" is for anyone who holds at least one worker (execution) role,
-  // even if they also hold a manager/admin role.
-  const showMyTasks = isWorker
-  // "Collaborations" is visible to workers, requestors, marketing managers, and admins.
-  const showCollaborations = isWorker || isRequestor || isMarketingManager || isProcurementManager || isAdmin
-  // "Requests" is for anyone who submits briefs. Admin alone does not qualify —
-  // assign the Requestor role as well if an admin needs to submit requests.
-  const showRequests = isRequestor || isHead || isRegionalManager
+
+  const visibleManagerLinks = useMemo(
+    () => MANAGER_NAV_LINKS.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)),
+    [hasRight, hasAnyRight],
+  )
+  const managerGroupLinks = useMemo(
+    () => visibleManagerLinks.filter(item => item.to !== '/manager/analytics'),
+    [visibleManagerLinks],
+  )
+  const showManagerTools = managerGroupLinks.length > 0
+  const showAnalyticsInGroup = showManagerTools &&
+    visibleManagerLinks.some(item => item.to === '/manager/analytics')
+  const showAnalyticsOnly = !showManagerTools &&
+    hasAnyRight(Rights.VIEW_ANALYTICS_REPORTS, Rights.ACCESS_MANAGER_TOOLS)
+  const showBudgetPlanning = hasAnyRight(...BUDGET_RIGHTS)
 
   // Auto-expand groups based on current URL
   useEffect(() => {
@@ -194,6 +222,8 @@ export default function AppLayout() {
     if (location.pathname.startsWith('/manager/task-management'))  return 'Task Management'
     if (location.pathname.startsWith('/manager/qc-review'))        return 'Manager QC Review Queue'
     if (location.pathname.startsWith('/requestor-qc-review'))     return 'Requestor QC Review'
+    if (location.pathname.startsWith('/manager/analytics'))       return 'Analytics'
+    if (location.pathname.startsWith('/budget-planning'))         return 'Budget & Planning'
     if (location.pathname === '/dashboard')                        return 'Dashboard'
     return 'Marketing Automation'
   }, [location.pathname])
@@ -230,12 +260,7 @@ export default function AppLayout() {
 
         {/* Nav */}
         <nav className={`flex-1 overflow-y-auto py-3 ${collapsed ? 'px-1.5 space-y-0.5' : 'px-2 space-y-0.5'}`}>
-          {TOP_NAV.filter(item => {
-            if (item.to === '/my-tasks')        return showMyTasks
-            if (item.to === '/collaborations')  return showCollaborations
-            if (item.to === '/campaigns')       return showRequests
-            return true
-          }).map((item) => (
+          {TOP_NAV.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)).map((item) => (
             <SidebarLink
               key={item.to}
               to={item.to}
@@ -247,27 +272,27 @@ export default function AppLayout() {
             />
           ))}
 
-          {/* Requestor-only: QC Review + Completed Tasks */}
-          {showRequests && (
-            <>
-              <SidebarLink
-                to="/requestor-qc-review"
-                label="Requestor QC Review"
-                icon="checkCircle"
-                collapsed={collapsed}
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <SidebarLink
-                to="/campaigns/completed"
-                label="Completed Tasks"
-                icon="check"
-                collapsed={collapsed}
-                onNavigate={() => setMobileOpen(false)}
-              />
-            </>
+          {hasRight(Rights.VIEW_OWN_COMPLETED_TASKS) && (
+            <SidebarLink
+              to="/campaigns/completed"
+              label="Completed Tasks"
+              icon="check"
+              collapsed={collapsed}
+              onNavigate={() => setMobileOpen(false)}
+            />
           )}
 
-          {/* Marketing-Manager tools */}
+          {hasRight(Rights.VIEW_REQUESTOR_QC_QUEUE) && (
+            <SidebarLink
+              to="/requestor-qc-review"
+              label="Requestor QC Review"
+              icon="checkCircle"
+              collapsed={collapsed}
+              onNavigate={() => setMobileOpen(false)}
+            />
+          )}
+
+          {/* Manager ops — ACCESS_MANAGER_TOOLS only */}
           {showManagerTools && (
             <SidebarGroup
               label="Manager Tools"
@@ -276,42 +301,59 @@ export default function AppLayout() {
               open={managerOpen}
               onToggle={() => setManagerOpen((o) => !o)}
             >
-              <SidebarLink
-                to="/manager/task-management"
-                label="Task Management"
-                icon="fileText"
-                collapsed={collapsed}
-                nested
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <SidebarLink
-                to="/manager/qc-review"
-                label="Manager QC Review"
-                icon="check"
-                collapsed={collapsed}
-                nested
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <SidebarLink
-                to="/manager/analytics"
-                label="Analytics"
-                icon="barChart"
-                collapsed={collapsed}
-                nested
-                onNavigate={() => setMobileOpen(false)}
-              />
+              {managerGroupLinks.map((item) => (
+                <SidebarLink
+                  key={item.to}
+                  to={item.to}
+                  label={item.label}
+                  icon={item.icon}
+                  collapsed={collapsed}
+                  nested
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              ))}
+              {showAnalyticsInGroup && (
+                <SidebarLink
+                  to="/manager/analytics"
+                  label="Analytics"
+                  icon="barChart"
+                  collapsed={collapsed}
+                  nested
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
             </SidebarGroup>
           )}
 
-          {isAdmin && (
+          {showAnalyticsOnly && (
             <SidebarLink
-              to="/admin/master"
-              label="Master"
-              icon="cog"
+              to="/manager/analytics"
+              label="Analytics"
+              icon="barChart"
               collapsed={collapsed}
               onNavigate={() => setMobileOpen(false)}
             />
           )}
+
+          {showBudgetPlanning && (
+            <SidebarLink
+              to="/budget-planning"
+              label="Budget Planning"
+              icon="dollar"
+              collapsed={collapsed}
+              onNavigate={() => setMobileOpen(false)}
+            />
+          )}
+
+          <HasRight right={Rights.MANAGE_MASTER_DATA}>
+            <SidebarLink
+              to="/admin/master"
+              label="Master Data"
+              icon="cog"
+              collapsed={collapsed}
+              onNavigate={() => setMobileOpen(false)}
+            />
+          </HasRight>
         </nav>
 
         {/* Footer: sign out */}
