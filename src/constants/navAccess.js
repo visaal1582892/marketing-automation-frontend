@@ -1,9 +1,8 @@
 import { Rights } from './rights'
 
+/** Gate My Requests nav, /campaigns route, and requestor dashboard widgets. */
 export const REQUESTOR_RIGHTS = [
   Rights.VIEW_OWN_CAMPAIGNS,
-  Rights.CREATE_CAMPAIGN,
-  Rights.VIEW_CAMPAIGN_DETAIL,
 ]
 
 export const ADMIN_CONFIG_RIGHTS = [
