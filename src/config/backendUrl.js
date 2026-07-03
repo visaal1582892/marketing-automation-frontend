@@ -1,6 +1,7 @@
 /**
- * Backend URL helpers — source of truth: VITE_API_BASE_URL in .env.local
- * Example: VITE_API_BASE_URL=http://localhost:8080/
+ * Backend URL helpers — source of truth: VITE_API_BASE_URL
+ *   Dev:  .env.local  (e.g. http://localhost:8080/)
+ *   Prod: .env.production or Vercel Environment Variables (set before build)
  */
 
 function normalizeBackendRoot(raw) {
@@ -10,14 +11,26 @@ function normalizeBackendRoot(raw) {
     .replace(/\/api$/, '')
 }
 
+function configuredBackendRoot() {
+  const configured = import.meta.env.VITE_API_BASE_URL
+  if (!configured || !String(configured).trim()) return ''
+  return normalizeBackendRoot(configured)
+}
+
 /** Backend origin without trailing slash or /api suffix. */
 export function getBackendBaseUrl() {
-  const configured = import.meta.env.VITE_API_BASE_URL
-  if (!configured || !String(configured).trim()) {
-    console.warn('[Config] VITE_API_BASE_URL is not set. Add it to .env.local')
-    return ''
+  const fromEnv = configuredBackendRoot()
+  if (fromEnv) return fromEnv
+
+  // Deployed SPA on Vercel with /api rewrites — same-origin calls when env missing at build.
+  if (import.meta.env.PROD && typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin
   }
-  return normalizeBackendRoot(configured)
+
+  if (import.meta.env.DEV) {
+    console.warn('[Config] VITE_API_BASE_URL is not set. Add it to .env.local')
+  }
+  return ''
 }
 
 /** Axios base URL — always ends with /api */

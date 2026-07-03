@@ -1,6 +1,18 @@
 {
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://exemplify-kinsman-prison.ngrok-free.dev/api/:path*"
+    },
+    {
+      "source": "/ws/:path*",
+      "destination": "https://exemplify-kinsman-prison.ngrok-free.dev/ws/:path*"
+    },
+    {
+      "source": "/ws",
+      "destination": "https://exemplify-kinsman-prison.ngrok-free.dev/ws"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
