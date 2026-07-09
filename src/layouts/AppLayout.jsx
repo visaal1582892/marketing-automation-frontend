@@ -209,6 +209,7 @@ export default function AppLayout() {
     if (location.pathname.startsWith('/admin/task-mappings')) return 'Task Mappings'
     if (location.pathname.startsWith('/admin/questions'))           return 'Question Library'
     if (location.pathname.startsWith('/admin/qc-routing'))                  return 'QC Routing'
+    if (location.pathname.startsWith('/admin/working-hours'))           return 'Working Hours'
     if (location.pathname.startsWith('/admin/notification-templates'))      return 'Notification Templates'
     if (location.pathname.startsWith('/admin/campaign-mappings/vertical-type')) return 'Vertical → Type'
     if (location.pathname.startsWith('/admin/campaign-mappings/type-format'))   return 'Type → Format'

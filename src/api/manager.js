@@ -36,6 +36,9 @@ const managerApi = {
 
   // ── Dashboard KPI sparklines — 7-day daily trend data ────────────────────
   dashboardTrend: () => api.get(`${BASE}/dashboard/trend`),
+
+  /** Scoped manager + requestor QC pending counts for dashboard KPI. */
+  qcSummary: () => api.get(`${BASE}/dashboard/qc-summary`),
 }
 
 export default managerApi

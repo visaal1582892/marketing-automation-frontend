@@ -22,6 +22,7 @@ import QcRoutingPage from './pages/admin/QcRoutingPage'
 import NotificationTemplatesPage from './pages/admin/NotificationTemplatesPage'
 import VerticalTypeMappingPage from './pages/admin/VerticalTypeMappingPage'
 import TypeFormatMappingPage from './pages/admin/TypeFormatMappingPage'
+import WorkingHoursPage from './pages/admin/WorkingHoursPage'
 import CampaignFormPage from './pages/campaigns/CampaignFormPage'
 import CampaignListPage from './pages/campaigns/CampaignListPage'
 import CampaignDetailPage from './pages/campaigns/CampaignDetailPage'
@@ -216,6 +217,14 @@ export default function App() {
                 element={
                   <ProtectedRoute requireRight={Rights.MANAGE_QC_ROUTING}>
                     <QcRoutingPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/working-hours"
+                element={
+                  <ProtectedRoute requireRight={Rights.MANAGE_SYSTEM_SETTINGS}>
+                    <WorkingHoursPage />
                   </ProtectedRoute>
                 }
               />

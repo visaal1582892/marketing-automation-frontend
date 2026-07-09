@@ -35,7 +35,7 @@ export default function DashboardPage() {
   const [campaigns,            setCampaigns]            = useState([])
   const [tasks,                setTasks]                = useState([])
   const [workerCounts,         setWorkerCounts]         = useState({ open: 0, inFlight: 0, qc: 0, done: 0 })
-  const [opsQcTasks,           setOpsQcTasks]           = useState([])
+  const [opsQcSummary,         setOpsQcSummary]         = useState({ managerQcPending: 0, requestorQcPending: 0 })
   const [opsCounts,            setOpsCounts]            = useState({ qcReview: 0, rework: 0, inProgress: 0, completed: 0, assigned: 0, held: 0, cancelled: 0 })
   const [completedTasksCount,  setCompletedTasksCount]  = useState(0)
   const [loading,              setLoading]              = useState(true)
@@ -77,7 +77,7 @@ export default function DashboardPage() {
       // Worker: recent task list for the feed (first page, default size)
       need(showWorkerWidgets, () => tasksApi.listMy().then(r => r.data)),
       // Ops: QC pending (full list — usually small)
-      need(showOpsWidgets,     () => managerApi.pendingTasks().then(r => r.data)),
+      need(showOpsWidgets,     () => managerApi.qcSummary().then(r => r.data)),
       // Ops: per-status counts — fetch size=1 so backend returns totalElements accurately
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'REWORK',      size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'IN_PROGRESS', size: 1 }).then(r => r.data?.totalElements ?? 0)),
@@ -86,7 +86,7 @@ export default function DashboardPage() {
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'HELD',        size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets,     () => managerApi.allTasks({ status: 'CANCELLED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets,     () => managerApi.dashboardTrend().then(r => r.data)),
-    ]).then(([cs, completedTasks, openData, qcData, doneData, ts, qc, rework, inProgress, completed, assigned, held, cancelled, trendData]) => {
+    ]).then(([cs, completedTasks, openData, qcData, doneData, ts, qcSummary, rework, inProgress, completed, assigned, held, cancelled, trendData]) => {
       if (!alive) return
       setCampaignSummary(cs ?? {
         total: 0,
@@ -109,10 +109,9 @@ export default function DashboardPage() {
         done:     toTotal(doneData),
       })
 
-      const qcArr = toArr(qc)
-      setOpsQcTasks(qcArr)
+      setOpsQcSummary(qcSummary ?? { managerQcPending: 0, requestorQcPending: 0 })
       setOpsCounts({
-        qcReview:   toCount(qc),
+        qcReview:   (qcSummary?.managerQcPending ?? 0) + (qcSummary?.requestorQcPending ?? 0),
         rework:     rework     ?? 0,
         inProgress: inProgress ?? 0,
         completed:  completed  ?? 0,
@@ -132,8 +131,8 @@ export default function DashboardPage() {
   const myRequestCounts = campaignSummary
 
   // ── Derived analytics for card detail lines ───────────────────────────────
-  const mgrQcCount = opsQcTasks.filter(t => t.status === 'MANAGER_QC_REVIEW').length
-  const reqQcCount = opsQcTasks.filter(t => t.status === 'REQUESTOR_QC_REVIEW').length
+  const mgrQcCount = opsQcSummary.managerQcPending ?? 0
+  const reqQcCount = opsQcSummary.requestorQcPending ?? 0
 
   // "Active" = everything not yet terminal
   const opsActiveTotal = opsCounts.assigned + opsCounts.inProgress + opsCounts.qcReview + opsCounts.rework + opsCounts.held

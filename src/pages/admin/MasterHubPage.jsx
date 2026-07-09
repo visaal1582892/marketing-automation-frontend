@@ -9,9 +9,11 @@ export default function MasterHubPage() {
 
   const sections = MASTER_HUB_SECTIONS.map(section => ({
     ...section,
-    items: section.items.filter(item =>
-      !item.adminOnly || hasRight(Rights.MANAGE_QC_ROUTING),
-    ),
+    items: section.items.filter(item => {
+      if (item.right) return hasRight(item.right)
+      if (item.adminOnly) return hasRight(Rights.MANAGE_QC_ROUTING)
+      return true
+    }),
   })).filter(section => section.items.length > 0)
 
   return (

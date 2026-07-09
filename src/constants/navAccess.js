@@ -15,6 +15,7 @@ export const ADMIN_CONFIG_RIGHTS = [
   Rights.MANAGE_QC_ROUTING,
   Rights.MANAGE_NOTIFICATION_TEMPLATES,
   Rights.MANAGE_CAMPAIGN_SPEC_MAPPINGS,
+  Rights.MANAGE_SYSTEM_SETTINGS,
 ]
 
 /** Admin master-data config UI — Admin role only in DB mappings. */

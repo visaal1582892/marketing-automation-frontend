@@ -9,6 +9,7 @@ import { Rights } from '../constants/rights'
 import { useToast } from './Toast'
 import { printBrief } from '../utils/printBrief'
 import { formatTargetLocations, getLocationLabel, parseTargetLocations } from '../utils/targetLocations'
+import TaskHistoryTimeline from './TaskHistoryTimeline'
 
 /** Drop answered comment from local campaign snapshot; recompute badge flags. */
 function campaignAfterCommentAnswered(campaign, taskId, commentId) {
@@ -591,7 +592,7 @@ export default function RequestBriefDrawer({
 
                         {/* Task body */}
                         <div className="px-4 py-4 space-y-3">
-                          <TaskTimestamps task={t} />
+                          <TaskHistoryTimeline taskId={t.taskId} task={t} />
 
                           {t.submissionNotes && (
                             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">

@@ -8,6 +8,8 @@ import Icon from '../../components/Icon'
 import { printBrief } from '../../utils/printBrief'
 import { formatTargetLocations } from '../../utils/targetLocations'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
+import TaskHistoryTimeline from '../../components/TaskHistoryTimeline'
+import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
 
 const STATUS_STYLES = {
   IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
@@ -397,10 +399,11 @@ export default function CampaignDetailPage() {
                           {t.requestorReworkCount}× requestor rework
                         </span>
                       )}
+                      <ReassignedBadge assignmentCount={t.assignmentCount} />
                     </div>
-                    <p className="text-xs text-slate-500">
-                      {t.assigneeName ? `Assigned to ${t.assigneeName}` : 'Unassigned'}
-                      {t.totalTimeLoggedMinutes != null && ` · ${t.totalTimeLoggedMinutes} min logged`}
+                    <p className="text-xs text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {t.assigneeName ? <span>Assigned to {t.assigneeName}</span> : <span>Unassigned</span>}
+                      <TimeLoggedBadge task={t} currentUserId={myUserId} />
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap shrink-0">
@@ -428,7 +431,7 @@ export default function CampaignDetailPage() {
 
                 {/* Task body */}
                 <div className="px-4 py-4 space-y-3">
-                  <TaskTimestamps task={t} />
+                  <TaskHistoryTimeline taskId={t.taskId} task={t} />
                   {t.submissionNotes && (
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
@@ -571,54 +574,6 @@ function fmtMultiValue(v) {
 }
 
 function fmtDate(d) { return d ? new Date(d).toLocaleString('en-IN') : '' }
-
-function TaskTimestamps({ task }) {
-  const fmt = ts => new Date(ts).toLocaleString('en-IN', {
-    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-  })
-  const steps = [
-    { key: 'assigned',  label: 'Assigned',  ts: task.assignedAt || task.createdAt, done: { dot: 'bg-slate-500',   line: 'bg-slate-300',   text: 'text-slate-600',   card: 'bg-slate-50 border-slate-200'   } },
-    { key: 'accepted',  label: 'Accepted',  ts: task.acceptedAt,                   done: { dot: 'bg-blue-500',    line: 'bg-blue-200',    text: 'text-blue-700',    card: 'bg-blue-50 border-blue-200'     } },
-    { key: 'submitted', label: 'Submitted', ts: task.submittedAt,                  done: { dot: 'bg-violet-500',  line: 'bg-violet-200',  text: 'text-violet-700',  card: 'bg-violet-50 border-violet-200' } },
-    { key: 'mgr_approved',  label: 'Mgr Approved',  ts: task.managerApprovedAt,   done: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' } },
-    { key: 'req_approved',  label: 'Req Approved',  ts: task.requestorApprovedAt, done: { dot: 'bg-green-600',   line: 'bg-green-200',   text: 'text-green-700',   card: 'bg-green-50 border-green-200'     } },
-  ]
-  return (
-    <div className="overflow-x-auto pb-0.5">
-      <div className="flex items-stretch min-w-max gap-0">
-        {steps.map((step, i) => {
-          const active = !!step.ts
-          const isLast = i === steps.length - 1
-          const s = step.done
-          return (
-            <div key={step.key} className="flex items-center">
-              <div className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 transition ${
-                active ? s.card : 'bg-slate-50 border-slate-100'
-              }`}>
-                <span className={`flex h-4 w-4 items-center justify-center rounded-full shrink-0 ${
-                  active ? `${s.dot} text-white` : 'bg-slate-200 text-slate-400'
-                }`}>
-                  <Icon name="check" className="h-2.5 w-2.5" strokeWidth={3} />
-                </span>
-                <div className="leading-tight">
-                  <div className={`text-[9px] font-bold uppercase tracking-wider ${active ? s.text : 'text-slate-400'}`}>
-                    {step.label}
-                  </div>
-                  <div className={`text-[10px] font-semibold whitespace-nowrap ${active ? 'text-slate-700' : 'text-slate-400'}`}>
-                    {active ? fmt(step.ts) : '—'}
-                  </div>
-                </div>
-              </div>
-              {!isLast && (
-                <div className={`h-px w-3 shrink-0 ${active ? s.line : 'bg-slate-200'}`} />
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
 
 // ─── Requestor Rework Modal ───────────────────────────────────────────────────
 

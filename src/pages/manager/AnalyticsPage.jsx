@@ -200,6 +200,14 @@ export default function AnalyticsPage() {
     }))
   }, [data])
 
+  const timeEfficiencyData = useMemo(() => {
+    if (!data?.timeEfficiencyByType) return []
+    return data.timeEfficiencyByType.map(r => ({
+      name:    r.name,
+      Minutes: Number(r.minutes),
+    }))
+  }, [data])
+
   const totals = data?.totals ?? {}
   const completionRate = totals.tasks > 0
     ? Math.round((totals.completed / totals.tasks) * 100) : 0
@@ -234,16 +242,23 @@ export default function AnalyticsPage() {
 
       {/* ── KPI row ── */}
       {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} h="h-32" />)}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} h="h-32" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <KpiCard label="Total Campaigns"   value={totals.campaigns ?? 0}     icon="megaphone"  accent="brand"   />
           <KpiCard label="Tasks Completed"   value={totals.completed  ?? 0}    icon="checkCircle" accent="emerald" sub={`${completionRate}% completion rate`} />
           <KpiCard label="Pending QC Review" value={totals.pendingQc  ?? 0}    icon="eye"        accent="violet"  />
           <KpiCard label="In Rework"         value={totals.inRework   ?? 0}    icon="refresh"    accent="amber"   />
           <KpiCard label="Avg Task Duration" value={fmtMins(totals.avgMinutes)} icon="clock"     accent="blue"    sub="per completed task" />
+          <KpiCard
+            label="Avg Touches per Task"
+            value={data?.avgTouchesPerTask ?? '—'}
+            icon="list"
+            accent="indigo"
+            sub="assignment cycles per task"
+          />
         </div>
       )}
 
@@ -420,6 +435,84 @@ export default function AnalyticsPage() {
             </ResponsiveContainer>
           )}
         </Section>
+      </div>
+
+      {/* ── Time efficiency + bottlenecks ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Section
+          title="Time Efficiency"
+          sub="Total time logged across all assignment cycles, by task type"
+        >
+          {loading ? <Skeleton /> : timeEfficiencyData.length === 0 ? (
+            <p className="text-center text-slate-400 text-sm py-8">No time data yet.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={timeEfficiencyData} layout="vertical" margin={{ top: 4, right: 16, bottom: 0, left: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false}
+                       tickFormatter={v => fmtMins(v)} />
+                <YAxis type="category" dataKey="name" width={100}
+                       tick={{ fontSize: 10, fill: '#475569' }} tickLine={false} axisLine={false} />
+                <Tooltip content={<ChartTooltip valueLabel="Minutes" />} formatter={v => fmtMins(v)} />
+                <Bar dataKey="Minutes" fill={COLORS.cyan} radius={[0, 6, 6, 0]} maxBarSize={28} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </Section>
+
+        {(loading || (data?.bottlenecks?.length > 0)) && (
+          <Section
+            title="Rework Leaders & Bottlenecks"
+            sub="Tasks with 3+ assignment cycles — reassignment or rework churn"
+          >
+            {loading ? <Skeleton h="h-48" /> : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      {['Task', 'Current Assignee', 'Status', 'Cycles', 'Total Time'].map(h => (
+                        <th key={h} className="pb-2.5 pr-4 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 whitespace-nowrap">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {data.bottlenecks.map((r, i) => (
+                      <tr key={r.task_id ?? i} className="hover:bg-slate-50/60 transition">
+                        <td className="py-3 pr-4">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full
+                                             bg-sky-100 text-[10px] font-bold text-sky-700">
+                              {i + 1}
+                            </span>
+                            <span className="font-semibold text-slate-800">{r.task_name || r.task_id}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4 text-slate-600">{r.assignee || '—'}</td>
+                        <td className="py-3 pr-4">
+                          <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                            {STATUS_LABEL[r.status] || r.status}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-50
+                                           px-2.5 py-0.5 text-xs font-bold text-sky-700 ring-1 ring-sky-200">
+                            <Icon name="refresh" className="h-2.5 w-2.5" />
+                            {r.cycleCount}×
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4 text-slate-600 tabular-nums whitespace-nowrap">
+                          {fmtMins(Number(r.totalMinutes))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Section>
+        )}
       </div>
 
       {/* ── Team performance table ── */}

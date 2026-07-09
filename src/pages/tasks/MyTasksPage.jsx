@@ -6,18 +6,21 @@ import collaborationApi from '../../api/collaboration'
 import Icon from '../../components/Icon'
 import { useToast } from '../../components/Toast'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
+import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
 import campaignsApi from '../../api/campaigns'
 import AssetPanel from '../../components/AssetPanel'
 import AppSelect from '../../components/AppSelect'
 import Pagination from '../../components/Pagination'
 import { useAuth } from '../../auth/AuthContext'
 import { Rights } from '../../constants/rights'
+import workingHoursApi from '../../api/workingHours'
+import { normalizeSnapshot, formatWorkingElapsed } from '../../utils/workingHours'
 
 /**
  * Module 3 — Employee Dashboard.
  *
  *  - Lists every task assigned to the logged-in user, ordered by priority.
- *  - "Accept" starts a server-side timer; the elapsed time updates every second.
+ *  - "Accept" starts a server-side timer; the elapsed time updates every minute.
  *  - "Submit for QC" stops the timer and lets the user upload an asset URL + notes.
  */
 export default function MyTasksPage() {
@@ -67,6 +70,8 @@ export default function MyTasksPage() {
   // Task-specific dynamic questions and worker's current answers
   const [taskQuestions, setTaskQuestions] = useState([])
   const [taskAnswers,   setTaskAnswers]   = useState({}) // { [questionId]: string }
+
+  const [hoursSnapshot, setHoursSnapshot] = useState(null)
 
   const PAGE_SIZE = 10
   const debouncedSearch = useDebounce(search, 500)
@@ -122,13 +127,21 @@ export default function MyTasksPage() {
     load(0)
   }, [debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Live "wall clock" used by the timer badge ───────────────────────────
+  useEffect(() => {
+    let alive = true
+    workingHoursApi.getSnapshot()
+      .then((data) => { if (alive) setHoursSnapshot(normalizeSnapshot(data)) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [])
+
+  // ── Live clock for active timer — ticks every minute (XXh : YYm display) ─
   const [now, setNow]   = useState(() => Date.now())
   const hasInFlight     = tasks.some(t => t.status === 'IN_PROGRESS')
   useEffect(() => {
     if (!hasInFlight) return
     setNow(Date.now())
-    const id = setInterval(() => setNow(Date.now()), 1000)
+    const id = setInterval(() => setNow(Date.now()), 60000)
     return () => clearInterval(id)
   }, [hasInFlight])
 
@@ -422,6 +435,7 @@ export default function MyTasksPage() {
                   key={t.taskId}
                   task={t}
                   now={now}
+                  hoursSnapshot={hoursSnapshot}
                   busy={savingId === t.taskId}
                   closed={isTaskClosed(t)}
                   isNextUp={t.canStart}
@@ -436,6 +450,7 @@ export default function MyTasksPage() {
                   isGraphicDesigner={canRequestSupportingContent}
                   onRequestContent={() => requestContent(t)}
                   requestingContent={requestingContentId === t.taskId}
+                  currentUserId={user?.userId ?? user?.id}
                 />
               ))}
             </div>
@@ -509,9 +524,9 @@ export default function MyTasksPage() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onCommentAnswered, onCollaborate, isGraphicDesigner, onRequestContent, requestingContent }) {
+function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onCommentAnswered, onCollaborate, isGraphicDesigner, onRequestContent, requestingContent, currentUserId }) {
   const [showAssets, setShowAssets] = useState(false)
-  const elapsed      = formatElapsed(task, now)
+  const { display: timerDisplay, outsideHours, isRunning } = formatWorkingElapsed(task, now, hoursSnapshot)
   const isAssigned   = task.status === 'ASSIGNED' && !closed
   const isRework     = task.status === 'REWORK' && !closed
   const isInProgress = task.status === 'IN_PROGRESS' && !closed
@@ -568,6 +583,7 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
                 Requestor {task.requestorReworkCount}×
               </span>
             )}
+            <ReassignedBadge assignmentCount={task.assignmentCount} />
             {isHeld && (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
                 <Icon name="pause" className="h-3 w-3" />
@@ -595,19 +611,33 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
             {task.contentAssigneeName && (
               <span>• Content requested from {task.contentAssigneeName}</span>
             )}
+            <span className="w-full sm:w-auto">
+              <TimeLoggedBadge task={task} currentUserId={currentUserId} />
+            </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           {isActiveWork && (
-            <span
-              key={task.acceptedAt || task.startedAt || task.taskId}
-              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 tabular-nums"
-              title={task.acceptedAt ? `Accepted ${fmtDateTime(task.acceptedAt)}` : 'Timer running'}
-            >
-              <Icon name="clock" className="h-3.5 w-3.5" />
-              {elapsed || '00:00'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span
+                key={task.acceptedAt || task.startedAt || task.taskId}
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold tabular-nums ring-1 ${
+                  outsideHours
+                    ? 'bg-slate-100 text-slate-600 ring-slate-200'
+                    : 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                }`}
+                title={task.acceptedAt ? `Accepted ${fmtDateTime(task.acceptedAt)}` : 'Timer running'}
+              >
+                <Icon name="clock" className="h-3.5 w-3.5" />
+                <TaskTimerDisplay display={timerDisplay} isRunning={isRunning} />
+              </span>
+              {outsideHours && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 ring-1 ring-amber-200">
+                  ⏸ Paused (Outside Working Hours)
+                </span>
+              )}
+            </div>
           )}
           {canStart && (
             <button
@@ -727,9 +757,8 @@ function TaskCard({ task, now, busy, closed, isNextUp, hasInFlight, onAccept, on
         )
       })()}
 
-      {task.totalTimeLoggedMinutes != null && (
+      {(isInProgress || (task.fileUrls?.length > 0)) && (
         <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5 flex flex-wrap items-center gap-4 text-xs text-slate-600">
-          <span><span className="text-slate-400">Time logged:</span> {task.totalTimeLoggedMinutes} min</span>
           <button
             onClick={() => setShowAssets(true)}
             className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-200 transition"
@@ -967,44 +996,26 @@ function SubmitModal({
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Live task timer (XXh : YYm, pulsing when actively accruing) ─────────────
 
-// Plain helper — NOT a React hook (no state, no lifecycle). The previous name
-// `useElapsed` falsely tripped React's hook lint since the function is called
-// conditionally inside TaskCard. Renamed to `formatElapsed` so the lint
-// honestly applies to actual hooks only.
-//
-// Returns the wall-clock elapsed time since `startedAt` for IN_PROGRESS
-// tasks. `now` is the parent's reactive 1-Hz wall clock — passing it in
-// (rather than calling Date.now() directly) is what makes the timer
-// actually re-render every second, since React tracks props.
-function formatElapsed(task, now) {
-  if (task.status !== 'IN_PROGRESS') return ''
-  const start = parseTs(task.acceptedAt) ?? parseTs(task.startedAt)
-  if (start == null) return '00:00'
-  const ms    = Math.max(0, (now ?? Date.now()) - start)
-  const total = Math.floor(ms / 1000)
-  const h = Math.floor(total / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  if (h > 0) return `${h}h ${pad(m)}m ${pad(s)}s`
-  return `${pad(m)}:${pad(s)}`
-}
-function pad(n) { return String(n).padStart(2, '0') }
-function parseTs(v) {
-  if (!v) return null
-  // Backend serializes LocalDateTime as ISO-8601 without an offset, e.g.
-  // "2026-04-27T11:00:00". `new Date(...)` interprets that as local time —
-  // which is exactly what we want since both server and browser run in IST.
-  // Some payloads occasionally arrive as `[y, m, d, ...]` arrays (Jackson
-  // default for older configs); guard against that too.
-  if (Array.isArray(v) && v.length >= 3) {
-    const [y, mo, d, hh = 0, mm = 0, ss = 0] = v
-    const t = new Date(y, (mo || 1) - 1, d || 1, hh, mm, ss).getTime()
-    return Number.isNaN(t) ? null : t
-  }
-  const t = new Date(v).getTime()
-  return Number.isNaN(t) ? null : t
+function TaskTimerDisplay({ display, isRunning }) {
+  const [hoursPart = '0h', minutesPart = '0m'] = String(display || '0h : 0m').split(' : ')
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {isRunning && (
+        <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden="true">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        </span>
+      )}
+      <span aria-live="polite">
+        {hoursPart}
+        <span className={isRunning ? 'animate-pulse' : ''}> : </span>
+        {minutesPart}
+      </span>
+    </span>
+  )
 }
 
 // ─── Comment & Hold modal ─────────────────────────────────────────────────────

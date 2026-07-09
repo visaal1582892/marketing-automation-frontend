@@ -8,6 +8,8 @@ import AssetPanel from '../../components/AssetPanel'
 import DateRangePicker from '../../components/DateRangePicker'
 import Pagination from '../../components/Pagination'
 import useDebounce from '../../hooks/useDebounce'
+import { useAuth } from '../../auth/AuthContext'
+import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
 
 const PAGE_SIZE = 20
 
@@ -243,6 +245,8 @@ export default function RequestorQcReviewPage() {
 // ─── Task Card ───────────────────────────────────────────────────────────────
 
 function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
+  const { user } = useAuth()
+  const currentUserId = user?.userId ?? user?.id
   const fmt = ts => new Date(ts).toLocaleString('en-IN', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
   })
@@ -265,6 +269,7 @@ function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
               {task.requestorReworkCount}× rework
             </span>
           )}
+          <ReassignedBadge assignmentCount={task.assignmentCount} />
         </div>
         <div className="flex items-center gap-2">
           {task.managerApprovedAt && (
@@ -300,11 +305,11 @@ function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
               )}
               <span>
                 by <span className="font-semibold text-slate-700">{task.assigneeName || `User ${task.assignedTo}`}</span>
-                {task.totalTimeLoggedMinutes != null && ` · ${task.totalTimeLoggedMinutes} min`}
               </span>
               {task.requestorName && (
                 <span>· Req: <span className="font-semibold text-slate-700">{task.requestorName}</span></span>
               )}
+              <TimeLoggedBadge task={task} currentUserId={currentUserId} />
             </div>
           </div>
 

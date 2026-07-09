@@ -10,6 +10,7 @@ import { useAuth } from '../../auth/AuthContext'
 import Pagination from '../../components/Pagination'
 import AssetPanel, { CHAT_OPEN_STATUSES, UploadRow, isImage, isVideo, displayName, openUrl, triggerDownload } from '../../components/AssetPanel'
 import useDebounce from '../../hooks/useDebounce'
+import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -440,6 +441,8 @@ function AddPeopleModal({ task, onClose, onDone }) {
 
 function CollabCard({ task, onChat, onAssets, onBrief, onRefresh }) {
   const toast               = useToast()
+  const { user }            = useAuth()
+  const currentUserId       = user?.userId ?? user?.id
   const role                = task.myRole || 'COLLABORATOR'
   const cfg                 = rc(role)
   const canManage           = ['OWNER', 'ADMIN', 'MANAGER'].includes(role)
@@ -510,6 +513,10 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh }) {
               {task.taskTypeName}
             </span>
           )}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <ReassignedBadge assignmentCount={task.assignmentCount} />
+            <TimeLoggedBadge task={task} currentUserId={currentUserId} />
+          </div>
         </div>
 
         {/* ── People: side-by-side ── */}

@@ -7,6 +7,7 @@ import useDebounce from '../../hooks/useDebounce'
 import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
+import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
 import { useAuth } from '../../auth/AuthContext'
@@ -1158,11 +1159,14 @@ const TaskRow = memo(function TaskRow({ task: t, alt, autoMode = false, holding,
       </td>
 
       <td className={cellCls}>
-        <span className={`inline-flex max-w-full truncate items-center rounded-full px-2 py-0.5 text-xs
-                          font-medium ring-1 ${STATUS_STYLES[t.status] || 'bg-slate-100 text-slate-600'}`}
-              title={STATUS_LABELS[t.status] || t.status}>
-          {STATUS_LABELS[t.status] || t.status}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className={`inline-flex max-w-full truncate items-center rounded-full px-2 py-0.5 text-xs
+                            font-medium ring-1 w-fit ${STATUS_STYLES[t.status] || 'bg-slate-100 text-slate-600'}`}
+                title={STATUS_LABELS[t.status] || t.status}>
+            {STATUS_LABELS[t.status] || t.status}
+          </span>
+          <ReassignedBadge assignmentCount={t.assignmentCount} />
+        </div>
       </td>
 
       <td className={`${cellCls} text-center`}>
@@ -1193,6 +1197,7 @@ const TaskRow = memo(function TaskRow({ task: t, alt, autoMode = false, holding,
         <span className="block truncate" title={t.assignedAt ? fmtDate(t.assignedAt) : undefined}>
           {t.assignedAt ? fmtDate(t.assignedAt) : <span className="text-slate-300">—</span>}
         </span>
+        <TimeLoggedBadge task={t} />
       </td>
 
       <td className={`${cellCls} text-xs text-slate-600`}>

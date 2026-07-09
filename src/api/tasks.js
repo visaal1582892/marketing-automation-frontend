@@ -15,6 +15,9 @@ const tasksApi = {
 
   getById: (id) => api.get(`${BASE}/${id}`),
 
+  /** All assignment cycles for accountability timeline. */
+  getAssignmentHistory: (taskId) => api.get(`${BASE}/${taskId}/history`),
+
   /** Click "Accept" — starts the timer (status → IN_PROGRESS). */
   accept: (id) => api.patch(`${BASE}/${id}/accept`),
 

@@ -75,6 +75,16 @@ export const MASTER_HUB_SECTIONS = [
     ],
   },
   {
+    id: 'system',
+    title: 'System Settings',
+    description: 'Working hours, week-offs, and holiday calendar for time tracking.',
+    icon: 'clock',
+    accent: 'sky',
+    items: [
+      { label: 'Working Hours', to: '/admin/working-hours', icon: 'clock', right: 'MANAGE_SYSTEM_SETTINGS' },
+    ],
+  },
+  {
     id: 'notifications',
     title: 'Notifications',
     description: 'Email and in-app notification templates.',

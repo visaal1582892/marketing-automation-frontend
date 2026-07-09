@@ -5,7 +5,7 @@ import Icon from './Icon'
  * Centered, accessible modal with backdrop blur, ESC-to-close, scroll-lock.
  * Compact density to match the rest of the UI.
  */
-export default function Modal({ open, onClose, title, children, footer, size = 'md' }) {
+export default function Modal({ open, onClose, title, children, footer, size = 'md', maxWidth }) {
   useEffect(() => {
     if (!open) return undefined
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -22,7 +22,10 @@ export default function Modal({ open, onClose, title, children, footer, size = '
   const sizeClass =
     size === 'sm' ? 'max-w-md' :
     size === 'lg' ? 'max-w-3xl' :
+    size === 'xl' ? 'max-w-5xl' :
     'max-w-lg'
+
+  const widthClass = maxWidth || sizeClass
 
   return (
     <div
@@ -33,7 +36,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
       aria-modal="true"
     >
       <div
-        className={`relative w-full ${sizeClass} rounded-xl bg-white shadow-2xl
+        className={`relative w-full ${widthClass} rounded-xl bg-white shadow-2xl
                     ring-1 ring-slate-200/60`}
         onClick={(e) => e.stopPropagation()}
       >

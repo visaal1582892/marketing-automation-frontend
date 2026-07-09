@@ -10,6 +10,7 @@ import { useAuth } from '../../auth/AuthContext'
 import DateRangePicker from '../../components/DateRangePicker'
 import Pagination from '../../components/Pagination'
 import useDebounce from '../../hooks/useDebounce'
+import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
 
 const PAGE_SIZE = 12
 
@@ -245,6 +246,8 @@ export default function ManagerQcReviewPage() {
 // ─── Flat task card (one card per task, sorted latest-first) ─────────────────
 
 function FlatTaskCard({ task, onApprove, onRework, onReject, onView, onViewAssets }) {
+  const { user } = useAuth()
+  const currentUserId = user?.userId ?? user?.id
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       {/* ── Header: IDs + priority + meta ── */}
@@ -263,6 +266,7 @@ function FlatTaskCard({ task, onApprove, onRework, onReject, onView, onViewAsset
               {task.reworkCount}× rework
             </span>
           )}
+          <ReassignedBadge assignmentCount={task.assignmentCount} />
         </div>
         <div className="flex items-center gap-2">
           {task.submittedAt && (
@@ -299,11 +303,11 @@ function FlatTaskCard({ task, onApprove, onRework, onReject, onView, onViewAsset
               )}
               <span>
                 by <span className="font-semibold text-slate-700">{task.assigneeName || `User ${task.assignedTo}`}</span>
-                {task.totalTimeLoggedMinutes != null && ` · ${task.totalTimeLoggedMinutes} min`}
               </span>
               {task.requestorName && (
                 <span>· Req: <span className="font-semibold text-slate-700">{task.requestorName}</span></span>
               )}
+              <TimeLoggedBadge task={task} currentUserId={currentUserId} />
             </div>
           </div>
           {/* Action buttons */}
