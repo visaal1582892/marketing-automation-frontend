@@ -1,8 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Client } from '@stomp/stompjs'
-import { tokenStorage } from '../api/client'
-import { buildWsUrl } from '../config/backendUrl'
+import { ensureConnected, subscribe, shutdown } from '../services/stompClient'
 import { notificationsApi } from '../api/notifications'
 import { useAuth } from '../auth/AuthContext'
 import { useToast } from '../components/Toast'
@@ -34,7 +32,6 @@ export function NotificationProvider({ children }) {
   const navigate   = useNavigate()
   const [notifications, setNotifications] = useState([])
   const [unreadCount,   setUnreadCount]   = useState(0)
-  const clientRef  = useRef(null)
   const userId     = user?.id
   const [browserNotifStatus, setBrowserNotifStatus] = useState(
     () => 'Notification' in window ? Notification.permission : 'unsupported'
@@ -62,90 +59,47 @@ export function NotificationProvider({ children }) {
       .catch(() => {}) // silently fail — bell shows 0 if load fails
   }, [userId])
 
-  // ── Subscribe to STOMP for real-time push ────────────────────────────────
+  // ── Own the single shared STOMP connection for the whole session ──────────
+  // The connection is opened once on login and torn down on logout. All other
+  // hooks (chat, typing, unread watcher) reuse this same client.
   useEffect(() => {
     if (!userId) return
-    const wsUrl = buildWsUrl()
-    if (!wsUrl) return
 
-    const MAX_RETRIES = 5
-    const BASE_DELAY  = 5_000   // 5 s → 10 s → 20 s → 40 s → 80 s
-    const MAX_DELAY   = 120_000 // cap at 2 min
-    const retryCount  = { current: 0 }
-    const retryTimer  = { current: null }
-    const destroyed   = { current: false }
+    if (!ensureConnected()) return // no WebSocket URL configured — real-time disabled
 
-    const scheduleReconnect = () => {
-      if (destroyed.current) return
-      if (retryTimer.current) return           // already scheduled — ignore duplicate call
-      if (retryCount.current >= MAX_RETRIES) {
-        console.warn('[Notifications] WebSocket failed after max retries — real-time updates paused.')
-        return
-      }
-      const delay = Math.min(BASE_DELAY * 2 ** retryCount.current, MAX_DELAY)
-      retryCount.current += 1
-      retryTimer.current = setTimeout(() => {
-        retryTimer.current = null              // allow next disconnect to schedule again
-        if (!destroyed.current) client.activate()
-      }, delay)
-    }
+    const unsubscribe = subscribe(`/topic/notifications/${userId}`, frame => {
+      try {
+        const msg = JSON.parse(frame.body)
 
-    const client = new Client({
-      brokerURL:        wsUrl,
-      reconnectDelay:   10000, // 5 seconds // manual exponential backoff via scheduleReconnect
-      heartbeatIncoming: 4000,
-      heartbeatOutgoing: 4000,
-      connectHeaders: {
-        Authorization:             `Bearer ${tokenStorage.get()}`,
-        'ngrok-skip-browser-warning': 'true',
-      },
+        // RESOLVED signal — re-fetch from REST so state mirrors DB exactly
+        if (msg.type === 'RESOLVED') {
+          notificationsApi.getAll()
+            .then(data => {
+              setNotifications(data)
+              setUnreadCount(data.filter(n => !n.read).length)
+            })
+            .catch(() => {})
+          return
+        }
 
-      onConnect: () => {
-        retryCount.current = 0
-        client.subscribe(`/topic/notifications/${userId}`, frame => {
-          try {
-            const msg = JSON.parse(frame.body)
-
-            // RESOLVED signal — re-fetch from REST so state mirrors DB exactly
-            if (msg.type === 'RESOLVED') {
-              notificationsApi.getAll()
-                .then(data => {
-                  setNotifications(data)
-                  setUnreadCount(data.filter(n => !n.read).length)
-                })
-                .catch(() => {})
-              return
-            }
-
-            // New notification push
-            setNotifications(prev => [msg, ...prev])
-            setUnreadCount(c => c + 1)
-            // In-app toast (when tab is visible)
-            toast.notify(
-              msg.message,
-              msg.url ? () => navigate(msg.url) : null
-            )
-            // Browser notification (when tab is hidden / not focused)
-            fireBrowserNotification('New Notification', msg.message, msg.url, navigate)
-          } catch { /* ignore malformed frame */ }
-        })
-      },
-
-      onDisconnect:     () => scheduleReconnect(),
-      onStompError:     () => scheduleReconnect(),
-      onWebSocketError: () => { /* browser already logs one line */ },
+        // New notification push
+        setNotifications(prev => [msg, ...prev])
+        setUnreadCount(c => c + 1)
+        // In-app toast (when tab is visible)
+        toast.notify(
+          msg.message,
+          msg.url ? () => navigate(msg.url) : null
+        )
+        // Browser notification (when tab is hidden / not focused)
+        fireBrowserNotification('New Notification', msg.message, msg.url, navigate)
+      } catch { /* ignore malformed frame */ }
     })
 
-    client.activate()
-    clientRef.current = client
-
     return () => {
-      destroyed.current = true
-      if (retryTimer.current) clearTimeout(retryTimer.current)
-      client.deactivate()
-      clientRef.current = null
+      unsubscribe()
+      shutdown() // logout / provider teardown closes the single connection
     }
-  }, [userId])
+  }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
