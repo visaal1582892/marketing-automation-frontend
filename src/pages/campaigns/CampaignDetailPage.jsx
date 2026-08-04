@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import { useNavigate, useParams, useLocation, useSearchParams, Link } from 'react-router-dom'
 import campaignsApi from '../../api/campaigns'
+import tasksApi from '../../api/tasks'
 import { useAuth } from '../../auth/AuthContext'
 import { Rights } from '../../constants/rights'
 import { useToast } from '../../components/Toast'
@@ -43,6 +44,8 @@ export default function CampaignDetailPage() {
   const { id }     = useParams()
   const navigate   = useNavigate()
   const location   = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const targetTaskId = searchParams.get('taskId')
   const toast      = useToast()
   const showToast  = (m, t = 'info') => toast[t]?.(m)
   const { user, hasRight } = useAuth()
@@ -68,12 +71,36 @@ export default function CampaignDetailPage() {
 
   const load = () => {
     setLoading(true)
-    campaignsApi.getById(id)
+    campaignsApi.getById(id, targetTaskId)
       .then(res => setC(res.data))
       .catch(() => showToast('Failed to load campaign', 'error'))
       .finally(() => setLoading(false))
   }
-  useEffect(load, [id, location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [id, targetTaskId, location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Parent Campaign Context (Phase 4 UX Polish)
+  const [resolvedParentCampaignId, setResolvedParentCampaignId] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    if (c && c.workTasks?.length > 0) {
+      const taskToCheck = targetTaskId 
+        ? c.workTasks.find(t => t.taskId === targetTaskId) 
+        : c.workTasks[0]
+      const parentTaskIdToFetch = taskToCheck?.parentTaskId
+
+      if (parentTaskIdToFetch) {
+        tasksApi.getParentTask(taskToCheck.taskId) // pass child task ID to backend
+          .then(res => {
+            if (alive && res.data?.campaignId && String(res.data.campaignId) !== String(c.campaignId)) {
+              setResolvedParentCampaignId(res.data.campaignId)
+            }
+          })
+          .catch(() => {})
+      }
+    }
+    return () => { alive = false }
+  }, [c, targetTaskId])
 
   const handleRequestorRework = async () => {
     if (!reworkTask) return
@@ -145,6 +172,15 @@ export default function CampaignDetailPage() {
   )
   if (!c) return <p className="text-center text-slate-400 py-12 text-sm">Campaign not found.</p>
 
+  // Requirement 2: The Filter Logic & Rendering Block
+  const tasksToDisplay = targetTaskId
+    ? (c.workTasks || []).filter(task => task.taskId === targetTaskId)
+    : (c.workTasks || [])
+    
+  const deliverablesToDisplay = targetTaskId
+    ? (c.deliverables || []).filter(d => d.taskId === targetTaskId)
+    : (c.deliverables || [])
+
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
       {/* ── Top action bar ── */}
@@ -157,41 +193,7 @@ export default function CampaignDetailPage() {
           <Icon name="chevron" className="h-4 w-4 rotate-180" /> Back
         </button>
         <div className="flex items-center gap-2">
-          {/* Bookmark */}
-          <button
-            onClick={toggleBookmark}
-            disabled={bookmarking}
-            title={bookmarked ? 'Remove bookmark' : 'Bookmark this request'}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold
-                        transition shadow-sm disabled:opacity-50
-                        ${bookmarked
-                          ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24"
-              fill={bookmarked ? 'currentColor' : 'none'}
-              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-            </svg>
-            {bookmarked ? 'Bookmarked' : 'Bookmark'}
-          </button>
-          {/* Clone */}
-          {hasRight(Rights.CLONE_OWN_CAMPAIGN) && (
-            <button
-              onClick={handleClone}
-              disabled={cloning}
-              title="Clone this request into a new draft"
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white
-                         px-3 py-1.5 text-xs font-semibold text-slate-600
-                         hover:bg-slate-50 disabled:opacity-50 transition shadow-sm"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-              </svg>
-              {cloning ? 'Cloning…' : 'Clone Request'}
-            </button>
-          )}
+          {/* Bookmark & Clone removed as per Fix 2 */}
           <button
             onClick={handlePrint}
             disabled={printing}
@@ -212,6 +214,21 @@ export default function CampaignDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Cross-Campaign Context Tabs ── */}
+      {resolvedParentCampaignId && tasksToDisplay[0]?.parentTaskId && (
+        <div className="flex border-b border-slate-200 mt-2">
+          <button className="border-b-2 border-brand-600 px-4 py-2 text-sm font-semibold text-brand-700 bg-white rounded-t-lg">
+            Current Request
+          </button>
+          <Link
+            to={`/campaigns/${resolvedParentCampaignId}?taskId=${tasksToDisplay[0].parentTaskId}`}
+            className="border-b-2 border-transparent px-4 py-2 text-sm font-medium text-slate-500 hover:border-slate-300 hover:text-slate-700 transition"
+          >
+            Original Reference
+          </Link>
+        </div>
+      )}
 
       {/* ── Hero banner ── */}
       <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-slate-800 via-slate-800 to-slate-900 text-white shadow-md">
@@ -340,10 +357,10 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* ── Deliverables ── */}
-      {c.deliverables?.length > 0 && (
-        <BriefCard title={`Deliverables (${c.deliverables.length})`} icon="checkSquare" accent="slate">
+      {deliverablesToDisplay.length > 0 && (
+        <BriefCard title={`Deliverables (${deliverablesToDisplay.length})`} icon="checkSquare" accent="slate">
           <div className="flex flex-wrap gap-2">
-            {c.deliverables.map((d) => (
+            {deliverablesToDisplay.map((d) => (
               <div key={d.taskId ?? d.granularTaskId}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
                 <span className="flex items-center justify-center rounded-full
@@ -361,15 +378,15 @@ export default function CampaignDetailPage() {
 
       {/* ── Work Tasks ── */}
       <BriefCard
-        title={`Work Tasks${c.workTasks?.length ? ` (${c.workTasks.length})` : ''}`}
+        title={`Work Tasks${tasksToDisplay.length ? ` (${tasksToDisplay.length})` : ''}`}
         icon="clipboard"
         accent="brand"
       >
-        {(!c.workTasks || c.workTasks.length === 0) ? (
+        {(!tasksToDisplay || tasksToDisplay.length === 0) ? (
           <p className="text-center text-slate-400 py-6 text-sm">No work tasks yet — pending routing.</p>
         ) : (
           <div className="space-y-4">
-            {c.workTasks.map(t => (
+            {tasksToDisplay.map(t => (
               <div key={t.taskId}
                 className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
                 {/* Task header */}
@@ -483,7 +500,7 @@ const ACCENT_ICON = {
   slate:   'from-slate-500 to-slate-700',
 }
 
-function BriefCard({ title, icon, accent = 'slate', children }) {
+function BriefCard({ title, icon, accent = 'slate', action, children }) {
   return (
     <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
       <div className="flex items-center gap-2.5 border-b border-slate-100 px-5 py-3.5">
@@ -492,7 +509,8 @@ function BriefCard({ title, icon, accent = 'slate', children }) {
                          text-white shadow-sm`}>
           <Icon name={icon} className="h-3.5 w-3.5" strokeWidth={2} />
         </div>
-        <h3 className="text-sm font-bold text-slate-800">{title}</h3>
+        <h3 className="text-sm font-bold text-slate-800 flex-1">{title}</h3>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
       <div className="px-5 py-4 space-y-3.5">
         {children}

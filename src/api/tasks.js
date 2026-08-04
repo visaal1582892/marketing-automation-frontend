@@ -18,10 +18,16 @@ const tasksApi = {
   /** All assignment cycles for accountability timeline. */
   getAssignmentHistory: (taskId) => api.get(`${BASE}/${taskId}/history`),
 
+  /** Fetch the parent task context if this is a sub-task. */
+  getParentTask: (taskId) => api.get(`/work-tasks/${taskId}/parent`),
+
+  /** Create a child campaign from a parent designer task. */
+  createChildCampaign: (parentTaskId, payload) =>
+    api.post(`${BASE}/${parentTaskId}/child-campaigns`, payload).then(r => r.data),
   /** Click "Accept" — starts the timer (status → IN_PROGRESS). */
   accept: (id) => api.patch(`${BASE}/${id}/accept`),
 
-  requestContent: (id) => api.post(`${BASE}/${id}/request-content`),
+
 
   getContentDeliverables: (id) => api.get(`${BASE}/${id}/content-deliverables`),
 

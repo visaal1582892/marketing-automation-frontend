@@ -85,13 +85,14 @@ export default function BudgetPlanningPage() {
     const data = await loadDetail(id)
     if (!data) return
 
-    if (data.status === 'PROPOSED' && isApprover) {
+    const isPending = data.status === 'PENDING_APPROVAL' || data.status === 'PROPOSED'
+    const isActive = data.status === 'ACTIVE' || data.status === 'APPROVED'
+
+    if (isPending && isApprover) {
       setMode('review')
     } else if ((data.status === 'DRAFT' || data.status === 'NEEDS_REVISION') && isPlanner
         && data.createdBy === user?.id) {
       setMode('edit')
-    } else if (data.status === 'APPROVED') {
-      setMode('readonly')
     } else {
       setMode('readonly')
     }
@@ -127,6 +128,17 @@ export default function BudgetPlanningPage() {
     }
   }
 
+  const handleDelete = async (id) => {
+    try {
+      await budgetApi.delete(id)
+      toast.success('Draft deleted.')
+      if (selectedId === id) handleBack()
+      await loadList()
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Delete failed.')
+    }
+  }
+
   const persistProposal = async (payload, existingId) => {
     if (existingId) {
       return budgetApi.update(existingId, payload)
@@ -150,7 +162,19 @@ export default function BudgetPlanningPage() {
     }
   }
 
+  const hasPendingProposal = proposals.some(
+    p => p.status === 'PENDING_APPROVAL' || p.status === 'PROPOSED',
+  )
+
+  const existingActiveProposal = proposals.find(
+    p => (p.status === 'ACTIVE' || p.status === 'APPROVED') && p.id !== activeProposal?.id,
+  )
+
   const handleSubmit = async (payload) => {
+    if (hasPendingProposal && activeProposal?.status !== 'PENDING_APPROVAL' && activeProposal?.status !== 'PROPOSED') {
+      toast.error('A budget proposal is already pending approval. You cannot submit another until it is reviewed.')
+      return
+    }
     setSubmitting(true)
     try {
       const saved = await persistProposal(payload, activeProposal?.id)
@@ -167,11 +191,11 @@ export default function BudgetPlanningPage() {
     }
   }
 
-  const handleApprove = async (comments) => {
+  const handleApprove = async (comments = '') => {
     setSaving(true)
     try {
       await budgetApi.approve(activeProposal.id, comments)
-      toast.success('Budget approved.')
+      toast.success('Budget approved and activated.')
       handleBack()
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Approval failed.')
@@ -209,11 +233,9 @@ export default function BudgetPlanningPage() {
     key: `ro-${r.id}`,
     departmentId: r.departmentId,
     departmentName: r.departmentName,
-    isPercentage: r.percentage,
-    percentageValue: r.percentageValue,
     allocatedAmount: r.allocatedAmount,
+    absoluteValue: r.allocatedAmount ?? 0,
     plannerComment: r.plannerComment,
-    inputValue: '',
     markedForRevision: false,
     revisionDismissed: false,
   }))
@@ -224,21 +246,21 @@ export default function BudgetPlanningPage() {
         <HeadBudgetWidget data={headData} loading={headLoading} />
       </HasRight>
 
-      <div className={`grid gap-6 ${showDetail ? 'lg:grid-cols-5' : ''}`}>
-        <div className={showDetail ? 'lg:col-span-2' : ''}>
-          <BudgetDashboard
-            proposals={proposals}
-            loading={listLoading}
-            selectedId={selectedId}
-            onSelect={handleSelect}
-            onNew={handleNew}
-            onClone={handleClone}
-            cloningId={cloningId}
-          />
-        </div>
+      <div className="space-y-6">
+        <BudgetDashboard
+          proposals={proposals}
+          loading={listLoading}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          onNew={handleNew}
+          onClone={handleClone}
+          cloningId={cloningId}
+          onDelete={handleDelete}
+          isCollapsed={showDetail}
+        />
 
         {showDetail && (
-          <div className="lg:col-span-3">
+          <div className="w-full">
             {detailLoading ? (
               <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
                 Loading…
@@ -251,6 +273,7 @@ export default function BudgetPlanningPage() {
                   departments={deptOptions}
                   saving={saving}
                   submitting={submitting}
+                  hasPendingProposal={hasPendingProposal}
                   onSave={handleSave}
                   onSubmit={handleSubmit}
                   onBack={handleBack}
@@ -261,6 +284,7 @@ export default function BudgetPlanningPage() {
                 <BudgetApproverView
                   proposal={activeProposal}
                   saving={saving}
+                  activeProposal={existingActiveProposal}
                   onApprove={handleApprove}
                   onNeedsRevision={handleNeedsRevision}
                   onBack={handleBack}

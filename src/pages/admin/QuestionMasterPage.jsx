@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, memo, useState } from 'react'
+import { useCallback, useEffect, memo, useState } from 'react'
 import { granularTasksApi, questionApi } from '../../api/masterData'
 import questionnaireApi from '../../api/questionnaire'
 import useDebounce from '../../hooks/useDebounce'
@@ -158,13 +158,23 @@ export default function QuestionMasterPage() {
     if (!deleting) return
     try {
       await questionnaireApi.remove(deleting.questionId)
-      toast.success(`Question ${deleting.questionId} deleted.`)
+      toast.success(`Question ${deleting.questionId} deactivated.`)
       setDeleting(null)
       refresh()
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to delete question')
     }
   }
+
+  const handleReactivateRow = useCallback(async (q) => {
+    try {
+      await questionnaireApi.reactivate(q.questionId)
+      toast.success(`Question ${q.questionId} restored.`)
+      refresh()
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to restore question')
+    }
+  }, [])
 
   const handleEditRow   = useCallback((q) => openEdit(q), []) // eslint-disable-line react-hooks/exhaustive-deps
   const handleDeleteRow = useCallback((q) => setDeleting(q), [])
@@ -260,7 +270,7 @@ export default function QuestionMasterPage() {
                 <TableStatusRow colSpan={6} className="py-12">No matching questions.</TableStatusRow>
               ) : (
                 rows.map((q) => (
-                  <QuestionRow key={q.questionId} question={q} onEdit={handleEditRow} onDelete={handleDeleteRow} />
+                  <QuestionRow key={q.questionId} question={q} onEdit={handleEditRow} onDelete={handleDeleteRow} onReactivate={handleReactivateRow} />
                 ))
               )}
             </tbody>
@@ -322,7 +332,7 @@ export default function QuestionMasterPage() {
                     )}
                   </div>
                 </div>
-                <RowActions onEdit={() => openEdit(q)} onDelete={() => setDeleting(q)} />
+                <RowActions question={q} onEdit={() => openEdit(q)} onDelete={() => setDeleting(q)} onReactivate={handleReactivateRow} />
               </div>
             ))
           )}
@@ -465,8 +475,8 @@ export default function QuestionMasterPage() {
       >
         {deleting && (
           <p className="text-sm text-slate-600">
-            This removes <span className="rounded bg-slate-100 px-1 font-mono text-xs text-slate-800">{deleting.questionId}</span>
-            {' '}and all task links and saved answers for it.
+            This deactivates <span className="rounded bg-slate-100 px-1 font-mono text-xs text-slate-800">{deleting.questionId}</span>.
+            Historical task answers will be preserved, but it will be hidden from new forms.
           </p>
         )}
       </Modal>
@@ -510,25 +520,40 @@ function FilterSelect({ value, onChange, options, placeholder }) {
   )
 }
 
-function RowActions({ onEdit, onDelete }) {
+function RowActions({ question, onEdit, onDelete, onReactivate }) {
+  const isInactive = question && question.isActive === false
   return (
-    <div className="flex items-center justify-end gap-0.5">
-      <button
-        type="button"
-        title="Edit"
-        onClick={onEdit}
-        className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-      >
-        <Icon name="pencil" className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        title="Delete"
-        onClick={onDelete}
-        className="rounded-md p-1.5 text-slate-400 transition hover:bg-brand-50 hover:text-brand-700"
-      >
-        <Icon name="trash" className="h-4 w-4" />
-      </button>
+    <div className="flex items-center justify-end gap-1">
+      {isInactive ? (
+        <button
+          type="button"
+          title="Restore Question"
+          onClick={() => onReactivate(question)}
+          className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+        >
+          <Icon name="arrow-path" className="h-3.5 w-3.5" />
+          Restore
+        </button>
+      ) : (
+        <>
+          <button
+            type="button"
+            title="Edit"
+            onClick={() => onEdit(question)}
+            className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <Icon name="pencil" className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            title="Delete"
+            onClick={() => onDelete(question)}
+            className="rounded-md p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+          >
+            <Icon name="trash" className="h-4 w-4" />
+          </button>
+        </>
+      )}
     </div>
   )
 }
@@ -553,12 +578,20 @@ function FieldTypeBadge({ type }) {
   )
 }
 
-const QuestionRow = memo(function QuestionRow({ question: q, onEdit, onDelete }) {
+const QuestionRow = memo(function QuestionRow({ question: q, onEdit, onDelete, onReactivate }) {
+  const isInactive = q.isActive === false
   return (
-    <tr className="transition hover:bg-slate-50/60">
+    <tr className={`transition hover:bg-slate-50/60 ${isInactive ? 'bg-slate-50/50 opacity-75' : ''}`}>
       <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{q.questionId}</td>
       <td className="px-4 py-2.5 font-medium text-slate-800 max-w-md">
-        <p className="line-clamp-2">{q.questionText}</p>
+        <div className="flex items-center gap-2">
+          <p className={`line-clamp-2 ${isInactive ? 'line-through text-slate-500' : ''}`}>{q.questionText}</p>
+          {isInactive && (
+            <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+              Archived
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-4 py-2.5 whitespace-nowrap">
         <FieldTypeBadge type={q.fieldType} />
@@ -603,7 +636,7 @@ const QuestionRow = memo(function QuestionRow({ question: q, onEdit, onDelete })
         )}
       </td>
       <td className="px-4 py-2.5">
-        <RowActions onEdit={() => onEdit(q)} onDelete={() => onDelete(q)} />
+        <RowActions question={q} onEdit={() => onEdit(q)} onDelete={() => onDelete(q)} onReactivate={onReactivate} />
       </td>
     </tr>
   )

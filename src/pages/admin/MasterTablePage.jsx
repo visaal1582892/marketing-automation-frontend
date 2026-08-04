@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, memo, useState } from 'react'
+import { useCallback, useEffect, memo, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 import { findResource, masterApi, MASTER_RESOURCES } from '../../api/masterData'
 import useDebounce from '../../hooks/useDebounce'
@@ -95,15 +95,26 @@ export default function MasterTablePage() {
     try {
       await masterApi.remove(slug, row.id)
       setConfirmDelete(null)
-      toast.success(`${row.name} deleted`)
+      toast.success(`${row.name} deactivated`)
       refresh()
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Delete failed')
+      toast.error(e?.response?.data?.message || 'Deactivation failed')
+    }
+  }
+
+  const handleRestore = async (row) => {
+    try {
+      await masterApi.restore(slug, row.id)
+      toast.success(`${row.name} reactivated`)
+      refresh()
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Reactivation failed')
     }
   }
 
   const handleEditRow   = useCallback((row) => setEditing({ ...row, isActive: row.status === 'ACTIVE' }), [])
   const handleDeleteRow = useCallback((row) => setConfirmDelete(row), [])
+  const handleRestoreRow = useCallback((row) => handleRestore(row), [slug]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------------------------------------------------------- render
   return (
@@ -166,7 +177,7 @@ export default function MasterTablePage() {
                 <TableStatusRow colSpan={4} className="py-12">No matching records.</TableStatusRow>
               ) : (
                 rows.map((row) => (
-                  <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} />
+                  <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} onRestore={handleRestoreRow} />
                 ))
               )}
             </tbody>
@@ -193,7 +204,7 @@ export default function MasterTablePage() {
             <div className="px-4 py-12 text-center text-sm text-slate-500">No matching records.</div>
           ) : (
             rows.map((row) => (
-              <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} mobile />
+              <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} onRestore={handleRestoreRow} mobile />
             ))
           )}
           <div className="px-4 py-1">
@@ -229,7 +240,7 @@ function singular(resource) {
   return resource.label.replace(/s$/, '')
 }
 
-const MasterRow = memo(function MasterRow({ row, onEdit, onDelete, mobile = false }) {
+const MasterRow = memo(function MasterRow({ row, onEdit, onDelete, onRestore, mobile = false }) {
   const active = row.status === 'ACTIVE'
   if (mobile) {
     return (
@@ -237,23 +248,23 @@ const MasterRow = memo(function MasterRow({ row, onEdit, onDelete, mobile = fals
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs text-slate-500">{row.id}</span>
-            <span className="font-medium text-slate-800">{row.name}</span>
+            <span className={`font-medium text-slate-800 ${!active ? 'line-through text-slate-400' : ''}`}>{row.name}</span>
           </div>
           <div className="mt-1.5">
             <StatusPill active={active} />
           </div>
         </div>
-        <RowActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} />
+        <RowActions row={row} onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} onRestore={onRestore} />
       </div>
     )
   }
   return (
-    <tr className="transition hover:bg-slate-50/60">
+    <tr className={`transition hover:bg-slate-50/60 ${!active ? 'bg-slate-50/50 opacity-75' : ''}`}>
       <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{row.id}</td>
-      <td className="px-4 py-2.5 font-medium text-slate-800">{row.name}</td>
+      <td className={`px-4 py-2.5 font-medium text-slate-800 ${!active ? 'line-through text-slate-400' : ''}`}>{row.name}</td>
       <td className="px-4 py-2.5"><StatusPill active={active} /></td>
       <td className="px-4 py-2.5">
-        <RowActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} />
+        <RowActions row={row} onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} onRestore={onRestore} />
       </td>
     </tr>
   )
@@ -297,15 +308,30 @@ function StatusPill({ active }) {
   )
 }
 
-function RowActions({ onEdit, onDelete }) {
+function RowActions({ row, onEdit, onDelete, onRestore }) {
+  const isInactive = row && row.status === 'INACTIVE'
   return (
-    <div className="flex items-center justify-end gap-0.5">
-      <IconButton title="Edit" onClick={onEdit}>
-        <Icon name="pencil" className="h-4 w-4" />
-      </IconButton>
-      <IconButton title="Delete" tone="danger" onClick={onDelete}>
-        <Icon name="trash" className="h-4 w-4" />
-      </IconButton>
+    <div className="flex items-center justify-end gap-1">
+      {isInactive ? (
+        <button
+          type="button"
+          title="Reactivate"
+          onClick={() => onRestore(row)}
+          className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+        >
+          <Icon name="arrow-path" className="h-3.5 w-3.5" />
+          Reactivate
+        </button>
+      ) : (
+        <>
+          <IconButton title="Edit" onClick={onEdit}>
+            <Icon name="pencil" className="h-4 w-4" />
+          </IconButton>
+          <IconButton title="Deactivate" tone="danger" onClick={onDelete}>
+            <Icon name="trash" className="h-4 w-4" />
+          </IconButton>
+        </>
+      )}
     </div>
   )
 }
@@ -418,7 +444,7 @@ function ConfirmDeleteModal({ open, target, resource, onClose, onConfirm }) {
     <Modal
       open={open}
       onClose={onClose}
-      title="Delete record?"
+      title="Deactivate record?"
       size="sm"
       footer={
         <>
@@ -430,17 +456,17 @@ function ConfirmDeleteModal({ open, target, resource, onClose, onConfirm }) {
           </button>
           <button
             onClick={onConfirm}
-            className="rounded-md bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white
-                       shadow-sm transition hover:bg-brand-700"
+            className="rounded-md bg-red-600 px-3.5 py-2 text-sm font-semibold text-white
+                       shadow-sm transition hover:bg-red-700"
           >
-            Yes, delete
+            Yes, deactivate
           </button>
         </>
       }
     >
       <p className="text-sm text-slate-600">
-        This will <strong>permanently delete</strong> <strong>{target?.name}</strong> ({target?.id}) from the
-        list of <strong>{resource?.label}</strong>. This action cannot be undone.
+        This will <strong>deactivate</strong> <strong>{target?.name}</strong> ({target?.id}) from the
+        list of <strong>{resource?.label}</strong>. It will no longer appear in form dropdowns for new selections, but existing historical data will be preserved.
       </p>
     </Modal>
   )

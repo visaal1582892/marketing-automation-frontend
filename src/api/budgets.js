@@ -27,4 +27,7 @@ export const budgetApi = {
 
   myDepartment: () =>
     api.get('/budget-proposals/my-department').then(r => r.data),
+
+  delete: (id) =>
+    api.delete(`/budget-proposals/${id}`).then(r => r.data),
 }

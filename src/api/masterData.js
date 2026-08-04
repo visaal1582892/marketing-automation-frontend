@@ -45,6 +45,7 @@ export const masterApi = {
   create: (slug, payload)     => api.post(`/master/${slug}`, payload).then((r) => r.data),
   update: (slug, code, body)  => api.put(`/master/${slug}/${code}`, body).then((r) => r.data),
   remove: (slug, code)        => api.delete(`/master/${slug}/${code}`).then((r) => r.data),
+  restore: (slug, code)       => api.put(`/master/${slug}/${code}/restore`).then((r) => r.data),
 }
 
 /** API for Granular Tasks (/api/master/granular-tasks) */
@@ -69,6 +70,7 @@ export const granularTasksApi = {
   create: (payload)     => api.post('/master/granular-tasks', payload).then((r) => r.data),
   update: (id, payload) => api.put(`/master/granular-tasks/${id}`, payload).then((r) => r.data),
   remove: (id)          => api.delete(`/master/granular-tasks/${id}`).then((r) => r.data),
+  restore: (id)         => api.put(`/master/granular-tasks/${id}/restore`).then((r) => r.data),
 }
 
 /** API for Role → Task mappings (/api/master/routing/role-task) */

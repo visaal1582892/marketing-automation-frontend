@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import BudgetPlannerGrid, { useBudgetTotals } from './BudgetPlannerGrid'
-import { defaultFinancialYear } from '../../utils/budgetHelpers'
+import BudgetPlannerGrid from './BudgetPlannerGrid'
+import { defaultFinancialYear, parseAmount, reconcileAbsoluteValues, amountsEqual } from '../../utils/budgetHelpers'
 
 let rowKeySeq = 0
 function nextRowKey() {
@@ -14,15 +14,12 @@ export function mapProposalToRows(proposal) {
     id: r.id,
     departmentId: r.departmentId,
     departmentName: r.departmentName,
-    isPercentage: r.percentage,
-    inputValue: r.percentage
-      ? String(r.percentageValue ?? '')
-      : String(r.allocatedAmount ?? ''),
+    // always store the resolved absolute amount regardless of how it was saved
+    absoluteValue: r.allocatedAmount ?? 0,
     plannerComment: r.plannerComment ?? '',
     markedForRevision: r.markedForRevision,
     revisionComment: r.revisionComment ?? '',
     revisionDismissed: false,
-    allocatedAmount: r.allocatedAmount,
   }))
 }
 
@@ -32,8 +29,7 @@ export function emptyRow() {
     id: null,
     departmentId: '',
     departmentName: '',
-    isPercentage: false,
-    inputValue: '',
+    absoluteValue: 0,
     plannerComment: '',
     markedForRevision: false,
     revisionComment: '',
@@ -42,18 +38,19 @@ export function emptyRow() {
 }
 
 export function buildPayload(financialYear, totalAmount, plannerComment, rows) {
+  const reconciled = reconcileAbsoluteValues(rows, totalAmount)
   return {
     financialYear,
     totalAmount: Number(totalAmount),
     plannerComment: plannerComment || null,
-    departmentBudgets: rows
+    departmentBudgets: reconciled
       .filter(r => r.departmentId)
       .map(r => ({
         id: r.id ?? undefined,
         departmentId: r.departmentId,
-        allocatedAmount: r.isPercentage ? null : Number(r.inputValue || 0),
-        percentage: r.isPercentage,
-        percentageValue: r.isPercentage ? Number(r.inputValue || 0) : null,
+        allocatedAmount: Math.round(r.absoluteValue || 0),
+        percentage: false,
+        percentageValue: null,
         plannerComment: r.plannerComment || null,
       })),
   }
@@ -64,12 +61,14 @@ export default function BudgetPlannerEditor({
   departments,
   saving,
   submitting,
+  hasPendingProposal = false,
   onSave,
   onSubmit,
   onBack,
 }) {
   const isNew = !proposal?.id
   const editable = proposal?.status === 'DRAFT' || proposal?.status === 'NEEDS_REVISION' || isNew
+  const isPendingBlocked = hasPendingProposal && proposal?.status !== 'PENDING_APPROVAL' && proposal?.status !== 'PROPOSED'
 
   const [financialYear, setFinancialYear] = useState(proposal?.financialYear ?? defaultFinancialYear())
   const [totalAmount, setTotalAmount] = useState(String(proposal?.totalAmount ?? ''))
@@ -80,6 +79,7 @@ export default function BudgetPlannerEditor({
   const [rows, setRows] = useState(() =>
     proposal?.departmentBudgets?.length ? mapProposalToRows(proposal) : [emptyRow()],
   )
+  const [inputMode, setInputMode] = useState('ABSOLUTE') // 'ABSOLUTE' | 'PERCENTAGE'
 
   useEffect(() => {
     if (!proposal?.id) return
@@ -90,21 +90,33 @@ export default function BudgetPlannerEditor({
     setRows(proposal.departmentBudgets?.length ? mapProposalToRows(proposal) : [emptyRow()])
   }, [proposal?.id, proposal?.updatedAt])
 
-  const totals = useBudgetTotals(totalAmount, rows)
+  // totals computed directly from absoluteValue
+  const { allocatedSum, remaining, remainingOk, hasServerFlags } = useMemo(() => {
+    const total = parseAmount(totalAmount)
+    const sum = rows.reduce((acc, r) => acc + (r.absoluteValue ?? 0), 0)
+    const rem = total - sum
+    return {
+      allocatedSum: sum,
+      remaining: rem,
+      remainingOk: amountsEqual(rem, 0),
+      hasServerFlags: rows.some(r => r.markedForRevision),
+    }
+  }, [rows, totalAmount])
 
   const canSubmit = useMemo(() => {
     if (!editable) return false
-    if (!totals.remainingOk) return false
-    if (totals.hasServerFlags) return false
+    if (!remainingOk) return false
+    if (hasServerFlags) return false
+    if (isPendingBlocked) return false
     if (rows.filter(r => r.departmentId).length === 0) return false
     return true
-  }, [editable, totals, rows])
+  }, [editable, remainingOk, hasServerFlags, isPendingBlocked, rows])
 
   const handleRowChange = (idx, patch) => {
     setRows(prev => prev.map((row, i) => {
       if (i !== idx) return row
       const next = { ...row, ...patch }
-      if (patch.inputValue !== undefined || patch.isPercentage !== undefined) {
+      if (patch.absoluteValue !== undefined) {
         next.revisionDismissed = true
       }
       return next
@@ -210,35 +222,49 @@ export default function BudgetPlannerEditor({
               onAddRow={() => setRows(prev => [...prev, emptyRow()])}
               onRemoveRow={(idx) => setRows(prev => prev.filter((_, i) => i !== idx))}
               readOnly={!editable}
+              inputMode={inputMode}
+              onInputModeChange={setInputMode}
+              allocatedSum={allocatedSum}
+              remaining={remaining}
+              remainingOk={remainingOk}
             />
 
             {editable && (
-              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => onSave(payload())}
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm
-                             font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-                >
-                  {saving ? 'Saving…' : 'Save Draft'}
-                </button>
-                <button
-                  type="button"
-                  disabled={!canSubmit || submitting}
-                  onClick={() => onSubmit(payload())}
-                  title={
-                    totals.hasServerFlags
-                      ? 'Save all flagged rows before submitting'
-                      : !totals.remainingOk
-                        ? 'Remaining budget must be exactly ₹0'
-                        : ''
-                  }
-                  className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white
-                             shadow-sm transition hover:bg-brand-700 disabled:opacity-50"
-                >
-                  {submitting ? 'Submitting…' : 'Send for Approval'}
-                </button>
+              <div className="space-y-2 border-t border-slate-100 pt-4">
+                {isPendingBlocked && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
+                    A budget proposal is currently pending approval. You cannot submit another proposal until the pending one is reviewed.
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => onSave(payload())}
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm
+                               font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {saving ? 'Saving…' : 'Save Draft'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canSubmit || submitting}
+                    onClick={() => onSubmit(payload())}
+                    title={
+                      isPendingBlocked
+                        ? 'A budget proposal is already pending approval'
+                        : hasServerFlags
+                          ? 'Save all flagged rows before submitting'
+                          : !remainingOk
+                            ? 'Remaining budget must be exactly ₹0'
+                            : ''
+                    }
+                    className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white
+                               shadow-sm transition hover:bg-brand-700 disabled:opacity-50"
+                  >
+                    {submitting ? 'Submitting…' : 'Send for Approval'}
+                  </button>
+                </div>
               </div>
             )}
           </>

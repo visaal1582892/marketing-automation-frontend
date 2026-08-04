@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, memo, useState } from 'react'
+import { useCallback, useEffect, useMemo, memo, useState } from 'react'
 import { granularTasksApi, masterApi } from '../../api/masterData'
 import useDebounce from '../../hooks/useDebounce'
 import Icon from '../../components/Icon'
@@ -35,9 +35,9 @@ export default function GranularTaskPage() {
   // Reset page on filter change
   useEffect(() => { setPage(0) }, [dId, dName, fTaskType, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load task types for filter dropdown
+  // Load all task types (including inactive) for column search filter
   useEffect(() => {
-    masterApi.list('task-types', false)
+    masterApi.list('task-types', true)
       .then((data) => setTaskTypes(data))
       .catch(() => {})
   }, [])
@@ -94,18 +94,29 @@ export default function GranularTaskPage() {
     try {
       await granularTasksApi.remove(row.taskId)
       setConfirmDelete(null)
-      toast.success(`${row.taskName} deleted`)
+      toast.success(`${row.taskName} deactivated`)
       refresh()
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Delete failed')
+      toast.error(e?.response?.data?.message || 'Deactivation failed')
+    }
+  }
+
+  const handleRestore = async (row) => {
+    try {
+      await granularTasksApi.restore(row.taskId)
+      toast.success(`${row.taskName} reactivated`)
+      refresh()
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Reactivation failed')
     }
   }
 
   const handleEditRow   = useCallback((row) => setEditing({ ...row, isActive: row.status === 'ACTIVE' }), [])
   const handleDeleteRow = useCallback((row) => setConfirmDelete(row), [])
+  const handleRestoreRow = useCallback((row) => handleRestore(row), []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const taskTypeOptions = useMemo(() =>
-    [['all', 'All Types'], ...taskTypes.map((t) => [t.id, t.name])],
+    [['all', 'All Types'], ...taskTypes.map((t) => [t.id, t.name + (t.status === 'INACTIVE' ? ' (Inactive)' : '')])],
     [taskTypes]
   )
 
@@ -174,7 +185,7 @@ export default function GranularTaskPage() {
                 <TableStatusRow colSpan={5} className="py-12">No matching records.</TableStatusRow>
               ) : (
                 rows.map((row) => (
-                  <GranularTaskRow key={row.taskId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} />
+                  <GranularTaskRow key={row.taskId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} onRestore={handleRestoreRow} />
                 ))
               )}
             </tbody>
@@ -201,7 +212,7 @@ export default function GranularTaskPage() {
             <div className="px-4 py-12 text-center text-sm text-slate-500">No matching records.</div>
           ) : (
             rows.map((row) => (
-              <GranularTaskRow key={row.taskId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} mobile />
+              <GranularTaskRow key={row.taskId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} onRestore={handleRestoreRow} mobile />
             ))
           )}
           <div className="px-4 py-1">
@@ -291,28 +302,45 @@ function CategoryPill({ category }) {
   )
 }
 
-function RowActions({ onEdit, onDelete }) {
+function RowActions({ row, onEdit, onDelete, onRestore }) {
+  const isInactive = row && row.status === 'INACTIVE'
   return (
-    <div className="flex items-center justify-end gap-0.5">
-      <button
-        title="Edit"
-        onClick={onEdit}
-        className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-      >
-        <Icon name="pencil" className="h-4 w-4" />
-      </button>
-      <button
-        title="Delete"
-        onClick={onDelete}
-        className="rounded-md p-1.5 text-slate-400 transition hover:bg-brand-50 hover:text-brand-700"
-      >
-        <Icon name="trash" className="h-4 w-4" />
-      </button>
+    <div className="flex items-center justify-end gap-1">
+      {isInactive ? (
+        <button
+          type="button"
+          title="Reactivate"
+          onClick={() => onRestore(row)}
+          className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+        >
+          <Icon name="arrow-path" className="h-3.5 w-3.5" />
+          Reactivate
+        </button>
+      ) : (
+        <>
+          <button
+            type="button"
+            title="Edit"
+            onClick={onEdit}
+            className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <Icon name="pencil" className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            title="Deactivate"
+            onClick={onDelete}
+            className="rounded-md p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+          >
+            <Icon name="trash" className="h-4 w-4" />
+          </button>
+        </>
+      )}
     </div>
   )
 }
 
-const GranularTaskRow = memo(function GranularTaskRow({ row, onEdit, onDelete, mobile = false }) {
+const GranularTaskRow = memo(function GranularTaskRow({ row, onEdit, onDelete, onRestore, mobile = false }) {
   const active = row.status === 'ACTIVE'
   if (mobile) {
     return (
@@ -320,7 +348,7 @@ const GranularTaskRow = memo(function GranularTaskRow({ row, onEdit, onDelete, m
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs text-slate-500">{row.taskId}</span>
-            <span className="font-medium text-slate-800">{row.taskName}</span>
+            <span className={`font-medium text-slate-800 ${!active ? 'line-through text-slate-400' : ''}`}>{row.taskName}</span>
           </div>
           {row.taskTypeName && (
             <div className="mt-1"><TypePill name={row.taskTypeName} /></div>
@@ -329,14 +357,14 @@ const GranularTaskRow = memo(function GranularTaskRow({ row, onEdit, onDelete, m
             <StatusPill active={active} />
           </div>
         </div>
-        <RowActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} />
+        <RowActions row={row} onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} onRestore={onRestore} />
       </div>
     )
   }
   return (
-    <tr className="transition hover:bg-slate-50/60">
+    <tr className={`transition hover:bg-slate-50/60 ${!active ? 'bg-slate-50/50 opacity-75' : ''}`}>
       <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{row.taskId}</td>
-      <td className="px-4 py-2.5 font-medium text-slate-800">{row.taskName}</td>
+      <td className={`px-4 py-2.5 font-medium text-slate-800 ${!active ? 'line-through text-slate-400' : ''}`}>{row.taskName}</td>
       <td className="px-4 py-2.5">
         {row.taskTypeName
           ? <TypePill name={row.taskTypeName} />
@@ -344,7 +372,7 @@ const GranularTaskRow = memo(function GranularTaskRow({ row, onEdit, onDelete, m
       </td>
       <td className="px-4 py-2.5"><StatusPill active={active} /></td>
       <td className="px-4 py-2.5">
-        <RowActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} />
+        <RowActions row={row} onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} onRestore={onRestore} />
       </td>
     </tr>
   )
@@ -360,15 +388,20 @@ function GranularTaskFormModal({ open, initial, taskTypes, onClose, onSave }) {
   const [isActive,     setIsActive]     = useState(true)
   const [submitting,   setSubmitting]   = useState(false)
 
+  const activeTaskTypes = useMemo(() =>
+    taskTypes.filter((t) => t.status === 'ACTIVE' || t.status === undefined || t.id === initial?.taskTypeId),
+    [taskTypes, initial]
+  )
+
   useEffect(() => {
     if (open) {
       setTaskName(initial?.taskName ?? '')
-      setTaskTypeId(initial?.taskTypeId ?? taskTypes[0]?.id ?? '')
+      setTaskTypeId(initial?.taskTypeId ?? activeTaskTypes[0]?.id ?? '')
       setTaskCategory(initial?.taskCategory ?? '')
       setIsActive(initial?.isActive ?? true)
       setSubmitting(false)
     }
-  }, [open, initial, taskTypes])
+  }, [open, initial, activeTaskTypes])
 
   if (!open) return null
 
@@ -431,12 +464,15 @@ function GranularTaskFormModal({ open, initial, taskTypes, onClose, onSave }) {
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Task Type</label>
           <AppSelect
-            value={taskTypeId ? String(taskTypeId) : ''}
-            onChange={setTaskTypeId}
-            options={taskTypes.map(t => ({ value: String(t.id), label: t.name }))}
-            placeholder="— Select a task type —"
-          />
-          {taskTypes.length === 0 && (
+            value={taskTypeId}
+            onChange={(val) => setTaskTypeId(val)}
+            options={activeTaskTypes.map((t) => ({
+              value: t.id,
+              label: t.name + (t.status === 'INACTIVE' ? ' (Inactive)' : ''),
+            }))}
+            placeholder="Select task type…"
+            isClearable={false}
+          />{taskTypes.length === 0 && (
             <p className="mt-1 text-xs text-slate-500">
               No task types available. Add some in the Task Types master table first.
             </p>
@@ -479,7 +515,7 @@ function ConfirmDeleteModal({ open, target, onClose, onConfirm }) {
     <Modal
       open={open}
       onClose={onClose}
-      title="Delete granular task?"
+      title="Deactivate granular task?"
       size="sm"
       footer={
         <>
@@ -491,17 +527,17 @@ function ConfirmDeleteModal({ open, target, onClose, onConfirm }) {
           </button>
           <button
             onClick={onConfirm}
-            className="rounded-md bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white
-                       shadow-sm transition hover:bg-brand-700"
+            className="rounded-md bg-red-600 px-3.5 py-2 text-sm font-semibold text-white
+                       shadow-sm transition hover:bg-red-700"
           >
-            Yes, delete
+            Yes, deactivate
           </button>
         </>
       }
     >
       <p className="text-sm text-slate-600">
-        This will <strong>permanently delete</strong> <strong>{target?.taskName}</strong> ({target?.taskId}).
-        This action cannot be undone.
+        This will <strong>deactivate</strong> <strong>{target?.taskName}</strong> ({target?.taskId}).
+        It will no longer appear in form dropdowns for new tasks, but existing historical data will be preserved.
       </p>
     </Modal>
   )

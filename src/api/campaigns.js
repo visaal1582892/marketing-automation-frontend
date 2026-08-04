@@ -10,7 +10,7 @@ const campaignsApi = {
   list: (params = {}) => api.get(BASE, { params }),
 
   /** Get full campaign detail with deliverables and work tasks. */
-  getById: (id) => api.get(`${BASE}/${id}`),
+  getById: (id, targetTaskId) => api.get(`${BASE}/${id}`, { params: { targetTaskId } }),
 
   /**
    * Requestor (owner) appends new task deliverables to an existing campaign,
