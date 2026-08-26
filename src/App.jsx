@@ -14,6 +14,7 @@ import DashboardPage from './pages/DashboardPage'
 import UnauthorizedPage from './pages/UnauthorizedPage'
 import MasterHubPage from './pages/admin/MasterHubPage'
 import MasterTablePage from './pages/admin/MasterTablePage'
+import RoleRightsMappingPage from './pages/admin/RoleRightsMappingPage'
 import EventCategoryMasterPage from './pages/admin/EventCategoryMasterPage'
 import CampaignTypeMasterPage from './pages/admin/CampaignTypeMasterPage'
 import EventCampaignTaskMaster from './pages/admin/EventCampaignTaskMaster'
@@ -182,6 +183,14 @@ export default function App() {
                 element={
                   <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
                     <MasterHubPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/role-rights"
+                element={
+                  <ProtectedRoute requireRight={Rights.MANAGE_SYSTEM_SETTINGS}>
+                    <RoleRightsMappingPage />
                   </ProtectedRoute>
                 }
               />

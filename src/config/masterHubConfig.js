@@ -82,6 +82,7 @@ export const MASTER_HUB_SECTIONS = [
       { label: 'Task Mappings',    to: '/admin/task-mappings', icon: 'shield'    },
       { label: 'Question Library', to: '/admin/questions',     icon: 'clipboard' },
       { label: 'QC Routing',       to: '/admin/qc-routing',    icon: 'shield', adminOnly: true },
+      { label: 'Role Rights',      to: '/admin/role-rights',   icon: 'shield', adminOnly: true },
       { label: 'Users',            to: '/admin/users',         icon: 'users'     },
     ],
   },
