@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, memo, useRef, useState } from 'react'
+import { useCallback, useEffect, memo, useRef, useState } from 'react'
 import api from '../../api/client'
 import { masterApi } from '../../api/masterData'
 import Icon from '../../components/Icon'
@@ -177,10 +177,26 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
   const blank = {
     fullName: '', email: '',
     departmentId: '', designationId: '', roleIds: [],
+    teamMemberIds: [],
     skillLevel: 'JUNIOR', status: 'ACTIVE',
   }
   const [form, setForm] = useState(blank)
   const [saving, setSaving] = useState(false)
+  const [marketingUsers, setMarketingUsers] = useState([])
+  const isTeamLeader = form.roleIds.includes('TEAM_LEADER')
+
+  // Fetch users for Team Members dropdown
+  useEffect(() => {
+    if (isTeamLeader && marketingUsers.length === 0) {
+      // Find marketing department ID dynamically
+      const marketingDept = departments.find(d => d.name.toLowerCase() === 'marketing')
+      const filter = marketingDept ? { departmentId: marketingDept.id, size: 500 } : { size: 500 }
+      usersApi.list(filter).then(res => {
+        const raw = res.data?.content || res.data || []
+        setMarketingUsers(raw)
+      }).catch(err => console.error("Failed to fetch team members", err))
+    }
+  }, [isTeamLeader, departments, marketingUsers.length])
 
   useEffect(() => {
     if (open) {
@@ -190,6 +206,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
         departmentId:  initial.departmentId  || '',
         designationId: initial.designationId || '',
         roleIds:       initial.roleIds       || [],
+        teamMemberIds: initial.teamMemberIds || [],
         skillLevel:    initial.skillLevel    || 'JUNIOR',
         status:        initial.status        || 'ACTIVE',
       } : blank)
@@ -205,6 +222,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
     departmentId:  form.departmentId || null,
     designationId: form.designationId || null,
     roleIds:       form.roleIds,
+    teamMemberIds: isTeamLeader ? form.teamMemberIds.filter(id => id !== initial?.userId) : [],
     skillLevel:    form.skillLevel,
     status:        form.status || 'ACTIVE',
   })
@@ -324,6 +342,30 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
             <p className="mt-1 text-xs text-amber-600">At least one role is recommended for proper access.</p>
           )}
         </div>
+
+        {isTeamLeader && (
+          <div>
+            <label className={labelCls}>
+              Team Members <span className="text-slate-400 font-normal">(select direct reports)</span>
+            </label>
+            <AppSelect
+              isMulti
+              value={form.teamMemberIds.map(id => {
+                const u = marketingUsers.find(mu => mu.userId === id);
+                return {
+                  value: String(id),
+                  label: u ? `${u.fullName} (${u.designationName || 'No Designation'})` : `Loading #${id}...`
+                };
+              })}
+              onChange={vals => setForm({ ...form, teamMemberIds: vals.map(v => Number(v.value)) })}
+              options={marketingUsers
+                .filter(u => u.userId !== initial?.userId)
+                .map(u => ({ value: String(u.userId), label: `${u.fullName} (${u.designationName || 'No Designation'})` }))}
+              placeholder="— Select team members —"
+              menuPortal
+            />
+          </div>
+        )}
 
         <div className="flex flex-col-reverse gap-2 pt-2 border-t border-slate-100 sm:flex-row sm:justify-end">
           <button type="button" onClick={onClose}

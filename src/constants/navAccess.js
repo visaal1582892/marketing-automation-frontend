@@ -5,6 +5,15 @@ export const REQUESTOR_RIGHTS = [
   Rights.VIEW_OWN_CAMPAIGNS,
 ]
 
+export const REQUESTOR_NAV_LINKS = [
+  {
+    to: '/requestor/review-center',
+    label: 'Review Center',
+    icon: 'check',
+    right: Rights.VIEW_REQUESTOR_QC_QUEUE,
+  },
+]
+
 export const ADMIN_CONFIG_RIGHTS = [
   Rights.VIEW_MASTER_DATA,
   Rights.MANAGE_MASTER_DATA,
@@ -34,19 +43,19 @@ export const MANAGER_NAV_LINKS = [
     to: '/manager/task-management',
     label: 'Task Management',
     icon: 'fileText',
-    right: Rights.ACCESS_MANAGER_TOOLS,
+    anyRight: [Rights.ACCESS_MANAGER_TOOLS, Rights.VIEW_TEAM_TASKS],
   },
   {
-    to: '/manager/qc-review',
-    label: 'Manager QC Review',
+    to: '/tasks/approvals',
+    label: 'Task Approvals',
     icon: 'check',
-    right: Rights.REVIEW_MANAGER_QC,
+    anyRight: [Rights.REVIEW_MANAGER_QC, Rights.APPROVE_TEAM_TASKS],
   },
   {
     to: '/manager/analytics',
     label: 'Analytics',
     icon: 'barChart',
-    anyRight: [Rights.VIEW_ANALYTICS_REPORTS, Rights.ACCESS_MANAGER_TOOLS],
+    anyRight: [Rights.VIEW_ANALYTICS_REPORTS, Rights.ACCESS_MANAGER_TOOLS, Rights.VIEW_TEAM_ANALYTICS],
   },
 ]
 

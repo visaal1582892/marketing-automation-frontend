@@ -553,7 +553,7 @@ function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFligh
               {task.granularTaskName || task.taskTypeName || 'Task'}
             </span>
             <PriorityBadge v={task.campaignPriority} />
-            <StatusBadge status={isCancelled ? 'CANCELLED' : task.status} />
+            <StatusBadge task={task} isCancelled={isCancelled} />
             {!!task.parentTaskId && <LinkedTaskBadge />}
             {task.status === 'REWORK' && !isCancelled && (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
@@ -782,8 +782,8 @@ function TaskTimeline({ task }) {
     { key: 'assigned',  label: 'Assigned',     ts: task.assignedAt || task.createdAt, icon: 'inbox' },
     { key: 'accepted',  label: 'Accepted',     ts: task.acceptedAt,                    icon: 'play' },
     { key: 'submitted', label: 'Submitted',    ts: task.submittedAt,                   icon: 'send' },
-    { key: 'mgr_approved',  label: 'Mgr Approved', ts: task.managerApprovedAt,  icon: 'check' },
-    { key: 'req_approved',  label: 'Req Approved', ts: task.requestorApprovedAt, icon: 'checkCircle' },
+    { key: 'mgr_approved',  label: 'Marketing Approved', ts: task.managerApprovedAt,  icon: 'check' },
+    { key: 'req_approved',  label: 'Requestor Approved', ts: task.requestorApprovedAt, icon: 'checkCircle' },
   ]
   return (
     <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-2 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
@@ -1089,24 +1089,24 @@ const STATUS_STYLES = {
   ASSIGNED:             'bg-blue-50 text-blue-700 ring-blue-200',
   IN_PROGRESS:          'bg-emerald-50 text-emerald-700 ring-emerald-200',
   REWORK:               'bg-amber-50 text-amber-700 ring-amber-200',
-  MANAGER_QC_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
-  REQUESTOR_QC_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
+  MARKETING_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
   COMPLETED:            'bg-green-50 text-green-700 ring-green-200',
   CANCELLED:            'bg-rose-50 text-rose-700 ring-rose-200',
   HELD:                 'bg-amber-50 text-amber-700 ring-amber-200',
 }
 const STATUS_LABELS = {
   ASSIGNED: 'New', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
-  MANAGER_QC_REVIEW: 'Manager QC', REQUESTOR_QC_REVIEW: 'Requestor QC',
+  MARKETING_REVIEW: 'Marketing Review', REQUESTOR_REVIEW: 'Requestor Review',
   COMPLETED: 'Completed', CANCELLED: 'Cancelled', HELD: 'On Hold',
 }
-function StatusBadge({ status }) {
+function StatusBadge({ task, isCancelled }) {
+  const status = isCancelled ? 'CANCELLED' : task?.status
   const cls = STATUS_STYLES[status] || 'bg-slate-100 text-slate-600'
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>
-      {STATUS_LABELS[status] || status}
-    </span>
-  )
+  if (status === 'MARKETING_REVIEW' && task?.pendingWithRole) {
+    return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>L{task.currentApprovalLevel}: {task.pendingWithRole}</span>
+  }
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${cls}`}>{STATUS_LABELS[status] || status}</span>
 }
 function PriorityBadge({ v }) {
   const m = { HIGH: 'bg-red-50 text-red-700 ring-red-200', MEDIUM: 'bg-yellow-50 text-yellow-700 ring-yellow-200', LOW: 'bg-green-50 text-green-700 ring-green-200' }

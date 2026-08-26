@@ -29,7 +29,7 @@ export function deriveAssignmentOutcome(entry, index, total) {
   const isActive = entry.status === 'ACTIVE'
   const isLast = index === total - 1
 
-  if (entry.lastReworkAction === 'NEEDS_REWORK') {
+  if (entry.lastReworkAction === 'MARKETING_REWORK') {
     return { label: 'Sent for Rework (Manager)', tone: 'amber' }
   }
   if (entry.lastReworkAction === 'REQUESTOR_REWORK') {

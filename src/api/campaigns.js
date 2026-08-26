@@ -65,13 +65,13 @@ const campaignsApi = {
     api.post(`${BASE}/${campaignId}/tasks/${taskId}/requestor-rework`, { message }),
 
   /**
-   * Requestor approves a REQUESTOR_QC_REVIEW task.
+   * Requestor approves a REQUESTOR_REVIEW task.
    * Task moves to COMPLETED; campaign moves to COMPLETED if all tasks are done.
    */
   requestorApprove: (campaignId, taskId, comment) =>
     api.post(`${BASE}/${campaignId}/tasks/${taskId}/requestor-approve`, { comment }),
 
-  /** Paged REQUESTOR_QC_REVIEW tasks for the current user's campaigns. */
+  /** Paged REQUESTOR_REVIEW tasks for the current user's campaigns. */
   requestorQcTasks: (params = {}) => api.get(`${BASE}/requestor-qc-tasks`, { params }),
 
   /**

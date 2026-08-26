@@ -22,8 +22,8 @@ const STATUS_STYLES = {
   ASSIGNED:             'bg-blue-50 text-blue-700 ring-blue-200',
   IN_PROGRESS:          'bg-indigo-50 text-indigo-700 ring-indigo-200',
   REWORK:               'bg-orange-50 text-orange-700 ring-orange-200',
-  MANAGER_QC_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
-  REQUESTOR_QC_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
+  MARKETING_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
   COMPLETED:            'bg-green-50 text-green-700 ring-green-200',
   CANCELLED:            'bg-slate-100 text-slate-500 ring-slate-200',
   HELD:                 'bg-amber-50 text-amber-700 ring-amber-200',
@@ -32,8 +32,8 @@ const STATUS_LABELS = {
   ASSIGNED:             'Assigned',
   IN_PROGRESS:          'In Progress',
   REWORK:               'Rework',
-  MANAGER_QC_REVIEW:    'Manager QC Review',
-  REQUESTOR_QC_REVIEW:  'Requestor QC Review',
+  MARKETING_REVIEW:    'Marketing Review',
+  REQUESTOR_REVIEW:  'Requestor Review',
   COMPLETED:            'Completed',
   CANCELLED:            'Cancelled',
   REJECTED:             'Rejected',
@@ -144,14 +144,14 @@ function FilterTd({ children, sticky = false }) {
 // ─── Edit modal ───────────────────────────────────────────────────────────────
 
 // Tasks whose status blocks deletion (matches backend constraint)
-const UNDELETABLE_STATUSES = new Set(['IN_PROGRESS', 'REWORK', 'MANAGER_QC_REVIEW', 'COMPLETED'])
+const UNDELETABLE_STATUSES = new Set(['IN_PROGRESS', 'REWORK', 'MARKETING_REVIEW', 'COMPLETED'])
 
 const TASK_STATUS_STYLES = {
   ASSIGNED:             'bg-blue-50 text-blue-700 ring-blue-200',
   IN_PROGRESS:          'bg-indigo-50 text-indigo-700 ring-indigo-200',
   REWORK:               'bg-orange-50 text-orange-700 ring-orange-200',
-  MANAGER_QC_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
-  REQUESTOR_QC_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
+  MARKETING_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
   COMPLETED:            'bg-green-50 text-green-700 ring-green-200',
   CANCELLED:            'bg-slate-100 text-slate-500 ring-slate-200',
   HELD:                 'bg-amber-50 text-amber-700 ring-amber-200',
@@ -636,8 +636,8 @@ export default function TaskManagementPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const PRIORITY_OPTS = ['HIGH', 'MEDIUM', 'LOW']
-  const STATUS_OPTS   = ['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW', 'COMPLETED', 'CANCELLED', 'REJECTED', 'HELD']
-  const CONTENT_REQUEST_STATUS_OPTS = ['REQUESTED', 'ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW', 'COMPLETED', 'CANCELLED', 'HELD']
+  const STATUS_OPTS   = ['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MARKETING_REVIEW', 'REQUESTOR_REVIEW', 'COMPLETED', 'CANCELLED', 'REJECTED', 'HELD']
+  const CONTENT_REQUEST_STATUS_OPTS = ['REQUESTED', 'ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MARKETING_REVIEW', 'REQUESTOR_REVIEW', 'COMPLETED', 'CANCELLED', 'HELD']
 
   const taskTypeOptions  = allTaskTypeOpts
   const priorityOptions  = PRIORITY_OPTS
@@ -1084,7 +1084,7 @@ const TaskRow = memo(function TaskRow({ task: t, alt, holding, onHold, onUnhold,
           <span className={`inline-flex max-w-full truncate items-center rounded-full px-2 py-0.5 text-xs
                             font-medium ring-1 w-fit ${STATUS_STYLES[t.status] || 'bg-slate-100 text-slate-600'}`}
                 title={STATUS_LABELS[t.status] || t.status}>
-            {STATUS_LABELS[t.status] || t.status}
+            {t.status === 'MARKETING_REVIEW' && t.pendingWithRole ? `L${t.currentApprovalLevel}: ${t.pendingWithRole}` : (STATUS_LABELS[t.status] || t.status)}
           </span>
           <ReassignedBadge assignmentCount={t.assignmentCount} />
         </div>

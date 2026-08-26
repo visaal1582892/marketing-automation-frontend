@@ -9,20 +9,20 @@ import Icon from '../../components/Icon'
 import { printBrief } from '../../utils/printBrief'
 import { formatTargetLocations } from '../../utils/targetLocations'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
-import TaskHistoryTimeline from '../../components/TaskHistoryTimeline'
+import TaskCyclesView from '../../components/TaskCyclesView'
 import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
 
 const STATUS_STYLES = {
   IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
-  MANAGER_QC_REVIEW:          'bg-purple-50 text-purple-700 ring-purple-200',
-  REQUESTOR_QC_REVIEW:        'bg-violet-50 text-violet-700 ring-violet-200',
+  MARKETING_REVIEW:          'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_REVIEW:        'bg-violet-50 text-violet-700 ring-violet-200',
   COMPLETED:                  'bg-green-50 text-green-700 ring-green-200',
   REJECTED:                   'bg-red-50 text-red-700 ring-red-200',
 }
 const STATUS_LABELS = {
   IN_PROGRESS:                'In Progress',
-  MANAGER_QC_REVIEW:          'Manager QC Review',
-  REQUESTOR_QC_REVIEW:        'Requestor QC Review',
+  MARKETING_REVIEW:          'Marketing Review',
+  REQUESTOR_REVIEW:        'Requestor Review',
   COMPLETED:                  'Completed',
   REJECTED:                   'Rejected',
 }
@@ -31,13 +31,13 @@ const TASK_STYLES = {
   ASSIGNED:             'bg-blue-50 text-blue-700 ring-blue-200',
   IN_PROGRESS:          'bg-emerald-50 text-emerald-700 ring-emerald-200',
   REWORK:               'bg-amber-50 text-amber-700 ring-amber-200',
-  MANAGER_QC_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
-  REQUESTOR_QC_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
+  MARKETING_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
   COMPLETED:            'bg-green-50 text-green-700 ring-green-200',
 }
 const TASK_LABELS = {
   ASSIGNED: 'Assigned', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
-  MANAGER_QC_REVIEW: 'Manager QC', REQUESTOR_QC_REVIEW: 'Requestor QC', COMPLETED: 'Completed',
+  MARKETING_REVIEW: 'Marketing Review', REQUESTOR_REVIEW: 'Requestor Review', COMPLETED: 'Completed',
 }
 
 export default function CampaignDetailPage() {
@@ -182,7 +182,7 @@ export default function CampaignDetailPage() {
     : (c.deliverables || [])
 
   return (
-    <div className="space-y-5 max-w-5xl mx-auto">
+    <div className="space-y-5 max-w-7xl mx-auto">
       {/* ── Top action bar ── */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button
@@ -401,7 +401,7 @@ export default function CampaignDetailPage() {
                       <span className="text-sm font-bold text-slate-900">
                         {t.granularTaskName || 'Task'}
                       </span>
-                      <TaskBadge status={t.status} />
+                      <TaskBadge task={t} />
                       {t.reworkCount > 0 && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5
                                          text-xs font-medium text-orange-700 ring-1 ring-orange-200">
@@ -424,7 +424,7 @@ export default function CampaignDetailPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap shrink-0">
-                    {(t.status === 'MANAGER_QC_REVIEW' || t.status === 'REQUESTOR_QC_REVIEW' || t.status === 'COMPLETED') && (
+                    {(t.status === 'MARKETING_REVIEW' || t.status === 'REQUESTOR_REVIEW' || t.status === 'COMPLETED') && (
                       <button
                         onClick={() => setAssetPreviewTask(t)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200
@@ -434,7 +434,7 @@ export default function CampaignDetailPage() {
                         View Assets
                       </button>
                     )}
-                    {t.status === 'REQUESTOR_QC_REVIEW' && canRequestRework && (
+                    {t.status === 'REQUESTOR_REVIEW' && canRequestRework && (
                       <button
                         onClick={() => { setReworkTask(t); setReworkMsg('') }}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200
@@ -448,7 +448,7 @@ export default function CampaignDetailPage() {
 
                 {/* Task body */}
                 <div className="px-4 py-4 space-y-3">
-                  <TaskHistoryTimeline taskId={t.taskId} task={t} />
+                  <TaskCyclesView taskId={t.taskId} currentAssigneeId={t.assignedTo} />
                   {t.submissionNotes && (
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
@@ -567,8 +567,12 @@ function StatusBadge({ status }) {
   const cls = STATUS_STYLES[status] || 'bg-slate-100 text-slate-600'
   return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${cls}`}>{STATUS_LABELS[status] || status}</span>
 }
-function TaskBadge({ status }) {
+function TaskBadge({ task }) {
+  const status = task?.status
   const cls = TASK_STYLES[status] || 'bg-slate-100 text-slate-600'
+  if (status === 'MARKETING_REVIEW' && task.pendingWithRole) {
+    return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>L{task.currentApprovalLevel}: {task.pendingWithRole}</span>
+  }
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>{TASK_LABELS[status] || status}</span>
 }
 function PriorityBadge({ v }) {

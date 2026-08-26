@@ -9,7 +9,8 @@ import { Rights } from '../constants/rights'
 import { useToast } from './Toast'
 import { printBrief } from '../utils/printBrief'
 import { formatTargetLocations, getLocationLabel, parseTargetLocations } from '../utils/targetLocations'
-import TaskHistoryTimeline from './TaskHistoryTimeline'
+import ConfigurableApprovalHistory from "./ConfigurableApprovalHistory"
+import TaskCyclesView from './TaskCyclesView'
 
 /** Drop answered comment from local campaign snapshot; recompute badge flags. */
 function campaignAfterCommentAnswered(campaign, taskId, commentId) {
@@ -211,7 +212,7 @@ export default function RequestBriefDrawer({
 
       {/* ── Sticky top bar ─────────────────────────────────────────── */}
       <div className="shrink-0 bg-white border-b border-slate-100 shadow-[0_1px_3px_0_rgb(0,0,0,0.05)]">
-        <div className="max-w-5xl mx-auto px-5 h-[60px] flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-5 h-[60px] flex items-center justify-between gap-4">
           {/* Left */}
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -258,7 +259,7 @@ export default function RequestBriefDrawer({
 
       {/* ── Scrollable body ─────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-5 py-8 space-y-5 pb-16">
+        <div className="max-w-7xl mx-auto px-5 py-8 space-y-5 pb-16">
 
           {loading && (
             <div className="flex flex-col items-center justify-center py-28 gap-3 text-slate-400">
@@ -593,7 +594,7 @@ export default function RequestBriefDrawer({
                               </p>
                             )}
                           </div>
-                          {t.status === 'REQUESTOR_QC_REVIEW' && canRequestRework && (
+                          {t.status === 'REQUESTOR_REVIEW' && canRequestRework && (
                             <button
                               onClick={() => { setReworkTask(t); setReworkMsg('') }}
                               className="flex items-center gap-1.5 rounded-lg border border-amber-200
@@ -607,7 +608,8 @@ export default function RequestBriefDrawer({
 
                         {/* Task body */}
                         <div className="px-4 py-4 space-y-3">
-                          <TaskHistoryTimeline taskId={t.taskId} task={t} />
+                          <ConfigurableApprovalHistory taskId={t.taskId} />
+                          <TaskCyclesView taskId={t.taskId} currentAssigneeId={t.assignedTo} />
 
                           {t.submissionNotes && (
                             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -887,12 +889,12 @@ function TaskTimestamps({ task }) {
       icon: <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5"><path d="M.5 9.9a.5.5 0 0 1 .5.5V13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.6a.5.5 0 0 1 1 0V13a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.6a.5.5 0 0 1 .5-.5Z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3Z"/></svg>,
     },
     {
-      key: 'mgr_approved', label: 'Mgr Approved', ts: task.managerApprovedAt,
+      key: 'mgr_approved', label: 'Marketing Approved', ts: task.managerApprovedAt,
       done: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' },
       icon: <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0Z"/></svg>,
     },
     {
-      key: 'req_approved', label: 'Req Approved', ts: task.requestorApprovedAt,
+      key: 'req_approved', label: 'Requestor Approved', ts: task.requestorApprovedAt,
       done: { dot: 'bg-green-600', line: 'bg-green-200', text: 'text-green-700', card: 'bg-green-50 border-green-200' },
       icon: <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5"><path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.78-1.72a.75.75 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25Z"/></svg>,
     },
@@ -963,15 +965,15 @@ function PriorityBadge({ v }) {
 function StatusBadge({ status }) {
   const S = {
     IN_PROGRESS:         'bg-blue-50 text-blue-700 ring-blue-200',
-    MANAGER_QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
-    REQUESTOR_QC_REVIEW: 'bg-violet-50 text-violet-700 ring-violet-200',
+    MARKETING_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
+    REQUESTOR_REVIEW: 'bg-violet-50 text-violet-700 ring-violet-200',
     COMPLETED:           'bg-green-50 text-green-700 ring-green-200',
     REJECTED:            'bg-red-50 text-red-700 ring-red-200',
     CANCELLED:           'bg-slate-100 text-slate-500 ring-slate-200',
   }
   const L = {
-    IN_PROGRESS: 'In Progress', MANAGER_QC_REVIEW: 'Manager QC',
-    REQUESTOR_QC_REVIEW: 'Requestor QC',
+    IN_PROGRESS: 'In Progress', MARKETING_REVIEW: 'Marketing Review',
+    REQUESTOR_REVIEW: 'Requestor Review',
     COMPLETED: 'Completed', REJECTED: 'Rejected', CANCELLED: 'Cancelled',
   }
   return (
@@ -986,15 +988,15 @@ function TaskBadge({ status }) {
     ASSIGNED:             'bg-blue-50 text-blue-700 ring-blue-200',
     IN_PROGRESS:          'bg-emerald-50 text-emerald-700 ring-emerald-200',
     REWORK:               'bg-amber-50 text-amber-700 ring-amber-200',
-    MANAGER_QC_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
-    REQUESTOR_QC_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
+    MARKETING_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
+    REQUESTOR_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
     COMPLETED:            'bg-green-50 text-green-700 ring-green-200',
     HELD:                 'bg-amber-50 text-amber-600 ring-amber-200',
     CANCELLED:            'bg-slate-100 text-slate-500 ring-slate-200',
   }
   const L = {
     ASSIGNED: 'Assigned', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
-    MANAGER_QC_REVIEW: 'Manager QC', REQUESTOR_QC_REVIEW: 'Requestor QC',
+    MARKETING_REVIEW: 'Marketing Review', REQUESTOR_REVIEW: 'Requestor Review',
     COMPLETED: 'Completed', HELD: 'Held', CANCELLED: 'Cancelled',
   }
   return (

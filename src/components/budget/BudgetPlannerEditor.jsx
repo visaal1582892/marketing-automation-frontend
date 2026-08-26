@@ -1,64 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
-import BudgetPlannerGrid from './BudgetPlannerGrid'
-import { defaultFinancialYear, parseAmount, reconcileAbsoluteValues, amountsEqual } from '../../utils/budgetHelpers'
-
-let rowKeySeq = 0
-function nextRowKey() {
-  rowKeySeq += 1
-  return `row-${rowKeySeq}`
-}
-
-export function mapProposalToRows(proposal) {
-  return (proposal?.departmentBudgets ?? []).map(r => ({
-    key: nextRowKey(),
-    id: r.id,
-    departmentId: r.departmentId,
-    departmentName: r.departmentName,
-    // always store the resolved absolute amount regardless of how it was saved
-    absoluteValue: r.allocatedAmount ?? 0,
-    plannerComment: r.plannerComment ?? '',
-    markedForRevision: r.markedForRevision,
-    revisionComment: r.revisionComment ?? '',
-    revisionDismissed: false,
-  }))
-}
-
-export function emptyRow() {
-  return {
-    key: nextRowKey(),
-    id: null,
-    departmentId: '',
-    departmentName: '',
-    absoluteValue: 0,
-    plannerComment: '',
-    markedForRevision: false,
-    revisionComment: '',
-    revisionDismissed: false,
-  }
-}
-
-export function buildPayload(financialYear, totalAmount, plannerComment, rows) {
-  const reconciled = reconcileAbsoluteValues(rows, totalAmount)
-  return {
-    financialYear,
-    totalAmount: Number(totalAmount),
-    plannerComment: plannerComment || null,
-    departmentBudgets: reconciled
-      .filter(r => r.departmentId)
-      .map(r => ({
-        id: r.id ?? undefined,
-        departmentId: r.departmentId,
-        allocatedAmount: Math.round(r.absoluteValue || 0),
-        percentage: false,
-        percentageValue: null,
-        plannerComment: r.plannerComment || null,
-      })),
-  }
-}
+import { useEffect, useState } from 'react'
+import { defaultFinancialYear } from '../../utils/budgetHelpers'
+import StateMonthlyMatrix from './StateMonthlyMatrix'
 
 export default function BudgetPlannerEditor({
   proposal,
-  departments,
   saving,
   submitting,
   hasPendingProposal = false,
@@ -73,63 +18,39 @@ export default function BudgetPlannerEditor({
   const [financialYear, setFinancialYear] = useState(proposal?.financialYear ?? defaultFinancialYear())
   const [totalAmount, setTotalAmount] = useState(String(proposal?.totalAmount ?? ''))
   const [plannerComment, setPlannerComment] = useState(proposal?.plannerComment ?? '')
-  const [phase, setPhase] = useState(
-    () => (proposal?.departmentBudgets?.length > 0 || !isNew ? 'allocation' : 'setup'),
-  )
-  const [rows, setRows] = useState(() =>
-    proposal?.departmentBudgets?.length ? mapProposalToRows(proposal) : [emptyRow()],
-  )
-  const [inputMode, setInputMode] = useState('ABSOLUTE') // 'ABSOLUTE' | 'PERCENTAGE'
+  
+  // phase can be setup (defining the proposal) or allocation (defining the matrix)
+  // If it's a new proposal, we MUST save the setup first to get an ID.
+  const [phase, setPhase] = useState(() => isNew ? 'setup' : 'allocation')
 
   useEffect(() => {
     if (!proposal?.id) return
     setFinancialYear(proposal.financialYear ?? defaultFinancialYear())
     setTotalAmount(String(proposal.totalAmount ?? ''))
     setPlannerComment(proposal.plannerComment ?? '')
-    setPhase(proposal.departmentBudgets?.length ? 'allocation' : 'setup')
-    setRows(proposal.departmentBudgets?.length ? mapProposalToRows(proposal) : [emptyRow()])
+    setPhase('allocation')
   }, [proposal?.id, proposal?.updatedAt])
-
-  // totals computed directly from absoluteValue
-  const { allocatedSum, remaining, remainingOk, hasServerFlags } = useMemo(() => {
-    const total = parseAmount(totalAmount)
-    const sum = rows.reduce((acc, r) => acc + (r.absoluteValue ?? 0), 0)
-    const rem = total - sum
-    return {
-      allocatedSum: sum,
-      remaining: rem,
-      remainingOk: amountsEqual(rem, 0),
-      hasServerFlags: rows.some(r => r.markedForRevision),
-    }
-  }, [rows, totalAmount])
-
-  const canSubmit = useMemo(() => {
-    if (!editable) return false
-    if (!remainingOk) return false
-    if (hasServerFlags) return false
-    if (isPendingBlocked) return false
-    if (rows.filter(r => r.departmentId).length === 0) return false
-    return true
-  }, [editable, remainingOk, hasServerFlags, isPendingBlocked, rows])
-
-  const handleRowChange = (idx, patch) => {
-    setRows(prev => prev.map((row, i) => {
-      if (i !== idx) return row
-      const next = { ...row, ...patch }
-      if (patch.absoluteValue !== undefined) {
-        next.revisionDismissed = true
-      }
-      return next
-    }))
-  }
 
   const handleStartPlanning = () => {
     if (!financialYear.trim()) return
     if (!totalAmount || Number(totalAmount) <= 0) return
-    setPhase('allocation')
+    if (isNew) {
+      // Must save the proposal to get an ID before rendering the matrix
+      onSave({
+        financialYear,
+        totalAmount: Number(totalAmount),
+        plannerComment: plannerComment || null
+      })
+    } else {
+      setPhase('allocation')
+    }
   }
 
-  const payload = () => buildPayload(financialYear, totalAmount, plannerComment, rows)
+  const payload = () => ({
+    financialYear,
+    totalAmount: Number(totalAmount),
+    plannerComment: plannerComment || null
+  })
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -187,12 +108,12 @@ export default function BudgetPlannerEditor({
             </div>
             <button
               type="button"
+              disabled={!financialYear.trim() || !totalAmount || Number(totalAmount) <= 0 || saving}
               onClick={handleStartPlanning}
-              disabled={!financialYear.trim() || !totalAmount || Number(totalAmount) <= 0}
               className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white
                          shadow-sm transition hover:bg-brand-700 disabled:opacity-50"
             >
-              Start Planning
+              {saving ? 'Saving...' : 'Start Planning'}
             </button>
           </div>
         ) : (
@@ -203,7 +124,7 @@ export default function BudgetPlannerEditor({
                 <p className="font-semibold text-slate-800">{financialYear}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500">Total Budget (locked)</p>
+                <p className="text-xs font-medium text-slate-500">Total Budget</p>
                 <p className="font-semibold text-slate-800">₹{Number(totalAmount).toLocaleString('en-IN')}</p>
               </div>
               {plannerComment && (
@@ -212,21 +133,20 @@ export default function BudgetPlannerEditor({
                   <p className="truncate text-sm text-slate-700">{plannerComment}</p>
                 </div>
               )}
+              {editable && (
+                <button
+                  type="button"
+                  onClick={() => setPhase('setup')}
+                  className="text-xs font-medium text-brand-600 hover:text-brand-800 underline"
+                >
+                  Edit Setup
+                </button>
+              )}
             </div>
 
-            <BudgetPlannerGrid
-              totalBudget={totalAmount}
-              rows={rows}
-              departments={departments}
-              onRowChange={handleRowChange}
-              onAddRow={() => setRows(prev => [...prev, emptyRow()])}
-              onRemoveRow={(idx) => setRows(prev => prev.filter((_, i) => i !== idx))}
-              readOnly={!editable}
-              inputMode={inputMode}
-              onInputModeChange={setInputMode}
-              allocatedSum={allocatedSum}
-              remaining={remaining}
-              remainingOk={remainingOk}
+            <StateMonthlyMatrix 
+              proposal={proposal} 
+              readOnly={!editable} 
             />
 
             {editable && (
@@ -244,21 +164,13 @@ export default function BudgetPlannerEditor({
                     className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm
                                font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                   >
-                    {saving ? 'Saving…' : 'Save Draft'}
+                    {saving ? 'Saving…' : 'Save Proposal Setup'}
                   </button>
                   <button
                     type="button"
-                    disabled={!canSubmit || submitting}
+                    disabled={submitting || isPendingBlocked}
                     onClick={() => onSubmit(payload())}
-                    title={
-                      isPendingBlocked
-                        ? 'A budget proposal is already pending approval'
-                        : hasServerFlags
-                          ? 'Save all flagged rows before submitting'
-                          : !remainingOk
-                            ? 'Remaining budget must be exactly ₹0'
-                            : ''
-                    }
+                    title={isPendingBlocked ? 'A budget proposal is already pending approval' : ''}
                     className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white
                                shadow-sm transition hover:bg-brand-700 disabled:opacity-50"
                   >

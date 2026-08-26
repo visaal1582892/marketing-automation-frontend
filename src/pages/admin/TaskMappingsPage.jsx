@@ -1,5 +1,5 @@
 import { useCallback, useEffect, memo, useState, useMemo } from 'react'
-import { masterApi, granularTasksApi, roleTaskApi, campaignTaskConfigApi } from '../../api/masterData'
+import { masterApi, granularTasksApi, roleTaskApi, campaignTaskConfigApi, campaignTypeApi } from '../../api/masterData'
 import campaignSpecsApi from '../../api/campaignSpecs'
 import useDebounce from '../../hooks/useDebounce'
 import Icon from '../../components/Icon'
@@ -276,7 +276,7 @@ function CampaignTaskTab() {
     loadGroups()
     Promise.all([
       granularTasksApi.list(false),
-      masterApi.list('campaign-types'),
+      campaignTypeApi.list(),
       masterApi.list('business-verticals'),
       masterApi.list('business-types'),
       masterApi.list('store-format-types'),

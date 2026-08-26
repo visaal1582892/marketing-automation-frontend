@@ -14,6 +14,9 @@ import DashboardPage from './pages/DashboardPage'
 import UnauthorizedPage from './pages/UnauthorizedPage'
 import MasterHubPage from './pages/admin/MasterHubPage'
 import MasterTablePage from './pages/admin/MasterTablePage'
+import EventCategoryMasterPage from './pages/admin/EventCategoryMasterPage'
+import CampaignTypeMasterPage from './pages/admin/CampaignTypeMasterPage'
+import EventCampaignTaskMaster from './pages/admin/EventCampaignTaskMaster'
 import GranularTaskPage from './pages/admin/GranularTaskPage'
 import TaskMappingsPage from './pages/admin/TaskMappingsPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
@@ -23,6 +26,7 @@ import NotificationTemplatesPage from './pages/admin/NotificationTemplatesPage'
 import VerticalTypeMappingPage from './pages/admin/VerticalTypeMappingPage'
 import TypeFormatMappingPage from './pages/admin/TypeFormatMappingPage'
 import WorkingHoursPage from './pages/admin/WorkingHoursPage'
+import ApprovalFlowMasterPage from './pages/admin/ApprovalFlowMasterPage'
 import CampaignFormPage from './pages/campaigns/CampaignFormPage'
 import CampaignListPage from './pages/campaigns/CampaignListPage'
 import CampaignDetailPage from './pages/campaigns/CampaignDetailPage'
@@ -33,7 +37,8 @@ import ManagerQcReviewPage from './pages/manager/ManagerQcReviewPage'
 import RequestorQcReviewPage from './pages/campaigns/RequestorQcReviewPage'
 import TaskManagementPage from './pages/manager/TaskManagementPage'
 import AnalyticsPage from './pages/manager/AnalyticsPage'
-import BudgetPlanningPage from './pages/budget/BudgetPlanningPage'
+import BudgetPlanningWizard from './pages/budget/BudgetPlanningWizard'
+import BudgetProposalListPage from './pages/budget/BudgetProposalListPage'
 
 export default function App() {
   return (
@@ -121,21 +126,21 @@ export default function App() {
               <Route
                 path="/manager/task-management"
                 element={
-                  <ProtectedRoute requireRight={Rights.ACCESS_MANAGER_TOOLS}>
+                  <ProtectedRoute requireAnyRight={[Rights.ACCESS_MANAGER_TOOLS, Rights.VIEW_TEAM_TASKS]}>
                     <TaskManagementPage />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="/manager/qc-review"
+                path="/tasks/approvals"
                 element={
-                  <ProtectedRoute requireRight={Rights.REVIEW_MANAGER_QC}>
+                  <ProtectedRoute requireAnyRight={[Rights.REVIEW_MANAGER_QC, Rights.APPROVE_TEAM_TASKS]}>
                     <ManagerQcReviewPage />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="/requestor-qc-review"
+                path="/requestor/review-center"
                 element={
                   <ProtectedRoute requireRight={Rights.VIEW_REQUESTOR_QC_QUEUE}>
                     <RequestorQcReviewPage />
@@ -146,19 +151,27 @@ export default function App() {
                 path="/manager/analytics"
                 element={
                   <ProtectedRoute
-                    requireAnyRight={[Rights.VIEW_ANALYTICS_REPORTS, Rights.ACCESS_MANAGER_TOOLS]}
+                    requireAnyRight={[Rights.VIEW_ANALYTICS_REPORTS, Rights.ACCESS_MANAGER_TOOLS, Rights.VIEW_TEAM_ANALYTICS]}
                   >
                     <AnalyticsPage />
                   </ProtectedRoute>
                 }
               />
 
-              {/* ── Budget & Planning ── */}
+              {/* ── Budget Planning ── */}
               <Route
                 path="/budget-planning"
                 element={
                   <ProtectedRoute requireAnyRight={BUDGET_RIGHTS}>
-                    <BudgetPlanningPage />
+                    <BudgetProposalListPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/budget-planning/wizard/:proposalId?/:stepId?"
+                element={
+                  <ProtectedRoute requireAnyRight={BUDGET_RIGHTS}>
+                    <BudgetPlanningWizard />
                   </ProtectedRoute>
                 }
               />
@@ -169,6 +182,30 @@ export default function App() {
                 element={
                   <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
                     <MasterHubPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/master/budget/event-categories"
+                element={
+                  <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
+                    <EventCategoryMasterPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/master/budget/campaign-types"
+                element={
+                  <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
+                    <CampaignTypeMasterPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/master/budget/event-campaign-tasks"
+                element={
+                  <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
+                    <EventCampaignTaskMaster />
                   </ProtectedRoute>
                 }
               />
@@ -225,6 +262,14 @@ export default function App() {
                 element={
                   <ProtectedRoute requireRight={Rights.MANAGE_SYSTEM_SETTINGS}>
                     <WorkingHoursPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/approval-flows"
+                element={
+                  <ProtectedRoute requireRight={Rights.MANAGE_SYSTEM_SETTINGS}>
+                    <ApprovalFlowMasterPage />
                   </ProtectedRoute>
                 }
               />

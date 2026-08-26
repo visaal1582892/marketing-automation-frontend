@@ -21,8 +21,8 @@ import { parseTargetLocations, serializeTargetLocations } from '../../utils/targ
 
 const CAMPAIGN_STATUS_STYLES = {
   IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
-  MANAGER_QC_REVIEW:          'bg-purple-50 text-purple-700 ring-purple-200',
-  REQUESTOR_QC_REVIEW:        'bg-violet-50 text-violet-700 ring-violet-200',
+  MARKETING_REVIEW:          'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_REVIEW:        'bg-violet-50 text-violet-700 ring-violet-200',
   COMPLETED:                  'bg-green-50 text-green-700 ring-green-200',
   REJECTED:                   'bg-red-50 text-red-700 ring-red-200',
   CANCELLED:                  'bg-slate-100 text-slate-500 ring-slate-200',
@@ -30,8 +30,8 @@ const CAMPAIGN_STATUS_STYLES = {
 
 const CAMPAIGN_STATUS_LABELS = {
   IN_PROGRESS:                'In Progress',
-  MANAGER_QC_REVIEW:          'Manager QC Review',
-  REQUESTOR_QC_REVIEW:        'Requestor QC Review',
+  MARKETING_REVIEW:          'Marketing Review',
+  REQUESTOR_REVIEW:        'Requestor Review',
   COMPLETED:                  'Completed',
   REJECTED:                   'Rejected',
   CANCELLED:                  'Cancelled',
@@ -1418,8 +1418,8 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
                           HELD:                 'text-amber-600 bg-amber-50',
                           ACCEPTED:             'text-indigo-600 bg-indigo-50',
                           IN_PROGRESS:          'text-emerald-600 bg-emerald-50',
-                          MANAGER_QC_REVIEW:    'text-purple-600 bg-purple-50',
-                          REQUESTOR_QC_REVIEW:  'text-violet-600 bg-violet-50',
+                          MARKETING_REVIEW:    'text-purple-600 bg-purple-50',
+                          REQUESTOR_REVIEW:  'text-violet-600 bg-violet-50',
                           REWORK:               'text-orange-600 bg-orange-50',
                           COMPLETED:            'text-green-600 bg-green-50',
                           CANCELLED:            'text-slate-500 bg-slate-100',
@@ -1482,7 +1482,7 @@ function EditCampaignModal({ campaign, onClose, onSuccess }) {
 
                             {/* Expandable questionnaire + files panel */}
                             {isExpanded && (() => {
-                              const READONLY_STATUSES = new Set(['COMPLETED','IN_PROGRESS','MANAGER_QC_REVIEW','REQUESTOR_QC_REVIEW','REWORK','ACCEPTED'])
+                              const READONLY_STATUSES = new Set(['COMPLETED','IN_PROGRESS','MARKETING_REVIEW','REQUESTOR_REVIEW','REWORK','ACCEPTED'])
                               const isReadOnly = READONLY_STATUSES.has(d.status)
                               return (
                                 <div className="border-t border-sky-200 px-4 pb-4 pt-3 space-y-4 bg-sky-50/20">
@@ -1929,7 +1929,7 @@ const CampaignRow = memo(function CampaignRow({
   const taskCount           = c.taskCount ?? (c.workTasks || []).length
   const doneCount           = c.completedTaskCount ?? (c.workTasks || []).filter(t => t.status === 'COMPLETED').length
   const hasRework           = c.hasRework   ?? (c.workTasks || []).some(t => t.status === 'REWORK')
-  const hasQcReview         = c.hasQcReview ?? (c.workTasks || []).some(t => t.status === 'MANAGER_QC_REVIEW' || t.status === 'REQUESTOR_QC_REVIEW')
+  const hasQcReview         = c.hasQcReview ?? (c.workTasks || []).some(t => t.status === 'MARKETING_REVIEW' || t.status === 'REQUESTOR_REVIEW')
   const hasUnansweredComments = !!c.hasUnansweredComments
   const canEdit             = !ROW_TERMINAL.includes(c.status)
   const isBookmarked        = !!c.bookmarked

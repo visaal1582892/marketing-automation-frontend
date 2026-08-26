@@ -16,8 +16,8 @@ const EVENT_LABELS = {
   ADDED_TO_COLLABORATION: 'Added to Collaboration',
   NEW_TASK_MESSAGE:       'New Task Message',
   SUBMITTED_FOR_QC:       'Submitted for QC',
-  MANAGER_QC_APPROVAL:    'Manager QC Approval',
-  REQUESTOR_QC_APPROVAL:  'Requestor QC Approval',
+  MANAGER_QC_APPROVAL:    'Marketing Review Approval',
+  REQUESTOR_QC_APPROVAL:  'Requestor Review Approval',
 }
 
 const EVENT_OPTIONS = [

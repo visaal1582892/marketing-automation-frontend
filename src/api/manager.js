@@ -16,6 +16,7 @@ const managerApi = {
   holdTask:             (taskId)     => api.post(`${BASE}/tasks/${taskId}/hold`),
   unholdTask:           (taskId)     => api.post(`${BASE}/tasks/${taskId}/unhold`),
   cancelTask:           (taskId)     => api.post(`${BASE}/tasks/${taskId}/cancel`),
+  getConfigurableApprovalHistory: (taskId) => api.get(`${BASE}/tasks/${taskId}/configurable-approval-history`),
   heldTasks:            ()           => api.get(`${BASE}/tasks/held`),
   eligibleUsersForTask: (taskId)     => api.get(`${BASE}/tasks/${taskId}/eligible-users`),
   assignHeldTask:       (taskId, userId) => api.post(`${BASE}/tasks/${taskId}/assign`, { userId }),
@@ -29,7 +30,7 @@ const managerApi = {
   overrideIntervention: (id, payload)       => api.post(`${BASE}/intervention/${id}/override`, payload),
   rejectIntervention:   (id, reason)        => api.post(`${BASE}/intervention/${id}/reject`, { reason }),
 
-  analytics:   () => api.get(`${BASE}/reports/analytics`),
+  analytics:   (params) => api.get(`${BASE}/reports/analytics`, { params }),
 
   // ── Time-tracking reports (Module 3) ───────────────────────────────────────
   timeReport: (from, to) => api.get(`${BASE}/reports/time`, { params: { from, to } }),

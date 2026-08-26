@@ -31,3 +31,28 @@ export const budgetApi = {
   delete: (id) =>
     api.delete(`/budget-proposals/${id}`).then(r => r.data),
 }
+
+export const stateMonthlyPlanApi = {
+  getByProposalId: (proposalId) => api.get('/state-monthly-plan', { params: { proposalId } }).then(r => r.data),
+  create: (payload) => api.post('/state-monthly-plan', payload).then(r => r.data),
+  update: (id, payload) => api.put(`/state-monthly-plan/${id}`, payload).then(r => r.data),
+  delete: (id) => api.delete(`/state-monthly-plan/${id}`).then(r => r.data),
+}
+
+export const taskAllocationApi = {
+  getByStatePlanId: (statePlanId) => api.get('/task-allocation', { params: { statePlanId } }).then(r => r.data),
+  create: (payload) => api.post('/task-allocation', payload).then(r => r.data),
+  update: (id, payload) => api.put(`/task-allocation/${id}`, payload).then(r => r.data),
+  delete: (id) => api.delete(`/task-allocation/${id}`).then(r => r.data),
+}
+
+export const taskSpendApi = {
+  getByAllocationId: (allocationId) => api.get('/task-spend', { params: { allocationId } }).then(r => r.data),
+  create: (payload) => api.post('/task-spend', payload).then(r => r.data),
+  update: (id, payload) => api.put(`/task-spend/${id}`, payload).then(r => r.data),
+  delete: (id) => api.delete(`/task-spend/${id}`).then(r => r.data),
+}
+
+export const ledgerApi = {
+  getLedger: (proposalId, stateCode) => api.get('/ledger', { params: { proposalId, stateCode } }).then(r => r.data),
+}

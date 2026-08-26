@@ -22,7 +22,8 @@ import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts'
 export default function DashboardPage() {
   const { user, hasRight, hasAnyRight } = useAuth()
 
-  const showOpsWidgets = hasRight(Rights.ACCESS_MANAGER_TOOLS)
+  const showOpsWidgets      = hasRight(Rights.ACCESS_MANAGER_TOOLS)
+  const showTeamLeaderWidgets = hasRight(Rights.VIEW_TEAM_TASKS) && !hasRight(Rights.ACCESS_MANAGER_TOOLS)
 
   const showAdminExtras = hasAnyRight(...ADMIN_CONFIG_RIGHTS)
 
@@ -77,14 +78,14 @@ export default function DashboardPage() {
       // Worker: recent task list for the feed (first page, default size)
       need(showWorkerWidgets, () => tasksApi.listMy().then(r => r.data)),
       // Ops: QC pending (full list — usually small)
-      need(showOpsWidgets,     () => managerApi.qcSummary().then(r => r.data)),
+      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.qcSummary().then(r => r.data)),
       // Ops: per-status counts — fetch size=1 so backend returns totalElements accurately
-      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'REWORK',      size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'IN_PROGRESS', size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'COMPLETED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'ASSIGNED',    size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'HELD',        size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets,     () => managerApi.allTasks({ status: 'CANCELLED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'REWORK',      size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'IN_PROGRESS', size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'COMPLETED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'ASSIGNED',    size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'HELD',        size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'CANCELLED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets,     () => managerApi.dashboardTrend().then(r => r.data)),
     ]).then(([cs, completedTasks, openData, qcData, doneData, ts, qcSummary, rework, inProgress, completed, assigned, held, cancelled, trendData]) => {
       if (!alive) return
@@ -123,7 +124,7 @@ export default function DashboardPage() {
     }).finally(() => alive && setLoading(false))
 
     return () => { alive = false }
-  }, [showWorkerWidgets, showOpsWidgets, showRequestWidgets])
+  }, [showWorkerWidgets, showOpsWidgets, showTeamLeaderWidgets, showRequestWidgets])
 
   // Worker KPI aliases (counts come from accurate totalElements, not from a filtered page)
   const taskCounts = workerCounts
@@ -173,12 +174,12 @@ export default function DashboardPage() {
           {/* QC queue shortcut — Marketing Manager only */}
           {hasRight(Rights.REVIEW_MANAGER_QC) && (
             <Link
-              to="/manager/qc-review"
+              to="/tasks/approvals"
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200
                          px-3 py-1.5 text-xs font-semibold text-slate-600
                          transition hover:bg-slate-50"
             >
-              <Icon name="send" className="h-3 w-3" /> Manager QC Review
+              <Icon name="send" className="h-3 w-3" /> Marketing Review
             </Link>
           )}
           
@@ -203,15 +204,15 @@ export default function DashboardPage() {
         <p className="text-center text-slate-400 py-8 text-sm">Loading dashboard…</p>
       )}
 
-      {/* ── Operations Overview: Marketing Manager + Admin ───────────── */}
-      {showOpsWidgets && (
+      {/* ── Operations Overview: Marketing Manager + Admin + Team Leader ── */}
+      {(showOpsWidgets || showTeamLeaderWidgets) && (
         <>
           <Section
             title="Operations Overview"
-            subtitle="Live pulse of the entire marketing execution pipeline."
+            subtitle={showTeamLeaderWidgets ? 'Live pulse of your team members\' execution pipeline.' : 'Live pulse of the entire marketing execution pipeline.'}
           >
             <KpiCard
-              to="/manager/qc-review"
+              to="/tasks/approvals"
               tone="violet"
               icon="send"
               label="Pending QC Review"
@@ -258,7 +259,7 @@ export default function DashboardPage() {
 
           <Section
             title="Team Pipeline"
-            subtitle="Breakdown of where work currently stands across all team members."
+            subtitle={showTeamLeaderWidgets ? 'Breakdown of where work stands across your assigned team members.' : 'Breakdown of where work currently stands across all team members.'}
           >
             <KpiCard
               to="/manager/task-management?status=ASSIGNED"
@@ -586,13 +587,13 @@ function TaskBadge({ status }) {
     ASSIGNED:    'bg-blue-50 text-blue-700 ring-blue-200',
     IN_PROGRESS: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
     REWORK:      'bg-amber-50 text-amber-700 ring-amber-200',
-    MANAGER_QC_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
-    REQUESTOR_QC_REVIEW: 'bg-violet-50 text-violet-700 ring-violet-200',
+    MARKETING_REVIEW:   'bg-purple-50 text-purple-700 ring-purple-200',
+    REQUESTOR_REVIEW: 'bg-violet-50 text-violet-700 ring-violet-200',
     COMPLETED:           'bg-green-50 text-green-700 ring-green-200',
   }
   const labels = {
     ASSIGNED: 'New', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
-    MANAGER_QC_REVIEW: 'Mgr QC', REQUESTOR_QC_REVIEW: 'Req QC', COMPLETED: 'Done',
+    MARKETING_REVIEW: 'Mktg Review', REQUESTOR_REVIEW: 'Req Review', COMPLETED: 'Done',
   }
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${m[status] || 'bg-slate-100 text-slate-600'}`}>{labels[status] || status}</span>
 }

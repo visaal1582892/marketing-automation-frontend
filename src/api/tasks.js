@@ -13,10 +13,14 @@ const tasksApi = {
   listMy: (q, statusGroup = 'ALL', page = 0, size = 10) =>
     api.get(`${BASE}/my`, { params: { q: q || undefined, statusGroup, page, size } }),
 
+  /** Paginated approvals queue (queueType: 'MANAGER' or 'REQUESTOR') */
+  myApprovals: (params = {}) => api.get(`${BASE}/my-approvals`, { params }),
+
   getById: (id) => api.get(`${BASE}/${id}`),
 
   /** All assignment cycles for accountability timeline. */
   getAssignmentHistory: (taskId) => api.get(`${BASE}/${taskId}/history`),
+  getActivityLedger: (taskId) => api.get(`${BASE}/${taskId}/activity-ledger`),
 
   /** Fetch the parent task context if this is a sub-task. */
   getParentTask: (taskId) => api.get(`/work-tasks/${taskId}/parent`),

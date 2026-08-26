@@ -5,6 +5,7 @@ import { Rights } from '../constants/rights'
 import {
   BUDGET_RIGHTS,
   MANAGER_NAV_LINKS,
+  REQUESTOR_NAV_LINKS,
   REQUESTOR_RIGHTS,
   canAccessNavItem,
 } from '../constants/navAccess'
@@ -221,8 +222,7 @@ export default function AppLayout() {
     if (location.pathname.startsWith('/my-tasks'))                 return 'My Tasks'
     if (location.pathname.startsWith('/collaborations'))           return 'Collaborations'
     if (location.pathname.startsWith('/manager/task-management'))  return 'Task Management'
-    if (location.pathname.startsWith('/manager/qc-review'))        return 'Manager QC Review Queue'
-    if (location.pathname.startsWith('/requestor-qc-review'))     return 'Requestor QC Review'
+    if (location.pathname.startsWith('/tasks/approvals'))          return 'Task Approvals'
     if (location.pathname.startsWith('/manager/analytics'))       return 'Analytics'
     if (location.pathname.startsWith('/budget-planning'))         return 'Budget & Planning'
     if (location.pathname === '/dashboard')                        return 'Dashboard'
@@ -283,15 +283,16 @@ export default function AppLayout() {
             />
           )}
 
-          {hasRight(Rights.VIEW_REQUESTOR_QC_QUEUE) && (
+          {REQUESTOR_NAV_LINKS.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)).map((item) => (
             <SidebarLink
-              to="/requestor-qc-review"
-              label="Requestor QC Review"
-              icon="checkCircle"
+              key={item.to}
+              to={item.to}
+              label={item.label}
+              icon={item.icon}
               collapsed={collapsed}
               onNavigate={() => setMobileOpen(false)}
             />
-          )}
+          ))}
 
           {/* Manager ops — ACCESS_MANAGER_TOOLS only */}
           {showManagerTools && (

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { useToast } from '../../components/Toast'
 import campaignsApi from '../../api/campaigns'
-import { masterApi, granularTasksApi } from '../../api/masterData'
+import { masterApi, granularTasksApi, campaignTypeApi } from '../../api/masterData'
 import { enumsApi } from '../../api/enums'
 import api from '../../api/client'
 import AppSelect from '../../components/AppSelect'
@@ -968,7 +968,7 @@ export default function CampaignFormPage() {
     masterApi.list('vendor-types').then(nbM(setVendorTypes)).catch(() => {})
     masterApi.list('kpi-types').then(nb(setKpiTypeOpts)).catch(() => {})
     masterApi.list('expected-outputs').then(nb(setExpectedOutputOpts)).catch(() => {})
-    masterApi.list('campaign-types').then((d) => setCampaignTypes(d.map(normaliseById))).catch(() => {})
+    campaignTypeApi.list().then((d) => setCampaignTypes(d.map(normaliseById))).catch(() => {})
     masterApi.list('business-verticals').then((d) => setBusinessVerticals(d.map(normaliseById))).catch(() => {})
 
     masterApi.list('granular-tasks').then((d) => setAllAvailableTasks(d))

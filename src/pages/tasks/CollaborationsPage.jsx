@@ -42,20 +42,30 @@ const STATUS_STYLES = {
   ASSIGNED:    { badge: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',     stripe: 'bg-blue-400',    dot: 'bg-blue-400'    },
   IN_PROGRESS: { badge: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', stripe: 'bg-emerald-400', dot: 'bg-emerald-400' },
   REWORK:      { badge: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',  stripe: 'bg-amber-400',   dot: 'bg-amber-400'   },
-  MANAGER_QC_REVIEW:   { badge: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200', stripe: 'bg-purple-400', dot: 'bg-purple-400'  },
-  REQUESTOR_QC_REVIEW: { badge: 'bg-violet-50 text-violet-700 ring-1 ring-violet-200', stripe: 'bg-violet-400', dot: 'bg-violet-400'  },
+  MARKETING_REVIEW:   { badge: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200', stripe: 'bg-purple-400', dot: 'bg-purple-400'  },
+  REQUESTOR_REVIEW: { badge: 'bg-violet-50 text-violet-700 ring-1 ring-violet-200', stripe: 'bg-violet-400', dot: 'bg-violet-400'  },
   COMPLETED:   { badge: 'bg-green-50 text-green-700 ring-1 ring-green-200',  stripe: 'bg-green-500',   dot: 'bg-green-500'   },
   CANCELLED:   { badge: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',     stripe: 'bg-rose-400',    dot: 'bg-rose-400'    },
   HELD:        { badge: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',  stripe: 'bg-amber-400',   dot: 'bg-amber-400'   },
 }
 const STATUS_LABELS = {
   ASSIGNED: 'New', IN_PROGRESS: 'In Progress', REWORK: 'Rework',
-  MANAGER_QC_REVIEW: 'Mgr QC', REQUESTOR_QC_REVIEW: 'Req QC',
+  MARKETING_REVIEW: 'Mktg Review', REQUESTOR_REVIEW: 'Req Review',
   COMPLETED: 'Completed', CANCELLED: 'Cancelled', HELD: 'On Hold',
 }
 const getStatus = (s) => STATUS_STYLES[s] || { badge: 'bg-slate-100 text-slate-600', stripe: 'bg-slate-300', dot: 'bg-slate-300' }
 
-function StatusBadge({ status }) {
+function StatusBadge({ task }) {
+  if (!task) return null
+  const status = task.status
+  if (status === 'MARKETING_REVIEW' && task.pendingWithRole) {
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${getStatus(status).badge}`}>
+        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${getStatus(status).dot}`} />
+        L{task.currentApprovalLevel}: {task.pendingWithRole}
+      </span>
+    )
+  }
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${getStatus(status).badge}`}>
       <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${getStatus(status).dot}`} />
@@ -100,7 +110,7 @@ function Avatar({ name, size = 'md' }) {
 
 // ─── Chat Panel ───────────────────────────────────────────────────────────────
 
-const CARD_BLOCKED_STATUSES = ['HELD', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW', 'CANCELLED', 'COMPLETED']
+const CARD_BLOCKED_STATUSES = ['HELD', 'MARKETING_REVIEW', 'REQUESTOR_REVIEW', 'CANCELLED', 'COMPLETED']
 
 function TypingDots() {
   return (
@@ -131,8 +141,8 @@ function ChatPanel({ task, onClose }) {
 
   const cardBlockReason = {
     HELD:      'Task is on hold — chat and assets are paused.',
-    MANAGER_QC_REVIEW: 'Task is in Manager QC review — chat and assets are locked.',
-    REQUESTOR_QC_REVIEW: 'Task is in Requestor QC review — chat and assets are locked.',
+    MARKETING_REVIEW: 'Task is in Marketing Review review — chat and assets are locked.',
+    REQUESTOR_REVIEW: 'Task is in Requestor Review review — chat and assets are locked.',
     COMPLETED: 'Task completed — chat and assets are locked.',
     CANCELLED: 'Task has been cancelled.',
   }[task.status]
@@ -215,7 +225,8 @@ function ChatPanel({ task, onClose }) {
               </div>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge task={task} />
                 <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-accent-400' : 'bg-white/40'}`} />
                 <span className="text-[10px] text-brand-100">{isConnected ? 'Live' : 'Connecting…'}</span>
               </div>
@@ -499,7 +510,7 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh }) {
                 {!task.collaborationActive ? 'Resume' : 'Pause'}
               </button>
             )}
-            <StatusBadge status={task.status} />
+            <StatusBadge task={task} />
           </div>
         </div>
 

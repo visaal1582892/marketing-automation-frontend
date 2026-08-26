@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import campaignsApi from '../../api/campaigns'
+import tasksApi from '../../api/tasks'
 import { useToast } from '../../components/Toast'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
@@ -10,6 +11,7 @@ import Pagination from '../../components/Pagination'
 import useDebounce from '../../hooks/useDebounce'
 import { useAuth } from '../../auth/AuthContext'
 import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
+import TimelineNodeFlow from '../../components/TimelineNodeFlow'
 
 const PAGE_SIZE = 20
 
@@ -44,12 +46,13 @@ export default function RequestorQcReviewPage() {
   const fetchTasks = useCallback((silent = false) => {
     if (!silent) setLoading(true)
     const params = {
+      queueType: 'REQUESTOR',
       page, size: PAGE_SIZE,
       ...(dSearch   && { search:   dSearch   }),
       ...(fDateFrom && { dateFrom: fDateFrom }),
       ...(fDateTo   && { dateTo:   fDateTo   }),
     }
-    campaignsApi.requestorQcTasks(params)
+    tasksApi.myApprovals(params)
       .then(res => {
         const data = res.data
         setTasks(data.content || [])
@@ -112,7 +115,7 @@ export default function RequestorQcReviewPage() {
       {/* ── Header ── */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Requestor QC Review</h2>
+          <h2 className="text-xl font-bold text-slate-900">Requestor Review</h2>
           <p className="mt-0.5 text-sm text-slate-500">
             Tasks approved by the manager and awaiting your final sign-off. Approve to complete, or send back for rework.
           </p>
@@ -274,7 +277,7 @@ function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
         <div className="flex items-center gap-2">
           {task.managerApprovedAt && (
             <span className="text-xs text-slate-400">
-              Mgr approved {fmt(task.managerApprovedAt)}
+              Marketing approved {fmt(task.managerApprovedAt)}
             </span>
           )}
           <button
@@ -374,7 +377,7 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
                 <div>
                   <span className="font-medium">Creator:</span>{' '}
                   {task.assigneeName || `User ${task.assignedTo}`}
-                  {task.totalTimeLoggedMinutes != null && ` • ${task.totalTimeLoggedMinutes} min logged`}
+                  {task.currentCycleLoggedMinutes != null && ` • Time spent on this cycle: ${Math.floor(task.currentCycleLoggedMinutes / 60)} hrs ${task.currentCycleLoggedMinutes % 60} mins`}
                 </div>
               </div>
             </>
@@ -467,72 +470,59 @@ function TaskTimeline({ task }) {
     {
       label: 'Assigned',
       ts: task.assignedAt || task.createdAt,
+      formattedTs: (task.assignedAt || task.createdAt) ? fmtDate(task.assignedAt || task.createdAt) : null,
       icon: (
-        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+        <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
           <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm4 1.5a4.5 4.5 0 0 1 1 2.833V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-.667A4.5 4.5 0 0 1 4 9.5h8Z"/>
         </svg>
       ),
-      done: { dot: 'bg-slate-500', line: 'bg-slate-300', text: 'text-slate-600', card: 'bg-slate-50 border-slate-200' },
+      styles: { dot: 'bg-slate-500', line: 'bg-slate-300', text: 'text-slate-600', card: 'bg-slate-50 border-slate-200' },
     },
     {
       label: 'Submitted',
       ts: task.submittedAt,
+      formattedTs: task.submittedAt ? fmtDate(task.submittedAt) : null,
       icon: (
-        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+        <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
           <path d="M.5 9.9a.5.5 0 0 1 .5.5V13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.6a.5.5 0 0 1 1 0V13a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.6a.5.5 0 0 1 .5-.5Z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3Z"/>
         </svg>
       ),
-      done: { dot: 'bg-blue-500', line: 'bg-blue-200', text: 'text-blue-700', card: 'bg-blue-50 border-blue-200' },
+      styles: { dot: 'bg-blue-500', line: 'bg-blue-200', text: 'text-blue-700', card: 'bg-blue-50 border-blue-200' },
     },
     {
-      label: 'Mgr Approved',
+      label: 'Marketing Approved',
       ts: task.managerApprovedAt,
+      formattedTs: task.managerApprovedAt ? fmtDate(task.managerApprovedAt) : null,
       icon: (
-        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+        <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
           <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.78-1.72a.75.75 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25Z"/>
         </svg>
       ),
-      done: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' },
+      styles: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' },
+    },
+    {
+      label: 'Requestor Approved',
+      ts: task.requestorApprovedAt,
+      formattedTs: task.requestorApprovedAt ? fmtDate(task.requestorApprovedAt) : null,
+      icon: (
+        <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
+          <path fillRule="evenodd" d="M14.5 2.5a.5.5 0 0 1 .5.5v2.565l-2.196-1.097A6.5 6.5 0 1 0 14.5 8.5a.5.5 0 0 1-1 0 5.5 5.5 0 1 1-1.74-4.004l-1.393.696A.5.5 0 0 1 9.5 4.5V2a.5.5 0 0 1 .5-.5h4.5z"/>
+          <path d="M15.354 4.146a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708 0l-1-1a.5.5 0 1 1 .708-.708l.646.647 1.646-1.647a.5.5 0 0 1 .708 0z"/>
+        </svg>
+      ),
+      styles: { dot: 'bg-teal-500', line: 'bg-teal-200', text: 'text-teal-700', card: 'bg-teal-50 border-teal-200' },
     },
   ]
 
-  const fmt = ts => new Date(ts).toLocaleString('en-IN', {
-    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-  })
+  return <TimelineNodeFlow steps={steps} />
+}
 
-  return (
-    <div className="overflow-x-auto pb-0.5">
-      <div className="flex items-stretch min-w-max gap-0">
-        {steps.map((step, i) => {
-          const active = !!step.ts
-          const isLast = i === steps.length - 1
-          const s = step.done
-          return (
-            <div key={step.label} className="flex items-center">
-              <div className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 transition ${
-                active ? s.card : 'bg-slate-50 border-slate-100'
-              }`}>
-                <span className={`flex h-5 w-5 items-center justify-center rounded-full shrink-0 ${
-                  active ? `${s.dot} text-white` : 'bg-slate-200 text-slate-400'
-                }`}>
-                  <span className="scale-75">{step.icon}</span>
-                </span>
-                <div className="leading-tight">
-                  <div className={`text-[9px] font-bold uppercase tracking-wider ${active ? s.text : 'text-slate-400'}`}>
-                    {step.label}
-                  </div>
-                  <div className={`text-[10px] font-semibold whitespace-nowrap ${active ? 'text-slate-700' : 'text-slate-400'}`}>
-                    {active ? fmt(step.ts) : '—'}
-                  </div>
-                </div>
-              </div>
-              {!isLast && (
-                <div className={`h-px w-3 shrink-0 ${active ? s.line : 'bg-slate-200'}`} />
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
+function fmtDate(d) {
+  if (!d) return ''
+  return new Date(d).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }

@@ -132,3 +132,28 @@ export const questionApi = {
       params: { questionId, questionText, fieldType, required, granularTaskId, page, size },
     }).then((r) => r.data),
 }
+
+/** API for Budget Master Data (/api/master-data) */
+export const budgetMasterDataApi = {
+  getStates: () => api.get('/master-data/states').then((r) => r.data),
+  getPeriods: (type = 'ANNUAL') => api.get('/master/periods', { params: { type } }).then((r) => r.data),
+}
+
+export const eventCategoryApi = {
+  list: () => api.get('/master/event-categories').then(r => r.data),
+  create: (payload) => api.post('/master/event-categories', payload).then(r => r.data),
+  update: (id, payload) => api.put(`/master/event-categories/${id}`, payload).then(r => r.data),
+}
+
+export const campaignTypeApi = {
+  list: () => api.get('/master/campaign-types').then(r => r.data),
+  create: (payload) => api.post('/master/campaign-types', payload).then(r => r.data),
+  update: (id, payload) => api.put(`/master/campaign-types/${id}`, payload).then(r => r.data),
+}
+
+export const eventCampaignTaskApi = {
+  listGroupedTasks: () => api.get('/master-data/event-campaign-tasks/list').then((r) => r.data),
+  getTasks: (eventCategoryId, campaignTypeId) => api.get('/master-data/event-campaign-tasks', { params: { eventCategoryId, campaignTypeId } }).then((r) => r.data),
+  saveTasks: (eventCategoryId, campaignTypeId, payload) => api.put('/master-data/event-campaign-tasks', payload, { params: { eventCategoryId, campaignTypeId } }).then((r) => r.data)
+}
+

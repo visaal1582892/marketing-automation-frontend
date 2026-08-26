@@ -4,6 +4,19 @@
 
 export const MASTER_HUB_SECTIONS = [
   {
+    id: 'budget-masters',
+    title: 'Budget Masters',
+    description: 'Event Categories, Campaign Types, and Task Types.',
+    icon: 'dollar',
+    accent: 'brand',
+    items: [
+      { label: 'Event Categories', to: '/admin/master/budget/event-categories', icon: 'list' },
+      { label: 'Campaign Types',   to: '/admin/master/budget/campaign-types',   icon: 'tag' },
+      { label: 'Task Types',       to: '/admin/master/task-types',              icon: 'list' },
+      { label: 'Event & Campaign Tasks', to: '/admin/master/budget/event-campaign-tasks', icon: 'shield' },
+    ],
+  },
+  {
     id: 'request-fields',
     title: 'Request Fields Config',
     description: 'Dropdown options and values used on the marketing request form.',
@@ -29,7 +42,6 @@ export const MASTER_HUB_SECTIONS = [
     icon: 'tag',
     accent: 'violet',
     items: [
-      { label: 'Campaign Types',      to: '/admin/master/campaign-types',      icon: 'tag'       },
       { label: 'Business Verticals',  to: '/admin/master/business-verticals',  icon: 'building'  },
       { label: 'Business Types',      to: '/admin/master/business-types',      icon: 'list'      },
       { label: 'Store / Format Types', to: '/admin/master/store-format-types', icon: 'globe'     },
@@ -44,10 +56,10 @@ export const MASTER_HUB_SECTIONS = [
     icon: 'building',
     accent: 'slate',
     items: [
-      { label: 'Departments',   to: '/admin/master/departments',  icon: 'building' },
-      { label: 'Designations',  to: '/admin/master/designations', icon: 'tag'      },
-      { label: 'Roles',         to: '/admin/master/roles',        icon: 'shield'   },
-      { label: 'Regions',       to: '/admin/master/regions',      icon: 'globe'    },
+      { label: 'Departments',      to: '/admin/master/departments',  icon: 'building' },
+      { label: 'Designations',     to: '/admin/master/designations', icon: 'tag'      },
+      { label: 'Roles',            to: '/admin/master/roles',        icon: 'shield'   },
+      { label: 'Regions',          to: '/admin/master/regions',      icon: 'globe'    },
     ],
   },
   {
@@ -57,7 +69,6 @@ export const MASTER_HUB_SECTIONS = [
     icon: 'list',
     accent: 'emerald',
     items: [
-      { label: 'Task Types',      to: '/admin/master/task-types', icon: 'list' },
       { label: 'Granular Tasks',  to: '/admin/granular-tasks',    icon: 'list' },
     ],
   },
@@ -81,7 +92,8 @@ export const MASTER_HUB_SECTIONS = [
     icon: 'clock',
     accent: 'sky',
     items: [
-      { label: 'Working Hours', to: '/admin/working-hours', icon: 'clock', right: 'MANAGE_SYSTEM_SETTINGS' },
+      { label: 'Working Hours',  to: '/admin/working-hours',  icon: 'clock',  right: 'MANAGE_SYSTEM_SETTINGS' },
+      { label: 'Approval Flows', to: '/admin/approval-flows', icon: 'shield', right: 'MANAGE_SYSTEM_SETTINGS' },
     ],
   },
   {
