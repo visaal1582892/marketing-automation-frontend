@@ -16,6 +16,9 @@ const tasksApi = {
   /** Paginated approvals queue (queueType: 'MANAGER' or 'REQUESTOR') */
   myApprovals: (params = {}) => api.get(`${BASE}/my-approvals`, { params }),
 
+  getTeamMembersStats: (search, page = 0, size = 10) =>
+    api.get(`${BASE}/team-members-stats`, { params: { search: search || undefined, page, size } }),
+
   getById: (id) => api.get(`${BASE}/${id}`),
 
   /** All assignment cycles for accountability timeline. */

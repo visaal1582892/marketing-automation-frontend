@@ -35,6 +35,7 @@ export default function Step1VerticalCaps({
   const isOverAllocated = remainingUnallocated < 0;
 
   const handleCapChange = (verticalId, value) => {
+    if (value && Number(value) > 999999999999) return;
     setVerticalCaps(prev => ({
       ...prev,
       [verticalId]: Number(value)
@@ -42,6 +43,7 @@ export default function Step1VerticalCaps({
   };
 
   const handleQuarterChange = (q, verticalId, value) => {
+    if (value && Number(value) > 999999999999) return;
     setQuarterlyCaps(prev => ({
       ...prev,
       [q]: {
@@ -122,9 +124,12 @@ export default function Step1VerticalCaps({
                 className={`${inputClass} pl-8`}
                 placeholder="0.00"
                 value={totalAnnualBudget || ''}
-                onChange={(e) => setTotalAnnualBudget(Number(e.target.value))}
+                onChange={(e) => {
+                  if (e.target.value && Number(e.target.value) > 999999999999) return;
+                  setTotalAnnualBudget(Number(e.target.value));
+                }}
                 onWheel={(e) => e.target.blur()}
-                disabled={isFrozen}
+                disabled={isFrozen || isReadOnly}
               />
             </div>
           </div>
@@ -212,13 +217,13 @@ export default function Step1VerticalCaps({
             <table className="w-full text-left text-sm text-slate-600">
                 <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
-                        <th className="px-5 py-3 font-semibold text-slate-800">Vertical</th>
-                        <th className="px-3 py-3 font-semibold text-slate-800 w-32">Q1</th>
-                        <th className="px-3 py-3 font-semibold text-slate-800 w-32">Q2</th>
-                        <th className="px-3 py-3 font-semibold text-slate-800 w-32">Q3</th>
-                        <th className="px-3 py-3 font-semibold text-slate-800 w-32">Q4</th>
-                        <th className="px-5 py-3 font-semibold text-slate-800 w-32">Total</th>
-                        {!isReadOnly && <th className="px-5 py-3 font-semibold text-slate-800 w-32">Actions</th>}
+                        <th className="px-5 py-3 font-semibold text-slate-800 w-[25%]">Vertical</th>
+                        <th className="px-3 py-3 font-semibold text-slate-800 w-[15%]">Q1</th>
+                        <th className="px-3 py-3 font-semibold text-slate-800 w-[15%]">Q2</th>
+                        <th className="px-3 py-3 font-semibold text-slate-800 w-[15%]">Q3</th>
+                        <th className="px-3 py-3 font-semibold text-slate-800 w-[15%]">Q4</th>
+                        <th className="px-5 py-3 font-semibold text-slate-800 w-[15%]">Total</th>
+                        {!isReadOnly && <th className="px-5 py-3 font-semibold text-slate-800 w-[15%]">Actions</th>}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

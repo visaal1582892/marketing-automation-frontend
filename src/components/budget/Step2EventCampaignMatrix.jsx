@@ -13,6 +13,7 @@ export default function Step2EventCampaignMatrix({
   const [activeVertical, setActiveVertical] = useState(verticals[0]?.id);
 
   const handleCellChange = (verticalId, eventCatId, campTypeId, value) => {
+    if (value && Number(value) > 999999999999) return;
     setStep2Matrix(prev => ({
       ...prev,
       [verticalId]: {

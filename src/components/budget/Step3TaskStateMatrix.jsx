@@ -165,6 +165,7 @@ export default function Step3TaskStateMatrix({
   };
 
   const updateGroup = (taskTypeId, groupIndex, field, value) => {
+    if (field === 'budgetPerState' && value && Number(value) > 999999999999) return;
     const groups = getTaskGroups(taskTypeId);
     const newGroups = [...groups];
     newGroups[groupIndex] = { ...newGroups[groupIndex], [field]: value };

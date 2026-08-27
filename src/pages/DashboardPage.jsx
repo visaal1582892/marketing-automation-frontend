@@ -8,6 +8,7 @@ import tasksApi from '../api/tasks'
 import managerApi from '../api/manager'
 import Icon from '../components/Icon'
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts'
+import TeamTaskTracker from '../components/dashboard/TeamTaskTracker'
 
 /**
  * Role-aware dashboard.
@@ -78,15 +79,15 @@ export default function DashboardPage() {
       // Worker: recent task list for the feed (first page, default size)
       need(showWorkerWidgets, () => tasksApi.listMy().then(r => r.data)),
       // Ops: QC pending (full list — usually small)
-      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.qcSummary().then(r => r.data)),
+      need(showOpsWidgets, () => managerApi.qcSummary().then(r => r.data)),
       // Ops: per-status counts — fetch size=1 so backend returns totalElements accurately
-      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'REWORK',      size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'IN_PROGRESS', size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'COMPLETED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'ASSIGNED',    size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'HELD',        size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets || showTeamLeaderWidgets, () => managerApi.allTasks({ status: 'CANCELLED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets,     () => managerApi.dashboardTrend().then(r => r.data)),
+      need(showOpsWidgets, () => managerApi.allTasks({ status: 'REWORK',      size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets, () => managerApi.allTasks({ status: 'IN_PROGRESS', size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets, () => managerApi.allTasks({ status: 'COMPLETED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets, () => managerApi.allTasks({ status: 'ASSIGNED',    size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets, () => managerApi.allTasks({ status: 'HELD',        size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets, () => managerApi.allTasks({ status: 'CANCELLED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets, () => managerApi.dashboardTrend().then(r => r.data)),
     ]).then(([cs, completedTasks, openData, qcData, doneData, ts, qcSummary, rework, inProgress, completed, assigned, held, cancelled, trendData]) => {
       if (!alive) return
       setCampaignSummary(cs ?? {
@@ -204,12 +205,12 @@ export default function DashboardPage() {
         <p className="text-center text-slate-400 py-8 text-sm">Loading dashboard…</p>
       )}
 
-      {/* ── Operations Overview: Marketing Manager + Admin + Team Leader ── */}
-      {(showOpsWidgets || showTeamLeaderWidgets) && (
+      {/* ── Operations Overview: Marketing Manager + Admin ── */}
+      {showOpsWidgets && (
         <>
           <Section
             title="Operations Overview"
-            subtitle={showTeamLeaderWidgets ? 'Live pulse of your team members\' execution pipeline.' : 'Live pulse of the entire marketing execution pipeline.'}
+            subtitle="Live pulse of the entire marketing execution pipeline."
           >
             <KpiCard
               to="/tasks/approvals"
@@ -259,7 +260,7 @@ export default function DashboardPage() {
 
           <Section
             title="Team Pipeline"
-            subtitle={showTeamLeaderWidgets ? 'Breakdown of where work stands across your assigned team members.' : 'Breakdown of where work currently stands across all team members.'}
+            subtitle="Breakdown of where work currently stands across all team members."
           >
             <KpiCard
               to="/manager/task-management?status=ASSIGNED"
@@ -307,6 +308,10 @@ export default function DashboardPage() {
             />
           </Section>
         </>
+      )}
+      
+      {showTeamLeaderWidgets && (
+        <TeamTaskTracker />
       )}
 
       {/* ── Admin-only quick-access shortcuts ──────────────────────────

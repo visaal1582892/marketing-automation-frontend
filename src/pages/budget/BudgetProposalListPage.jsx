@@ -52,7 +52,7 @@ export default function BudgetProposalListPage() {
 
   const handleAction = async (action, id, overrideActive = false) => {
     try {
-      if (action === 'reject' || action === 'inactivate') {
+      if (action === 'reject' || action === 'inactivate' || action === 'delete') {
         setActionDialog({ isOpen: true, type: action, proposalId: id });
         setRejectReason("");
         setRejectError(false);
@@ -98,9 +98,15 @@ export default function BudgetProposalListPage() {
         await budgetPlanningApi.rejectProposal(proposalId, { reason: rejectReason });
       } else if (type === 'inactivate') {
         await budgetPlanningApi.inactivateProposal(proposalId);
+      } else if (type === 'delete') {
+        await budgetPlanningApi.deleteProposal(proposalId);
+        setProposals(prev => prev.filter(p => p.id !== proposalId));
+        toast.success("Draft proposal deleted successfully.");
       }
       setActionDialog({ isOpen: false, type: null, proposalId: null });
-      await loadProposals();
+      if (type !== 'delete') {
+        await loadProposals();
+      }
     } catch (err) {
       console.error(err);
       const errMsg = err.response?.data?.message || err.message || "An error occurred while processing the request.";
@@ -254,13 +260,15 @@ export default function BudgetProposalListPage() {
 
                                 {/* Creator Actions */}
                                 {canPropose && proposal.status === 'DRAFT' && (
-                                  <button 
-                                    onClick={() => { setOpenMenuId(null); handleAction('submit', proposal.id); }}
-                                    disabled={processing}
-                                    className="block w-full text-left px-4 py-2 text-sm text-amber-600 hover:bg-amber-50 transition disabled:opacity-50"
-                                  >
-                                    Submit
-                                  </button>
+                                  <>
+                                    <button 
+                                      onClick={() => { setOpenMenuId(null); handleAction('delete', proposal.id); }}
+                                      disabled={processing}
+                                      className="block w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 transition disabled:opacity-50"
+                                    >
+                                      Delete
+                                    </button>
+                                  </>
                                 )}
                                 
                                 {canPropose && proposal.status === 'NEEDS_REVISION' && (
@@ -369,11 +377,17 @@ export default function BudgetProposalListPage() {
         </div>
       )}
 
-      {/* Action Dialog (Reject / Terminate) */}
-      <Modal
-        open={actionDialog.isOpen}
+      {/* Action Dialog (Reject / Terminate / Delete) */}
+      <Modal 
+        open={actionDialog.isOpen} 
         onClose={() => setActionDialog({ isOpen: false, type: null, proposalId: null })}
-        title={actionDialog.type === 'reject' ? 'Reject Proposal' : 'Terminate Proposal'}
+        title={
+          actionDialog.type === 'reject' 
+            ? "Reject Proposal" 
+            : actionDialog.type === 'inactivate'
+            ? "Terminate Proposal"
+            : "Delete Draft Proposal"
+        }
         footer={
           <>
             <button 
@@ -411,8 +425,10 @@ export default function BudgetProposalListPage() {
               />
               {rejectError && <p className="text-xs text-rose-600 font-medium">Rejection reason is required.</p>}
             </div>
-          ) : (
+          ) : actionDialog.type === 'inactivate' ? (
             <p>Are you sure you want to terminate proposal <span className="font-bold text-slate-900">#{actionDialog.proposalId}</span>? This action cannot be undone.</p>
+          ) : (
+            <p>Are you sure you want to permanently delete draft proposal <span className="font-bold text-slate-900">#{actionDialog.proposalId}</span>? This action cannot be undone.</p>
           )}
         </div>
       </Modal>

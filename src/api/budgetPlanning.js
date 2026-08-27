@@ -36,4 +36,7 @@ export const budgetPlanningApi = {
 
   submitOperationalPlan: (proposalId) => 
     api.post(`/budget-planning/proposals/${proposalId}/submit-operational`).then(r => r.data),
+    
+  deleteProposal: (proposalId) => 
+    api.delete(`/budget-planning/proposals/${proposalId}`).then(r => r.data),
 }

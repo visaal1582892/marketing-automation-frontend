@@ -9,6 +9,8 @@ import {
 import { budgetPlanningApi } from "../../api/budgetPlanning";
 import Icon from "../../components/Icon";
 import { useToast } from "../../components/Toast";
+import { useAuth } from "../../auth/AuthContext";
+import { Rights } from "../../constants/rights";
 
 import Step1VerticalCaps from "../../components/budget/Step1VerticalCaps";
 import Step2EventCampaignMatrix from "../../components/budget/Step2EventCampaignMatrix";
@@ -18,6 +20,8 @@ import Modal from "../../components/Modal";
 export default function BudgetPlanningWizard() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { hasRight } = useAuth();
+  const canPropose = hasRight(Rights.PROPOSE_BUDGET);
   const { proposalId: urlProposalId, stepId } = useParams();
   const [proposalId, setProposalId] = useState(urlProposalId || null);
   const currentStep = stepId === "step2" ? 2 : stepId === "step3" ? 3 : 1;
@@ -29,16 +33,20 @@ export default function BudgetPlanningWizard() {
   const [isQuarterEditMode, setIsQuarterEditMode] = useState(false);
 
   const isReadOnly =
-    proposalStatus === "ACTIVE"
-      ? !isQuarterEditMode
-      : currentStep === 1
-        ? proposalStatus !== "DRAFT" &&
-          proposalStatus !== "NEEDS_REVISION" &&
-          proposalStatus !== "REJECTED"
-        : proposalStatus !== "APPROVED" &&
-          proposalStatus !== "DRAFT" &&
-          proposalStatus !== "NEEDS_REVISION" &&
-          proposalStatus !== "REJECTED";
+    !canPropose
+      ? true
+      : proposalStatus === "ACTIVE"
+        ? !isQuarterEditMode
+        : currentStep === 1
+          ? proposalStatus &&
+            proposalStatus !== "DRAFT" &&
+            proposalStatus !== "NEEDS_REVISION" &&
+            proposalStatus !== "REJECTED"
+          : proposalStatus &&
+            proposalStatus !== "APPROVED" &&
+            proposalStatus !== "DRAFT" &&
+            proposalStatus !== "NEEDS_REVISION" &&
+            proposalStatus !== "REJECTED";
 
   // Master Data State
   const [verticals, setVerticals] = useState([]);
@@ -255,12 +263,17 @@ export default function BudgetPlanningWizard() {
     if (loading) return;
 
     // Check Status Locks
-    if (proposalStatus === "DRAFT" && currentStep > 1) {
-      toast.error("Proposal is in Draft. Please submit Step 1 first.");
-      navigate(`/budget-planning/wizard/${proposalId || ""}/step1`, {
-        replace: true,
-      });
-      return;
+    if (currentStep > 1) {
+      if (!canPropose && proposalStatus !== "ACTIVE") {
+        toast.error("Steps 2 and 3 are locked until the planner completes them.");
+        navigate(`/budget-planning/wizard/${proposalId || ""}/step1`, { replace: true });
+        return;
+      }
+      if (canPropose && proposalStatus !== "APPROVED" && proposalStatus !== "ACTIVE") {
+        toast.error("Steps 2 and 3 are locked until Step 1 is approved by the approver.");
+        navigate(`/budget-planning/wizard/${proposalId || ""}/step1`, { replace: true });
+        return;
+      }
     }
 
     if (
@@ -743,21 +756,29 @@ export default function BudgetPlanningWizard() {
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="border-b border-slate-200 bg-slate-50/50">
           <nav aria-label="Progress" className="flex">
-            {[1, 2, 3].map((step, idx) => (
+            {[1, 2, 3].map((step, idx) => {
+              const isTabDisabled = (step > 1) && (
+                (!canPropose && proposalStatus !== "ACTIVE") ||
+                (canPropose && proposalStatus !== "APPROVED" && proposalStatus !== "ACTIVE")
+              );
+              return (
               <button
                 key={step}
                 onClick={() =>
-                  navigate(
+                  !isTabDisabled && navigate(
                     proposalId
                       ? `/budget-planning/wizard/${proposalId}/step${step}`
                       : `/budget-planning/wizard/step${step}`,
                   )
                 }
+                disabled={isTabDisabled}
                 className={`relative flex-1 flex items-center justify-center py-4 text-sm font-medium transition
                   ${
                     currentStep === step
                       ? "text-brand-600 bg-white border-b-2 border-brand-500"
-                      : "text-slate-500 hover:text-slate-700 hover:bg-slate-50/80 border-b-2 border-transparent"
+                      : isTabDisabled
+                        ? "text-slate-400 bg-slate-50 cursor-not-allowed border-b-2 border-transparent"
+                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-50/80 border-b-2 border-transparent"
                   }
                   ${idx !== 2 ? "border-r border-slate-200" : ""}
                 `}
@@ -768,13 +789,15 @@ export default function BudgetPlanningWizard() {
                 >
                   {step}
                 </span>
+
                 {step === 1
                   ? "Vertical Caps"
                   : step === 2
                     ? "Target Matrix"
                     : "Task Distribution"}
               </button>
-            ))}
+              );
+            })}
           </nav>
         </div>
 
@@ -855,26 +878,30 @@ export default function BudgetPlanningWizard() {
         </div>
 
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50/50">
-          <button
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition
-              ${
-                currentStep === 1
-                  ? "text-slate-300 cursor-not-allowed"
-                  : "text-slate-600 hover:bg-white hover:text-slate-800 border border-slate-200 hover:shadow-sm bg-white"
-              }`}
-            onClick={() =>
-              navigate(
-                `/budget-planning/wizard/${proposalId}/step${Math.max(1, currentStep - 1)}`,
-              )
-            }
-            disabled={currentStep === 1}
-          >
-            <Icon name="chevronLeft" className="h-4 w-4" /> Previous
-          </button>
+          {canPropose ? (
+            <button
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition
+                ${
+                  currentStep === 1
+                    ? "text-slate-300 cursor-not-allowed"
+                    : "text-slate-600 hover:bg-white hover:text-slate-800 border border-slate-200 hover:shadow-sm bg-white"
+                }`}
+              onClick={() =>
+                navigate(
+                  `/budget-planning/wizard/${proposalId}/step${Math.max(1, currentStep - 1)}`,
+                )
+              }
+              disabled={currentStep === 1}
+            >
+              <Icon name="chevronLeft" className="h-4 w-4" /> Previous
+            </button>
+          ) : (
+            <div /> 
+          )}
 
           <div className="flex items-center gap-3">
             {currentStep === 3 ? (
-              !isReadOnly && (
+              canPropose && !isReadOnly && (
                 <button
                   className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 transition disabled:opacity-50"
                   onClick={handleSubmit}
@@ -893,7 +920,7 @@ export default function BudgetPlanningWizard() {
                   {!submitting && <Icon name="check" className="h-4 w-4" />}
                 </button>
               )
-            ) : (
+            ) : canPropose && proposalStatus !== "PENDING_APPROVAL" ? (
               <button
                 className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleNext}
@@ -911,7 +938,7 @@ export default function BudgetPlanningWizard() {
                   className="h-4 w-4"
                 />
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
