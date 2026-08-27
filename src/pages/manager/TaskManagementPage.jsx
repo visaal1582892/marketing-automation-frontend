@@ -143,181 +143,7 @@ function FilterTd({ children, sticky = false }) {
 
 // ─── Edit modal ───────────────────────────────────────────────────────────────
 
-// Tasks whose status blocks deletion (matches backend constraint)
-const UNDELETABLE_STATUSES = new Set(['IN_PROGRESS', 'REWORK', 'MARKETING_REVIEW', 'COMPLETED'])
 
-const TASK_STATUS_STYLES = {
-  ASSIGNED:             'bg-blue-50 text-blue-700 ring-blue-200',
-  IN_PROGRESS:          'bg-indigo-50 text-indigo-700 ring-indigo-200',
-  REWORK:               'bg-orange-50 text-orange-700 ring-orange-200',
-  MARKETING_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
-  REQUESTOR_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
-  COMPLETED:            'bg-green-50 text-green-700 ring-green-200',
-  CANCELLED:            'bg-slate-100 text-slate-500 ring-slate-200',
-  HELD:                 'bg-amber-50 text-amber-700 ring-amber-200',
-}
-
-function EditCampaignModal({ campaignId, task, onClose, onSaved }) {
-  const toast = useToast()
-  const [form,       setForm]       = useState({ priority: '', budgetTier: '', budgetTierOther: '', keyMessage: '' })
-  const [budgetOpts, setBudgetOpts] = useState([])
-  const [fetching,   setFetching]   = useState(true)
-  const [saving,     setSaving]     = useState(false)
-  const [workTasks,  setWorkTasks]  = useState([])
-  const [deletingId, setDeletingId] = useState(null)
-
-  const resolveId = (opts, storedVal) => {
-    if (!storedVal) return { selected: '', other: '' }
-    return opts.find(o => o.value === storedVal && o.value !== 'Other')
-      ? { selected: storedVal, other: '' }
-      : { selected: 'Other', other: storedVal }
-  }
-
-  const loadCampaign = () => {
-    setFetching(true)
-    Promise.all([
-      campaignsApi.getById(campaignId),
-      masterApi.list('budget-tiers'),
-    ]).then(([campRes, budgets]) => {
-        const c    = campRes.data
-        const raw  = Array.isArray(budgets) ? budgets : []
-        const opts = [
-          ...raw.map(i => ({ value: i.id, label: i.name })),
-          { value: 'Other', label: 'Other (specify below)' },
-        ]
-        setBudgetOpts(opts)
-        const bgt = resolveId(opts, c.budgetTierId || '')
-        setForm({ priority: c.priority || '', budgetTier: bgt.selected, budgetTierOther: bgt.other, keyMessage: c.keyMessage || '' })
-        setWorkTasks(Array.isArray(c.workTasks) ? c.workTasks : [])
-      })
-      .catch(() => toast.error('Could not load campaign details.'))
-      .finally(() => setFetching(false))
-  }
-
-  useEffect(loadCampaign, [campaignId]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const resolveBudget = () =>
-    form.budgetTier === 'Other'
-      ? (form.budgetTierOther?.trim() || undefined)
-      : (form.budgetTier || undefined)
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      await campaignsApi.updateCampaign(campaignId, {
-        priority:   form.priority  || undefined,
-        budgetTier: resolveBudget(),
-        keyMessage: form.keyMessage || undefined,
-      })
-      toast.success('Campaign updated successfully.')
-      onSaved(); onClose()
-    } catch (e) {
-      toast.error(e?.response?.data?.message || 'Update failed.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleDeleteTask = async (wt) => {
-    if (!window.confirm(`Delete task "${wt.granularTaskName || wt.taskTypeName || wt.taskId}"? This cannot be undone.`)) return
-    setDeletingId(wt.taskId)
-    try {
-      await campaignsApi.deleteTask(campaignId, wt.taskId)
-      toast.success(`Task ${wt.taskId} deleted.`)
-      setWorkTasks(prev => prev.filter(t => t.taskId !== wt.taskId))
-      onSaved()
-    } catch (e) {
-      toast.error(e?.response?.data?.message || 'Could not delete task.')
-    } finally {
-      setDeletingId(null)
-    }
-  }
-
-  const visibleTasks = workTasks.filter(t => t.status !== 'CANCELLED')
-
-  return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-slate-900/40" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 flex-shrink-0">
-          <div>
-            <h3 className="text-base font-semibold text-slate-800">Edit Campaign</h3>
-            <p className="mt-0.5 text-xs text-slate-400">
-              Campaign {campaignId}{task?.taskId ? ` · Task ${task.taskId}` : ''}
-            </p>
-          </div>
-          <button onClick={onClose} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 transition">
-            <Icon name="x" className="h-4 w-4" />
-          </button>
-        </div>
-
-        {fetching ? (
-          <div className="flex items-center justify-center py-12 gap-2 text-slate-400">
-            <Icon name="refresh" className="h-4 w-4 animate-spin" /><span className="text-sm">Loading…</span>
-          </div>
-        ) : (
-          <div className="overflow-y-auto flex-1">
-            {/* Campaign fields */}
-            <div className="space-y-4 px-5 py-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Priority</label>
-                  <AppSelect
-                    value={form.priority}
-                    onChange={v => setForm(f => ({ ...f, priority: v }))}
-                    options={PRIORITY_OPTIONS.map(p => ({ value: p, label: p.charAt(0) + p.slice(1).toLowerCase() }))}
-                    placeholder="Select priority…"
-                    isClearable={false}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Budget Tier</label>
-                  <AppSelect
-                    value={form.budgetTier}
-                    onChange={v => setForm(f => ({ ...f, budgetTier: v, budgetTierOther: v !== 'Other' ? '' : f.budgetTierOther }))}
-                    options={budgetOpts}
-                    placeholder="Select budget tier…"
-                    isClearable={false}
-                  />
-                  {form.budgetTier === 'Other' && (
-                    <input
-                      value={form.budgetTierOther}
-                      onChange={e => setForm(f => ({ ...f, budgetTierOther: e.target.value }))}
-                      placeholder="Specify budget tier…"
-                      className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm
-                                 text-slate-800 placeholder:text-slate-400 focus:border-brand-400
-                                 focus:outline-none focus:ring-1 focus:ring-brand-300"
-                    />
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Key Message</label>
-                <textarea value={form.keyMessage} onChange={e => setForm(f => ({ ...f, keyMessage: e.target.value }))}
-                  rows={2} placeholder="Type a new key message…"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800
-                             placeholder:text-slate-400 focus:border-brand-400 focus:outline-none
-                             focus:ring-1 focus:ring-brand-300 resize-none" />
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-3 sm:flex-row sm:justify-end flex-shrink-0">
-          <button onClick={onClose} disabled={saving || fetching}
-            className="w-full rounded-md border border-slate-200 px-4 py-1.5 text-sm text-slate-600
-                       hover:bg-slate-50 transition disabled:opacity-60 sm:w-auto">Cancel</button>
-          <button onClick={handleSave} disabled={saving || fetching}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-600 px-4 py-1.5
-                       text-sm font-medium text-white hover:bg-brand-700 transition disabled:opacity-60 sm:w-auto">
-            {saving ? <><Icon name="refresh" className="h-3.5 w-3.5 animate-spin" /> Saving…</> : 'Save Changes'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ─── Unhold modal — choose auto-route OR manual assign ────────────────────────
 // For TASK-OTHER tasks, auto-route is not shown — manual assignment only.
@@ -531,7 +357,6 @@ export default function TaskManagementPage() {
   const [refreshSeed,   setRefreshSeed]   = useState(0)
   const [heldCount,        setHeldCount]        = useState(0)
   const { user } = useAuth()
-  const [editTarget,       setEditTarget]       = useState(null)
   const [briefId,          setBriefId]          = useState(null)
   const [briefTaskId,      setBriefTaskId]      = useState(null)
   const [assetPreviewTask, setAssetPreviewTask] = useState(null)
@@ -663,7 +488,6 @@ export default function TaskManagementPage() {
   const cbHold       = useCallback((task) => handleHold(task),      []) // eslint-disable-line react-hooks/exhaustive-deps
   const cbOpenUnhold = useCallback((task) => openUnholdModal(task), []) // eslint-disable-line react-hooks/exhaustive-deps
   const cbSetCancel  = useCallback((task) => setCancelTarget(task), [])
-  const cbSetEdit    = useCallback((task) => setEditTarget({ campaignId: task.campaignId, task }), [])
   const cbSetBrief   = useCallback((task) => {
     setBriefId(task.campaignId)
     setBriefTaskId(task.taskId)
@@ -874,7 +698,6 @@ export default function TaskManagementPage() {
                     onHold={cbHold}
                     onUnhold={cbOpenUnhold}
                     onCancel={cbSetCancel}
-                    onEdit={cbSetEdit}
                     onViewBrief={cbSetBrief}
                     onViewAssets={cbSetAssets}
                   />
@@ -901,16 +724,6 @@ export default function TaskManagementPage() {
           taskName={assetPreviewTask.granularTaskName || `Task ${assetPreviewTask.taskId}`}
           currentUserId={user?.id}
           onClose={() => setAssetPreviewTask(null)}
-        />
-      )}
-
-      {/* Edit modal */}
-      {editTarget && (
-        <EditCampaignModal
-          campaignId={editTarget.campaignId}
-          task={editTarget.task}
-          onClose={() => setEditTarget(null)}
-          onSaved={() => setRefreshSeed(s => s + 1)}
         />
       )}
 
@@ -978,7 +791,7 @@ function Th({ children, align = 'left', sticky = false, title }) {
 
 // ─── Data row ─────────────────────────────────────────────────────────────────
 
-const TaskRow = memo(function TaskRow({ task: t, alt, holding, onHold, onUnhold, onCancel, onEdit, onViewBrief, onViewAssets }) {
+const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onViewBrief, onViewAssets }) => {
   // Hold: ASSIGNED or REWORK (manager can pause and reassign)
   const canHold   = t.status === 'ASSIGNED' || t.status === 'REWORK'
   // Unhold: only HELD
@@ -1148,14 +961,7 @@ const TaskRow = memo(function TaskRow({ task: t, alt, holding, onHold, onUnhold,
             </button>
           )}
 
-          {/* Edit — only for mutable statuses */}
-          {['ASSIGNED', 'HELD', 'IN_PROGRESS', 'REWORK'].includes(t.status) && (
-            <button onClick={() => onEdit(t)} title="Edit campaign"
-              className="rounded border border-slate-200 p-1.5 text-slate-400
-                         hover:bg-slate-50 hover:text-slate-700 transition">
-              <Icon name="edit" className="h-3.5 w-3.5" />
-            </button>
-          )}
+
 
           {/* Hold */}
           {canHold && (

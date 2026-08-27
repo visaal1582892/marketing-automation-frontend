@@ -80,18 +80,19 @@ export default function TeamTaskTracker() {
                 <th className="px-6 py-4">Marketing QC</th>
                 <th className="px-6 py-4">Requestor QC</th>
                 <th className="px-6 py-4">Completed</th>
+                <th className="px-6 py-4">Held</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-slate-400">
+                  <td colSpan={8} className="px-6 py-8 text-center text-slate-400">
                     Loading stats...
                   </td>
                 </tr>
               ) : stats.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-slate-400">
+                  <td colSpan={8} className="px-6 py-8 text-center text-slate-400">
                     No team members found.
                   </td>
                 </tr>
@@ -118,6 +119,9 @@ export default function TeamTaskTracker() {
                     </td>
                     <td className="px-6 py-4 text-slate-600">
                       {member.completed}
+                    </td>
+                    <td className="px-6 py-4 text-orange-600">
+                      {member.held}
                     </td>
                   </tr>
                 ))
