@@ -16,8 +16,8 @@ import { buildWsUrl } from '../config/backendUrl'
  */
 
 const RECONNECT_DELAY_MS   = 5_000
-const HEARTBEAT_INCOMING_MS = 4_000
-const HEARTBEAT_OUTGOING_MS = 4_000
+const HEARTBEAT_INCOMING_MS = 10_000
+const HEARTBEAT_OUTGOING_MS = 0 // Disable outgoing to prevent server from disconnecting background tabs
 
 let client = null
 let connected = false
