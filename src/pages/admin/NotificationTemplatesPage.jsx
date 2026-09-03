@@ -83,7 +83,7 @@ export default function NotificationTemplatesPage() {
         setTotal(res.totalElements ?? 0)
         setTotalPages(res.totalPages ?? 0)
       })
-      .catch(() => { if (alive) toast.error('Failed to load templates.') })
+      .catch((e) => { if (alive) toast.error(e?.response?.data?.message || 'Failed to load templates.') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -284,8 +284,8 @@ function TemplateEditModal({ open, template, onClose, onSaved }) {
       await notificationsApi.updateTemplate(template.id, form)
       onSaved()
       toast.success('Template updated.')
-    } catch {
-      toast.error('Failed to save template.')
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Failed to save template.')
     } finally {
       setSaving(false)
     }

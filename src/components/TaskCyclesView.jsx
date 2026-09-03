@@ -58,7 +58,7 @@ export default function TaskCyclesView({ taskId, currentAssigneeId }) {
   // Depending on how backend orders, typically active is the latest. 
   // Let's filter out active from historical and reverse the rest for descending chronological display if needed,
   // or just filter it.
-  const historicalCycles = history.filter(h => h.status !== 'ACTIVE')
+  const historicalCycles = history.filter(h => h.status !== 'ACTIVE').reverse()
   
   // Calculate total active time
   const totalActiveTimeMinutes = history.reduce((acc, curr) => acc + (curr.activeTimeMinutes || 0), 0)

@@ -3,6 +3,12 @@
  * Stroke-based for crisp scaling at any size.
  */
 const PATHS = {
+  copy: (
+    <>
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </>
+  ),
   building: (
     <>
       <path d="M3 21h18" />
@@ -326,6 +332,9 @@ const PATHS = {
   star: (
     <polygon points="12 2 15.1 8.3 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 8.9 8.3 12 2" />
   ),
+  starFilled: (
+    <polygon points="12 2 15.1 8.3 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 8.9 8.3 12 2" fill="currentColor" />
+  ),
   refreshCw: (
     <>
       <polyline points="23 4 23 10 17 10" />
@@ -374,6 +383,11 @@ const PATHS = {
       <circle cx="12" cy="12" r="1" />
       <circle cx="12" cy="5" r="1" />
       <circle cx="12" cy="19" r="1" />
+    </>
+  ),
+  zap: (
+    <>
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
     </>
   ),
 }

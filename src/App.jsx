@@ -14,7 +14,7 @@ import DashboardPage from './pages/DashboardPage'
 import UnauthorizedPage from './pages/UnauthorizedPage'
 import MasterHubPage from './pages/admin/MasterHubPage'
 import MasterTablePage from './pages/admin/MasterTablePage'
-import RoleRightsMappingPage from './pages/admin/RoleRightsMappingPage'
+import RoleManagementPage from './pages/admin/RoleManagementPage'
 import EventCategoryMasterPage from './pages/admin/EventCategoryMasterPage'
 import CampaignTypeMasterPage from './pages/admin/CampaignTypeMasterPage'
 import EventCampaignTaskMaster from './pages/admin/EventCampaignTaskMaster'
@@ -22,13 +22,13 @@ import GranularTaskPage from './pages/admin/GranularTaskPage'
 import TaskMappingsPage from './pages/admin/TaskMappingsPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
 import QuestionMasterPage from './pages/admin/QuestionMasterPage'
-import QcRoutingPage from './pages/admin/QcRoutingPage'
 import NotificationTemplatesPage from './pages/admin/NotificationTemplatesPage'
 import VerticalTypeMappingPage from './pages/admin/VerticalTypeMappingPage'
 import TypeFormatMappingPage from './pages/admin/TypeFormatMappingPage'
 import WorkingHoursPage from './pages/admin/WorkingHoursPage'
 import ApprovalFlowMasterPage from './pages/admin/ApprovalFlowMasterPage'
 import CampaignFormPage from './pages/campaigns/CampaignFormPage'
+import CampaignEditPage from './pages/campaigns/CampaignEditPage'
 import CampaignListPage from './pages/campaigns/CampaignListPage'
 import CampaignDetailPage from './pages/campaigns/CampaignDetailPage'
 import CompletedTasksPage from './pages/campaigns/CompletedTasksPage'
@@ -97,7 +97,7 @@ export default function App() {
                 path="/campaigns/:id/edit"
                 element={
                   <ProtectedRoute requireRight={Rights.EDIT_OWN_CAMPAIGN}>
-                    <CampaignFormPage />
+                    <CampaignEditPage />
                   </ProtectedRoute>
                 }
               />
@@ -116,7 +116,7 @@ export default function App() {
                 element={
                   <ProtectedRoute
                     requireRight={Rights.ACCESS_COLLABORATIONS}
-                    excludeRole={['Regional Manager']}
+                    excludeRole={[]}
                   >
                     <CollaborationsPage />
                   </ProtectedRoute>
@@ -187,10 +187,10 @@ export default function App() {
                 }
               />
               <Route
-                path="/admin/role-rights"
+                path="/admin/roles"
                 element={
                   <ProtectedRoute requireRight={Rights.MANAGE_SYSTEM_SETTINGS}>
-                    <RoleRightsMappingPage />
+                    <RoleManagementPage />
                   </ProtectedRoute>
                 }
               />
@@ -255,14 +255,6 @@ export default function App() {
                 element={
                   <ProtectedRoute requireRight={Rights.MANAGE_QUESTION_LIBRARY}>
                     <QuestionMasterPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/qc-routing"
-                element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_QC_ROUTING}>
-                    <QcRoutingPage />
                   </ProtectedRoute>
                 }
               />

@@ -12,6 +12,7 @@ import useDebounce from '../../hooks/useDebounce'
 import { useAuth } from '../../auth/AuthContext'
 import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
 import TimelineNodeFlow from '../../components/TimelineNodeFlow'
+import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
 
 const PAGE_SIZE = 20
 
@@ -144,7 +145,7 @@ export default function RequestorQcReviewPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search task, campaign, assignee…"
+            placeholder="Search task, campaign, store ID, assignee…"
             className="w-full rounded-lg border border-slate-200 pl-8 pr-8 py-1.5 text-sm text-slate-700
               placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400"
           />
@@ -280,12 +281,6 @@ function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
               Marketing approved {fmt(task.managerApprovedAt)}
             </span>
           )}
-          <button
-            onClick={onView}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
-          >
-            <Icon name="eye" className="h-3 w-3" /> Brief
-          </button>
         </div>
       </div>
 
@@ -318,18 +313,18 @@ function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-            <button onClick={onViewAssets}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition">
-              <Icon name="fileText" className="h-3.5 w-3.5" /> Assets
-            </button>
             <button onClick={onRework}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition">
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition">
               <Icon name="refresh" className="h-3.5 w-3.5" /> Request Rework
             </button>
             <button onClick={onApprove}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition">
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition">
               <Icon name="check" className="h-3.5 w-3.5" /> Approve
             </button>
+            <ActionMenu align="right">
+              <ActionMenuItem icon="eye" label="View Brief" onClick={onView} />
+              <ActionMenuItem icon="fileText" label="View Assets" onClick={onViewAssets} />
+            </ActionMenu>
           </div>
         </div>
 

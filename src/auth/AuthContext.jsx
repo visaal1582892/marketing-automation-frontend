@@ -97,7 +97,7 @@ export function AuthProvider({ children }) {
     // Roles that cannot be assigned tasks by the routing engine.
     const NON_WORKER_ROLES = [
       'requestor', 'admin', 'marketing manager', 'procurement manager',
-      'manager', 'regional manager',
+      'manager',
     ]
     // True when the user holds at least one execution (worker) role, even if they
     // also hold a manager/admin role. Rights-based equivalent: VIEW_MY_TASKS.
@@ -119,8 +119,6 @@ export function AuthProvider({ children }) {
       isMarketingManager:    hasAnyRole('marketing manager', 'manager') || hasAnyRight('ACCESS_MANAGER_TOOLS'),
       isProcurementManager:  hasAnyRole('procurement manager'),
       isMarketingCreator:    hasAnyRole('marketing creator', 'mart content executive'),
-      isHead:                false,
-      isRegionalManager:     hasAnyRole('regional manager'),
       isManager,
       /** True if the user holds at least one worker (execution) role. */
       isWorker,

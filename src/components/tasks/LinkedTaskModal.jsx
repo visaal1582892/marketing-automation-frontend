@@ -16,32 +16,34 @@ import { Rights } from '../../constants/rights'
 import useDebounce from '../../hooks/useDebounce'
 import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
 import tasksApi from '../../api/tasks'
+import MultiSelectDropdown from '../../components/MultiSelectDropdown'
 
-export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaultTaskTypeName, mode = "followup" }) {
-  const toast     = useToast()
+function FieldLabel({ children, required }) {
+  return (
+    <label className="mb-2 block text-[13px] font-semibold text-slate-700">
+      {children}
+      {required && <span className="ml-1 text-red-500">*</span>}
+    </label>
+  )
+}
+
+export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaultTaskTypeName }) {
+  const toast = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
 
-  const [phase,               setPhase]               = useState('loading')
+  const [phase, setPhase] = useState('loading')
   const [completedTaskAssets, setCompletedTaskAssets] = useState([])
-  const [allTaskTypes,        setAllTaskTypes]        = useState([])   // [{ id, name }]
-  const [allGranularTasks,    setAllGranularTasks]    = useState([])   // [{ taskId, taskName, taskTypeId, taskTypeName }]
-  const [lockedTypeIds,       setLockedTypeIds]       = useState(new Set())
+  const [allTaskTypes, setAllTaskTypes] = useState([])   // [{ id, name }]
+  const [allGranularTasks, setAllGranularTasks] = useState([])   // [{ taskId, taskName, taskTypeId, taskTypeName }]
+  const [lockedTypeIds, setLockedTypeIds] = useState(new Set())
 
   // ── Task type multi-select state ────────────────────────────────────────────
-  const [selectedTypeIds,  setSelectedTypeIds]  = useState(new Set())
-  const [typeSearch,       setTypeSearch]       = useState('')
-  const [typeDropOpen,     setTypeDropOpen]     = useState(false)
-  const typeRef = useRef(null)
-
-  // ── Task multi-select state ─────────────────────────────────────────────────
-  const [taskSearch,   setTaskSearch]   = useState('')
-  const [taskDropOpen, setTaskDropOpen] = useState(false)
-  const taskRef = useRef(null)
+  const [selectedTypeIds, setSelectedTypeIds] = useState(new Set())
 
   // ── Per-selected-task state: { [granularTaskId]: { questionnaire, stagedFiles, selectedAssets } }
-  const [taskData,      setTaskData]      = useState({})
+  const [taskData, setTaskData] = useState({})
   const [taskQuestions, setTaskQuestions] = useState({})
-  const [loadingQs,     setLoadingQs]     = useState({})
+  const [loadingQs, setLoadingQs] = useState({})
 
   const [saving, setSaving] = useState(false)
 
@@ -62,9 +64,9 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
         (granTasks || [])
           .filter(t => t.taskId !== 'TASK-AUTO-CONTENT')
           .map(t => ({
-            taskId:       String(t.taskId),
-            taskName:     t.taskName || t.name || '',
-            taskTypeId:   String(t.taskTypeId || ''),
+            taskId: String(t.taskId),
+            taskName: t.taskName || t.name || '',
+            taskTypeId: String(t.taskTypeId || ''),
             taskTypeName: typeMap[String(t.taskTypeId)] || t.taskTypeName || '',
           }))
       )
@@ -77,14 +79,14 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
           .filter(Boolean)
       )
       setLockedTypeIds(new Set()) // Task type is filter only — no locking
-      
-      const defaultTypeId = defaultTaskTypeName 
-          ? types.find(t => t.name === defaultTaskTypeName)?.id 
-          : null;
+
+      const defaultTypeId = defaultTaskTypeName
+        ? types.find(t => t.name === defaultTaskTypeName)?.id
+        : null;
       if (defaultTypeId) {
-          setSelectedTypeIds(new Set([String(defaultTypeId)]))
+        setSelectedTypeIds(new Set([String(defaultTypeId)]))
       } else {
-          setSelectedTypeIds(new Set()) // Do not auto-populate task type filter
+        setSelectedTypeIds(new Set()) // Do not auto-populate task type filter
       }
 
       const assets = assetsRes?.data || []
@@ -94,65 +96,41 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
     return () => { alive = false }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Close dropdowns on outside click ───────────────────────────────────────
-  useEffect(() => {
-    const h = (e) => {
-      if (typeRef.current && !typeRef.current.contains(e.target)) setTypeDropOpen(false)
-      if (taskRef.current && !taskRef.current.contains(e.target)) setTaskDropOpen(false)
-    }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+
 
   // ── Derived ─────────────────────────────────────────────────────────────────
   const filteredByType = selectedTypeIds.size === 0
     ? allGranularTasks
     : allGranularTasks.filter(t => selectedTypeIds.has(t.taskTypeId))
-  const taskDropList   = filteredByType.filter(t =>
-    t.taskName.toLowerCase().includes(taskSearch.toLowerCase()) ||
-    t.taskTypeName.toLowerCase().includes(taskSearch.toLowerCase())
-  )
   const selectedTaskIds = Object.keys(taskData)
 
-  // ── Task type helpers ───────────────────────────────────────────────────────
-  const toggleType = (typeId) => {
-    if (lockedTypeIds.has(typeId)) return
-    setSelectedTypeIds(prev => {
-      const n = new Set(prev)
-      if (n.has(typeId)) {
-        n.delete(typeId)
-        // deselect tasks belonging to this type
-        setTaskData(prev => {
-          const nd = { ...prev }
-          for (const t of allGranularTasks) if (t.taskTypeId === typeId) delete nd[t.taskId]
-          return nd
-        })
-      } else {
-        n.add(typeId)
+  // ── Handlers for MultiSelectDropdown ───────────────────────────────────────
+  const handleTypeChange = (newTypeIdsArray) => {
+    setSelectedTypeIds(new Set(newTypeIdsArray));
+  };
+
+  const handleTaskChange = (newTaskIdsArray) => {
+    const newSet = new Set(newTaskIdsArray);
+    const addedIds = newTaskIdsArray.filter(id => !taskData[id]);
+    const removedIds = Object.keys(taskData).filter(id => !newSet.has(id));
+
+    setTaskData(prev => {
+      const next = { ...prev };
+      for (const id of removedIds) delete next[id];
+      for (const id of addedIds) next[id] = { questionnaire: {}, stagedFiles: [], selectedAssets: new Set() };
+      return next;
+    });
+
+    for (const id of addedIds) {
+      if (!taskQuestions[id]) {
+        setLoadingQs(prev => ({ ...prev, [id]: true }));
+        granularTasksApi.getQuestions(id)
+          .then(qs => setTaskQuestions(prev => ({ ...prev, [id]: qs || [] })))
+          .catch(() => setTaskQuestions(prev => ({ ...prev, [id]: [] })))
+          .finally(() => setLoadingQs(prev => ({ ...prev, [id]: false })));
       }
-      return n
-    })
-  }
-
-  const typeDropItems = allTaskTypes.filter(t =>
-    t.name.toLowerCase().includes(typeSearch.toLowerCase())
-  )
-
-  // ── Task selection helpers ──────────────────────────────────────────────────
-  const toggleTask = (taskId) => {
-    if (taskData[taskId]) {
-      setTaskData(prev => { const n = { ...prev }; delete n[taskId]; return n })
-      return
     }
-    setTaskData(prev => ({ ...prev, [taskId]: { questionnaire: {}, stagedFiles: [], selectedAssets: new Set() } }))
-    if (!taskQuestions[taskId]) {
-      setLoadingQs(prev => ({ ...prev, [taskId]: true }))
-      granularTasksApi.getQuestions(taskId)
-        .then(qs => setTaskQuestions(prev => ({ ...prev, [taskId]: qs || [] })))
-        .catch(() => setTaskQuestions(prev => ({ ...prev, [taskId]: [] })))
-        .finally(() => setLoadingQs(prev => ({ ...prev, [taskId]: false })))
-    }
-  }
+  };
 
   const updateAnswer = (taskId, qid, val) =>
     setTaskData(prev => ({
@@ -180,7 +158,7 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
   const handleSubmit = async () => {
     if (selectedTaskIds.length === 0) { showToast('Select at least one task.', 'error'); return }
     for (const taskId of selectedTaskIds) {
-      const qs  = taskQuestions[taskId] || []
+      const qs = taskQuestions[taskId] || []
       const ans = taskData[taskId]?.questionnaire || {}
       for (const q of qs) {
         if (!(q.required ?? q.isRequired)) continue
@@ -198,7 +176,7 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
     setSaving(true)
     try {
       const specs = selectedTaskIds.map(taskId => {
-        const qn      = taskData[taskId]?.questionnaire || {}
+        const qn = taskData[taskId]?.questionnaire || {}
         const answers = Object.entries(qn)
           .filter(([, v]) => v != null && String(v).trim() !== '')
           .map(([questionId, answerValue]) => ({ questionId, answerValue }))
@@ -213,19 +191,14 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
         }
         return {
           granularTaskId: taskId,
-          parentTaskId: parentTaskId,
+          parentTaskId: parentTaskId || task?.taskId,
           questionnaireAnswers: answers,
           ...(fileUrls.length > 0 && { fileUrls, fileOriginalNames }),
         }
       })
-      if (mode === 'content') {
-        await tasksApi.createChildCampaign(parentTaskId, { specs })
-        showToast('New content request campaign created successfully.', 'success')
-      } else {
         await campaignsApi.addFollowupTasks(task.campaignId, { specs })
         showToast('Follow-up task created.', 'success')
-      }
-      onSuccess()
+        onSuccess()
     } catch (e) {
       showToast(e?.response?.data?.message || 'Failed to submit tasks.', 'error')
     } finally {
@@ -239,14 +212,14 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
         Layout: header + dropdowns stay outside the scroll container so absolute
         dropdown panels are never clipped. Only the task-cards section scrolls.
       */}
-      <div className="w-full max-w-2xl h-[96vh] flex flex-col rounded-2xl bg-white shadow-2xl border border-slate-200">
+      <div className="w-full max-w-5xl h-[95vh] flex flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
 
         {/* ── Header ── rounded-t via parent overflow-hidden */}
         <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-slate-100 shrink-0">
           <div>
             <h3 className="text-base font-bold text-slate-900">+ Followup Task</h3>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Campaign #{task.campaignId} · Task #{task.taskId} — {task.granularTaskName || task.taskTypeName}
+            <p className="mt-0.5 text-xs text-slate-500 font-medium">
+              Campaign {task.campaignId} &bull; {task.granularTaskName || task.taskTypeName || task.taskId}
             </p>
           </div>
           <button onClick={onClose}
@@ -277,48 +250,27 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
               They live in a shrink-0 section so their absolute panels can
               freely extend downward without being clipped.
             */}
-            <div className="shrink-0 px-6 pt-5 pb-3 space-y-4 border-b border-slate-100 relative z-20">
+            <div className="shrink-0 px-6 pt-5 pb-5 grid grid-cols-1 md:grid-cols-2 gap-5 border-b border-slate-100 relative z-20 bg-slate-50">
               {/* 1. Task Type */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                  Task Type
-                </label>
-                <MultiSearchSelect
-                  containerRef={typeRef}
-                  open={typeDropOpen}
-                  onOpenChange={setTypeDropOpen}
-                  search={typeSearch}
-                  onSearchChange={setTypeSearch}
-                  options={typeDropItems}
-                  selectedIds={selectedTypeIds}
-                  lockedIds={lockedTypeIds}
-                  onToggle={toggleType}
-                  getLabel={id => allTaskTypes.find(t => t.id === id)?.name || id}
+                <FieldLabel>Task Type <span className="text-slate-400 font-normal">(filter only)</span></FieldLabel>
+                <MultiSelectDropdown
+                  value={Array.from(selectedTypeIds)}
+                  onChange={handleTypeChange}
+                  options={allTaskTypes}
                   placeholder="Select task types…"
-                  searchPlaceholder="Search task types…"
                 />
               </div>
 
               {/* 2. Select Tasks */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                  Select Tasks
-                </label>
-                {selectedTypeIds.size === 0 ? (
-                  <p className="text-xs text-slate-400">Select task types first.</p>
-                ) : (
-                  <TaskMultiSelect
-                    containerRef={taskRef}
-                    open={taskDropOpen}
-                    onOpenChange={setTaskDropOpen}
-                    search={taskSearch}
-                    onSearchChange={setTaskSearch}
-                    options={taskDropList}
-                    selectedIds={new Set(selectedTaskIds)}
-                    onToggle={toggleTask}
-                    placeholder="Select tasks to add…"
-                  />
-                )}
+                <FieldLabel required>Select Tasks</FieldLabel>
+                <MultiSelectDropdown
+                  value={selectedTaskIds}
+                  onChange={handleTaskChange}
+                  options={filteredByType.map(t => ({ id: t.taskId, name: t.taskName, subtitle: t.taskTypeName }))}
+                  placeholder="Select tasks to add…"
+                />
               </div>
             </div>
 
@@ -340,7 +292,7 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
                     questions={taskQuestions[taskId] || []}
                     loadingQs={!!loadingQs[taskId]}
                     completedAssets={completedTaskAssets}
-                    onRemove={() => toggleTask(taskId)}
+                    onRemove={() => handleTaskChange(selectedTaskIds.filter(id => id !== taskId))}
                     onAnswerChange={(qid, val) => updateAnswer(taskId, qid, val)}
                     onFilesAdd={files => addFiles(taskId, files)}
                     onFileRemove={url => removeFile(taskId, url)}
@@ -351,7 +303,7 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
             </div>
 
             {/* ── Footer ── */}
-            <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 shrink-0">
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 shrink-0 rounded-b-2xl">
               <span className="text-xs text-slate-500">
                 {selectedTaskIds.length > 0
                   ? `${selectedTaskIds.length} task${selectedTaskIds.length !== 1 ? 's' : ''} selected`
@@ -363,7 +315,7 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
                   Cancel
                 </button>
                 <button onClick={handleSubmit} disabled={saving || selectedTaskIds.length === 0}
-                  className="flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition disabled:opacity-50">
+                  className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 transition disabled:opacity-50">
                   {saving
                     ? <><span className="animate-spin h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent" /> Saving…</>
                     : <><Icon name="plus" className="h-3.5 w-3.5" /> Add Followup Tasks</>}
@@ -373,150 +325,6 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
           </>
         )}
       </div>
-    </div>
-  )
-}
-
-// ─── Multi-search-select for task types ──────────────────────────────────────
-
-const MultiSearchSelect = ({ containerRef, open, onOpenChange, search, onSearchChange,
-  options, selectedIds, lockedIds, onToggle, getLabel, placeholder, searchPlaceholder }) => {
-  const selected = [...selectedIds]
-  return (
-    <div ref={containerRef} className="relative">
-      {/* Trigger */}
-      <div
-        onClick={() => onOpenChange(!open)}
-        className="min-h-[38px] flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 cursor-pointer hover:border-brand-400 transition">
-        {selected.length === 0 && (
-          <span className="text-sm text-slate-400">{placeholder}</span>
-        )}
-        {selected.map(id => {
-          const isLocked = lockedIds?.has(id)
-          return (
-            <span key={id}
-              className="inline-flex items-center gap-1 rounded-full bg-brand-100 text-brand-800 px-2.5 py-0.5 text-xs font-semibold">
-              {getLabel(id)}
-              {!isLocked && (
-                <button
-                  type="button"
-                  onClick={e => { e.stopPropagation(); onToggle(id) }}
-                  className="ml-0.5 rounded-full p-0.5 hover:bg-brand-200 transition">
-                  <Icon name="x" className="h-2.5 w-2.5" />
-                </button>
-              )}
-            </span>
-          )
-        })}
-        <Icon name="chevronDown" className={`ml-auto h-4 w-4 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </div>
-
-      {/* Dropdown */}
-      {open && (
-        <div className="absolute left-0 top-full mt-1 z-50 w-full rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
-          <div className="p-2 border-b border-slate-100">
-            <div className="relative">
-              <Icon name="search" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <input autoFocus value={search} onChange={e => onSearchChange(e.target.value)}
-                placeholder={searchPlaceholder}
-                className="w-full rounded-lg border border-slate-200 pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-300" />
-            </div>
-          </div>
-          <ul className="max-h-52 overflow-y-auto py-1">
-            {options.length === 0 && <li className="px-3 py-2 text-sm text-slate-400">No results</li>}
-            {options.map(opt => {
-              const checked  = selectedIds.has(opt.id)
-              const isLocked = lockedIds?.has(opt.id)
-              return (
-                <li key={opt.id}>
-                  <label className={`flex items-center gap-3 px-3 py-2 text-sm cursor-pointer transition
-                    ${checked ? 'bg-brand-50 text-brand-800' : 'hover:bg-slate-50 text-slate-700'}
-                    ${isLocked ? 'opacity-75' : ''}`}>
-                    <input type="checkbox" checked={checked} disabled={isLocked}
-                      onChange={() => onToggle(opt.id)}
-                      className="h-4 w-4 accent-brand-600 shrink-0" />
-                    <span className="flex-1">{opt.name}</span>
-                    {isLocked && <span className="text-[10px] text-brand-500 bg-brand-100 rounded px-1">existing</span>}
-                  </label>
-                </li>
-              )
-            })}
-          </ul>
-          <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100 bg-slate-50 text-xs text-slate-500">
-            <span>{selected.length} selected</span>
-            <button onClick={() => onOpenChange(false)}
-              className="font-semibold text-brand-600 hover:underline">Done</button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Multi-search-select for tasks ───────────────────────────────────────────
-
-const TaskMultiSelect = ({ containerRef, open, onOpenChange, search, onSearchChange,
-  options, selectedIds, onToggle, placeholder }) => {
-  const selectedArr = [...selectedIds]
-  return (
-    <div ref={containerRef} className="relative">
-      <div
-        onClick={() => onOpenChange(!open)}
-        className="min-h-[38px] flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 cursor-pointer hover:border-brand-400 transition">
-        {selectedArr.length === 0 && <span className="text-sm text-slate-400">{placeholder}</span>}
-        {selectedArr.slice(0, 2).map(id => (
-          <span key={id}
-            className="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-700 px-2.5 py-0.5 text-xs font-semibold truncate max-w-[160px]">
-            <span className="truncate">{options.find(o => o.taskId === id)?.taskName || id}</span>
-            <button type="button" onClick={e => { e.stopPropagation(); onToggle(id) }}
-              className="ml-0.5 rounded-full p-0.5 hover:bg-slate-300 transition shrink-0">
-              <Icon name="x" className="h-2.5 w-2.5" />
-            </button>
-          </span>
-        ))}
-        {selectedArr.length > 2 && (
-          <span className="rounded-full bg-brand-600 text-white px-2 py-0.5 text-xs font-bold">
-            +{selectedArr.length - 2} more
-          </span>
-        )}
-        <Icon name="chevronDown" className={`ml-auto h-4 w-4 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </div>
-      {open && (
-        <div className="absolute left-0 top-full mt-1 z-50 w-full rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
-          <div className="p-2 border-b border-slate-100">
-            <div className="relative">
-              <Icon name="search" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <input autoFocus value={search} onChange={e => onSearchChange(e.target.value)}
-                placeholder="Search tasks…"
-                className="w-full rounded-lg border border-slate-200 pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-300" />
-            </div>
-          </div>
-          <ul className="max-h-52 overflow-y-auto py-1">
-            {options.length === 0 && <li className="px-3 py-2 text-sm text-slate-400">No tasks available</li>}
-            {options.map(t => {
-              const checked = selectedIds.has(t.taskId)
-              return (
-                <li key={t.taskId}>
-                  <label className={`flex items-center gap-3 px-3 py-2 text-sm cursor-pointer transition
-                    ${checked ? 'bg-brand-50 text-brand-800' : 'hover:bg-slate-50 text-slate-700'}`}>
-                    <input type="checkbox" checked={checked} onChange={() => onToggle(t.taskId)}
-                      className="h-4 w-4 accent-brand-600 shrink-0" />
-                    <span className="flex-1">{t.taskName}</span>
-                    <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                      {t.taskTypeName}
-                    </span>
-                  </label>
-                </li>
-              )
-            })}
-          </ul>
-          <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100 bg-slate-50 text-xs text-slate-500">
-            <span>{selectedArr.length} selected</span>
-            <button onClick={() => onOpenChange(false)}
-              className="font-semibold text-brand-600 hover:underline">Done</button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -576,15 +384,15 @@ function SelectedTaskCard({ task: t, data, questions, loadingQs, completedAssets
             </p>
             <div className="space-y-1">
               {completedAssets.map(a => {
-                const name    = a.originalFilename || a.url?.split('/').pop() || 'File'
+                const name = a.originalFilename || a.url?.split('/').pop() || 'File'
                 const checked = (data?.selectedAssets || new Set()).has(String(a.assetId))
                 return (
                   <label key={a.assetId}
                     className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 cursor-pointer transition
-                      ${checked ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:bg-white'}`}>
+                      ${checked ? 'border-brand-300 bg-brand-50' : 'border-slate-200 bg-slate-50 hover:bg-white'}`}>
                     <input type="checkbox" checked={checked}
                       onChange={() => onToggleAsset(String(a.assetId))}
-                      className="h-4 w-4 accent-emerald-600 shrink-0" />
+                      className="h-4 w-4 accent-brand-600 shrink-0" />
                     <Icon name="fileText" className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                     <span className="flex-1 truncate text-xs text-slate-700">{name}</span>
                     <a href={a.url} target="_blank" rel="noopener noreferrer"
@@ -670,7 +478,7 @@ function QuestionField({ question: q, index, value, onChange }) {
 
 function TaskFileUpload({ stagedFiles, onFilesAdd, onFileRemove }) {
   const [pendingUploads, setPendingUploads] = useState([])
-  const [dragOver,       setDragOver]       = useState(false)
+  const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef(null)
 
   const uploadOne = async (file, id) => {
@@ -682,7 +490,7 @@ function TaskFileUpload({ stagedFiles, onFilesAdd, onFileRemove }) {
       return { url, name: file.name }
     } catch (err) {
       const raw = err?.response?.data?.message || err?.message || 'Upload failed'
-      throw new Error(raw.length > 60 ? 'Upload failed' : raw)
+      throw new Error(raw)
     }
   }
 
@@ -698,8 +506,10 @@ function TaskFileUpload({ stagedFiles, onFilesAdd, onFileRemove }) {
         setPendingUploads(prev => prev.filter(p => p.id !== entry.id))
         onFilesAdd([result])
       } catch (err) {
+        const msg = err.message || 'Upload failed'
+        toast.error(msg)
         setPendingUploads(prev => prev.map(p => p.id === entry.id
-          ? { ...p, uploading: false, error: err.message }
+          ? { ...p, uploading: false, error: msg }
           : p))
       }
     }
@@ -714,8 +524,10 @@ function TaskFileUpload({ stagedFiles, onFilesAdd, onFileRemove }) {
       setPendingUploads(prev => prev.filter(p => p.id !== id))
       onFilesAdd([result])
     } catch (err) {
+      const msg = err.message || 'Upload failed'
+      toast.error(msg)
       setPendingUploads(prev => prev.map(p => p.id === id
-        ? { ...p, uploading: false, error: err.message }
+        ? { ...p, uploading: false, error: msg }
         : p))
     }
   }
@@ -751,13 +563,13 @@ function TaskFileUpload({ stagedFiles, onFilesAdd, onFileRemove }) {
               ${p.error ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
               {p.uploading ? (
                 <svg className="h-3.5 w-3.5 animate-spin text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
               ) : (
                 <Icon name="alertCircle" className="h-3.5 w-3.5 text-red-400 shrink-0" />
               )}
-              <span className={`flex-1 truncate ${p.error ? 'text-red-600' : 'text-slate-600'}`}>
+              <span className={`flex-1 truncate ${p.error ? 'text-red-600' : 'text-slate-600'}`} title={p.error || undefined}>
                 {p.error ? `${p.name} — ${p.error}` : p.name}
               </span>
               {p.uploading && <span className="shrink-0 text-slate-400 text-[10px]">Uploading…</span>}

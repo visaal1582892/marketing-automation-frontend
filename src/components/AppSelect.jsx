@@ -13,6 +13,7 @@
  *   isSearchable boolean                               enable text search
  *   menuPortal   boolean                               render menu in document.body (avoids overflow clipping)
  */
+import React, { useRef } from 'react'
 import ReactSelect, { components } from 'react-select'
 
 // brand palette (from index.css CSS vars)
@@ -173,31 +174,79 @@ function normalise(options = []) {
 export default function AppSelect({
   value,
   onChange,
-  options = [],
+  options,
   placeholder = 'Select…',
   size = 'md',
   isClearable = true,
   isDisabled = false,
-  isSearchable = false,
   isMulti = false,
-  menuPortal = false,
+  isSearchable = true,
+  maxMultiValues = 3,
   className = '',
-  /** Max chips shown before "+N more" — multi mode only. Default 2. */
-  maxMultiValues = 2,
+  menuPortal = false
 }) {
   const normOpts = normalise(options)
   const styles   = buildStyles(size)
+  const isAutoScrolling = useRef(false)
+  const selectRef = useRef(null)
+
+  const handleMenuOpen = () => {
+    setTimeout(() => {
+      const menuEl = document.querySelector('.app-select__menu')
+      if (menuEl) {
+        const rect = menuEl.getBoundingClientRect()
+        if (rect.bottom > window.innerHeight) {
+          isAutoScrolling.current = true
+          setTimeout(() => { isAutoScrolling.current = false }, 500)
+          
+          const scrollAmount = rect.bottom - window.innerHeight + 20
+          
+          const controlEl = document.querySelector('.app-select__control--menu-is-open')
+          let parent = controlEl ? controlEl.parentElement : null
+          let scrolled = false
+          
+          while (parent && parent !== document.documentElement) {
+            const style = window.getComputedStyle(parent)
+            if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+              parent.scrollBy({ top: scrollAmount, behavior: 'smooth' })
+              scrolled = true
+              break
+            }
+            parent = parent.parentElement
+          }
+          
+          if (!scrolled) {
+            window.scrollBy({ top: scrollAmount, behavior: 'smooth' })
+          }
+        }
+      }
+    }, 10)
+  }
+
+  const handleCloseMenuOnScroll = (e) => {
+    // Only close if it's not currently animating an auto-scroll
+    return !isAutoScrolling.current
+  }
 
   // Multi mode: normalise value items to strings so they match normOpts
   if (isMulti) {
     const normValue = (value ?? []).map(v => ({ ...v, value: String(v.value) }))
     const LimitedVC = makeLimitedValueContainer(maxMultiValues)
+    
+    const handleChange = (opts, actionMeta) => {
+      onChange(opts || [])
+      if (actionMeta?.action === 'select-option' && actionMeta.option?.value === 'Other') {
+        selectRef.current?.blur()
+      }
+    }
+
     return (
       <ReactSelect
+        ref={selectRef}
         isMulti
         hideSelectedOptions={false}
         value={normValue}
-        onChange={(opts) => onChange(opts || [])}
+        onChange={handleChange}
         options={normOpts}
         placeholder={placeholder}
         isClearable={isClearable}
@@ -234,6 +283,8 @@ export default function AppSelect({
         menuPosition={menuPortal ? 'fixed' : undefined}
         className={className}
         classNamePrefix="app-select"
+        onMenuOpen={handleMenuOpen}
+        closeMenuOnScroll={handleCloseMenuOnScroll}
       />
     )
   }
@@ -260,6 +311,8 @@ export default function AppSelect({
       menuPosition={menuPortal ? 'fixed' : undefined}
       className={className}
       classNamePrefix="app-select"
+      onMenuOpen={handleMenuOpen}
+      closeMenuOnScroll={handleCloseMenuOnScroll}
     />
   )
 }

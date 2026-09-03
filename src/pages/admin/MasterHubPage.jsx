@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
-import { Rights } from '../../constants/rights'
 import Icon from '../../components/Icon'
 import { MASTER_HUB_SECTIONS, getAccentStyle } from '../../config/masterHubConfig'
 
@@ -11,7 +10,6 @@ export default function MasterHubPage() {
     ...section,
     items: section.items.filter(item => {
       if (item.right) return hasRight(item.right)
-      if (item.adminOnly) return hasRight(Rights.MANAGE_QC_ROUTING)
       return true
     }),
   })).filter(section => section.items.length > 0)

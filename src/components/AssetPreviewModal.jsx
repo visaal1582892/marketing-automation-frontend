@@ -3,6 +3,7 @@ import Icon from './Icon'
 import collaborationApi from '../api/collaboration'
 import tasksApi from '../api/tasks'
 import api from '../api/client'
+import { useToast } from './Toast'
 
 // ─── File-type helpers ────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ function fmtDate(iso) {
 // Uses axios so the request goes to the configured backend URL (ngrok/prod)
 // with the JWT header — avoids the relative-URL pitfall on Vercel deployments.
 
-async function triggerDownload(taskId, assetId, filename) {
+async function triggerDownload(taskId, assetId, filename, onError) {
   try {
     const resp = await api.get(
       `/collaborations/${taskId}/assets/${assetId}/download`,
@@ -63,13 +64,14 @@ async function triggerDownload(taskId, assetId, filename) {
     document.body.removeChild(a)
     setTimeout(() => URL.revokeObjectURL(url), 10_000)
   } catch (e) {
-    console.error('Download failed', e)
+    if (onError) onError(e)
   }
 }
 
 // ─── Single asset row ─────────────────────────────────────────────────────────
 
 function AssetRow({ asset, taskId, currentUserId, onDeleted }) {
+  const toast = useToast()
   const [deleting, setDeleting] = useState(false)
   const name  = displayName(asset)
   const type  = detectType(asset.url, name)
@@ -81,11 +83,16 @@ function AssetRow({ asset, taskId, currentUserId, onDeleted }) {
     try {
       await collaborationApi.deleteAsset(taskId, asset.assetId)
       onDeleted(asset.assetId)
-    } catch {
-      // silently ignore — parent will keep the row
+      toast.success('Asset removed.')
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Could not remove asset.')
     } finally {
       setDeleting(false)
     }
+  }
+
+  const handleDownloadError = (e) => {
+    toast.error(e?.response?.data?.message || 'Download failed. Please try again.')
   }
 
   return (
@@ -128,7 +135,7 @@ function AssetRow({ asset, taskId, currentUserId, onDeleted }) {
         </p>
         <div className="flex items-center gap-2 mt-1.5">
           <button
-            onClick={() => triggerDownload(taskId, asset.assetId, name)}
+            onClick={() => triggerDownload(taskId, asset.assetId, name, handleDownloadError)}
             className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-600 hover:text-brand-800 transition"
           >
             <Icon name="download" className="h-3 w-3" />
@@ -202,6 +209,7 @@ function UploadRow({ name, status, error }) {
  *   onClose       — close handler
  */
 export default function AssetPreviewModal({ taskId, taskName, currentUserId, canUpload = false, onClose }) {
+  const toast = useToast()
   const [assets,       setAssets]       = useState([])
   const [loading,      setLoading]      = useState(true)
   const [pendingFiles, setPendingFiles] = useState([])
@@ -258,17 +266,40 @@ export default function AssetPreviewModal({ taskId, taskName, currentUserId, can
       await refreshAssets()
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Upload failed.'
+      toast.error(msg)
       showError(msg.toLowerCase().includes('unsupported') || msg.toLowerCase().includes('format')
         ? 'File format not supported by the server. Try a different file.'
         : msg)
       setPendingFiles(prev => prev.map((f, idx) =>
-        idx >= offset && idx < offset + allowed.length ? { ...f, status: 'error', error: 'Failed' } : f
+        idx >= offset && idx < offset + allowed.length ? { ...f, status: 'error', error: msg } : f
       ))
     }
   }
 
-  const downloadAll = () =>
-    assets.forEach(a => triggerDownload(taskId, a.assetId, displayName(a)))
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false)
+
+  const downloadAll = async () => {
+    if (assets.length === 0) return
+    setIsDownloadingAll(true)
+    try {
+      const resp = await api.get(
+        `/collaborations/${taskId}/assets/download-all`,
+        { responseType: 'blob', timeout: 300_000 },
+      )
+      const url = URL.createObjectURL(resp.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `assets-${taskId}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    } catch {
+      toast.error('Failed to download assets. Please try again.')
+    } finally {
+      setIsDownloadingAll(false)
+    }
+  }
 
   const handleDeleted = (assetId) =>
     setAssets(prev => prev.filter(a => a.assetId !== assetId))
@@ -286,12 +317,12 @@ export default function AssetPreviewModal({ taskId, taskName, currentUserId, can
           <div className="flex items-center gap-2">
             <button
               onClick={downloadAll}
-              disabled={assets.length === 0}
-              title={assets.length === 0 ? 'No assets to download' : `Download all ${assets.length} asset${assets.length !== 1 ? 's' : ''}`}
+              disabled={assets.length === 0 || isDownloadingAll}
+              title={assets.length === 0 ? 'No assets to download' : `Download all ${assets.length} asset${assets.length !== 1 ? 's' : ''} as ZIP`}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Icon name="download" className="h-3.5 w-3.5" />
-              Download All
+              {isDownloadingAll ? 'Zipping…' : 'Download All'}
             </button>
             {canUpload && (
               <button

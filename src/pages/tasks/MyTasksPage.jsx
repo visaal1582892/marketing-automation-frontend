@@ -58,7 +58,6 @@ export default function MyTasksPage() {
   const [commentText,    setCommentText]    = useState('')
   const [commentSaving,  setCommentSaving]  = useState(false)
 
-  const [linkedTaskSource, setLinkedTaskSource] = useState(null)
 
   // Full-brief drawer (any task → click "View brief")
   const [briefCampaignId, setBriefCampaignId] = useState(null)
@@ -432,7 +431,6 @@ export default function MyTasksPage() {
                   onCommentAnswered={() => refresh()}
                   onCollaborate={() => handleCollaborate(t)}
                   canAddFollowup={canAddFollowup}
-                  onLinkedTask={() => setLinkedTaskSource(t)}
                   currentUserId={user?.userId ?? user?.id}
                 />
               ))}
@@ -478,20 +476,6 @@ export default function MyTasksPage() {
         />
       )}
 
-      {linkedTaskSource && (
-        <LinkedTaskModal mode="content"
-          task={linkedTaskSource}
-          parentTaskId={linkedTaskSource.taskId}
-          defaultTaskTypeName="Content Writing"
-          onClose={() => setLinkedTaskSource(null)}
-          onSuccess={() => {
-            setLinkedTaskSource(null)
-            showToast('Linked task created successfully.', 'success')
-            refresh()
-          }}
-        />
-      )}
-
       {briefCampaignId && (
         <RequestBriefDrawer
           campaignId={briefCampaignId}
@@ -520,7 +504,7 @@ export default function MyTasksPage() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onCommentAnswered, onCollaborate, canAddFollowup, onLinkedTask, currentUserId }) {
+function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFlight, onAccept, onSubmit, onView, onComment, onWorkerUnhold, onCommentAnswered, onCollaborate, canAddFollowup, currentUserId }) {
   const [showAssets, setShowAssets] = useState(false)
   const { display: timerDisplay, outsideHours, isRunning } = formatWorkingElapsed(task, now, hoursSnapshot)
   const isAssigned   = task.status === 'ASSIGNED' && !closed
@@ -604,9 +588,6 @@ function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFligh
             {!!task.parentTaskId && (
               <span>• Auto-assigned for designer task {task.parentTaskId}</span>
             )}
-            {task.contentAssigneeName && (
-              <span>• Content requested from {task.contentAssigneeName}</span>
-            )}
             <span className="w-full sm:w-auto">
               <TimeLoggedBadge task={task} currentUserId={currentUserId} />
             </span>
@@ -668,15 +649,7 @@ function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFligh
               {!!task.parentTaskId ? 'Submit' : 'Submit for QC'}
             </button>
           )}
-          {canAddFollowup && (isAssigned || isActiveWork) && !isCancelled && !task.contentAssigneeName && !isLocked && (
-            <button
-              onClick={onLinkedTask}
-              className="flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100 transition disabled:opacity-60"
-            >
-              <Icon name="edit" className="h-3.5 w-3.5" />
-              Need Content?
-            </button>
-          )}
+
           {(isAssigned || isActiveWork) && !isCancelled && (
             <button
               onClick={onComment}
@@ -1238,7 +1211,6 @@ function CollaborateModal({ task, onClose }) {
 // ─── Reference Task Panel (Phase 4) ──────────────────────────────────────────
 
 function ReferenceTaskPanel({ taskId, parentTaskId }) {
-  const navigate = useNavigate()
   const [parent, setParent] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -1259,31 +1231,22 @@ function ReferenceTaskPanel({ taskId, parentTaskId }) {
   if (!parent) return null
 
   return (
-    <>
-      <div className="border-t border-indigo-100 bg-indigo-50/50 px-4 py-2.5 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 min-w-0">
-          <Icon name="link" className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-          <span className="text-xs font-semibold text-indigo-700 whitespace-nowrap shrink-0">Reference Task:</span>
-          <span className="text-xs text-indigo-900 truncate">
-            {parent.taskId} — {parent.granularTaskName || parent.taskTypeName}
+    <div className="border-t border-indigo-100 bg-indigo-50/50 px-4 py-2.5 flex items-center justify-between gap-4">
+      <div className="flex items-center gap-2 min-w-0">
+        <Icon name="link" className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+        <span className="text-xs font-semibold text-indigo-700 whitespace-nowrap shrink-0">Reference Task:</span>
+        <span className="text-xs text-indigo-900 truncate">
+          {parent.taskId} — {parent.granularTaskName || parent.taskTypeName}
+        </span>
+        <span className="shrink-0 text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-medium">
+          {parent.status}
+        </span>
+        {parent.assigneeName && (
+          <span className="text-xs text-indigo-600 truncate ml-2 border-l border-indigo-200 pl-2">
+            Assigned to {parent.assigneeName}
           </span>
-          <span className="shrink-0 text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-medium">
-            {parent.status}
-          </span>
-          {parent.assigneeName && (
-            <span className="text-xs text-indigo-600 truncate ml-2 border-l border-indigo-200 pl-2">
-              Assigned to {parent.assigneeName}
-            </span>
-          )}
-        </div>
-        <button
-          onClick={() => navigate(`/campaigns/${parent.campaignId}?taskId=${parent.taskId}`)}
-          className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-800 transition flex items-center gap-1"
-        >
-          <Icon name="eye" className="h-3.5 w-3.5" />
-          View
-        </button>
+        )}
       </div>
-    </>
+    </div>
   )
 }

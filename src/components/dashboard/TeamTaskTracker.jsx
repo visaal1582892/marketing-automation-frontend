@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import tasksApi from '../../api/tasks'
 import Icon from '../Icon'
 import Pagination from '../Pagination' // Assuming standard pagination exists, wait I'll use standard pagination UI. Wait, let me check what pagination component is available.
+import { useToast } from '../Toast'
 
 export default function TeamTaskTracker() {
+  const toast = useToast()
   const [stats, setStats] = useState([])
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
@@ -20,7 +22,7 @@ export default function TeamTaskTracker() {
       setTotalElements(res.data?.totalElements || 0)
       setPage(res.data?.number || 0)
     } catch (err) {
-      console.error('Failed to fetch team stats', err)
+      toast.error(err?.response?.data?.message || 'Failed to load team task stats. Please try again.')
     } finally {
       setLoading(false)
     }

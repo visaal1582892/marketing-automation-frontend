@@ -5,6 +5,7 @@ import { useToast } from '../../components/Toast'
 import campaignsApi from '../../api/campaigns'
 import Icon from '../../components/Icon'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
+import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
 
 export default function DeptApprovalPage() {
   const { user } = useAuth()
@@ -96,7 +97,7 @@ export default function DeptApprovalPage() {
     }
   }
 
-  const roleLabel = 'Regional Manager'
+  const roleLabel = 'Department Head'
   const scope     = 'Showing requests from departments awaiting your approval.'
 
   return (
@@ -228,17 +229,13 @@ function PendingTable({ campaigns, onAction, onViewBrief }) {
               <td className="px-4 py-3 text-slate-500 text-xs">{c.campaignTypeName || ''}</td>
               <td className="px-4 py-3"><PriorityBadge v={c.priority} /></td>
               <td className="px-4 py-3 text-slate-500 text-xs">{fmtDateTime(c.createdAt)}</td>
-              <td className="px-4 py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => onViewBrief(c.campaignId)}
-                    className="rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1"
-                    title="View full request brief"
-                  >
-                    <Icon name="eye" className="h-3.5 w-3.5" /> Brief
-                  </button>
+              <td className="px-4 py-3 text-right">
+                <div className="flex items-center justify-end gap-2">
                   <ActionButton label="Approve" icon="check" color="green" onClick={() => onAction(c, 'approve')} />
                   <ActionButton label="Reject"  icon="x"     color="red"   onClick={() => onAction(c, 'reject')} />
+                  <ActionMenu align="right">
+                    <ActionMenuItem icon="eye" label="View Brief" onClick={() => onViewBrief(c.campaignId)} />
+                  </ActionMenu>
                 </div>
               </td>
             </tr>
@@ -262,9 +259,10 @@ export function HistoryTable({ campaigns, stage, onViewBrief }) {
       <table className="min-w-[900px] divide-y divide-slate-200 text-sm sm:min-w-full">
         <thead className="bg-slate-50">
           <tr>
-            {['#', 'Requirement', 'Requestor', 'Department', 'Decision', 'Decided', 'Reason / Status', ''].map((h) => (
+            {['#', 'Requirement', 'Requestor', 'Department', 'Decision', 'Decided', 'Reason / Status'].map((h) => (
               <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
             ))}
+            <th className="px-4 py-3 w-14"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -286,14 +284,12 @@ export function HistoryTable({ campaigns, stage, onViewBrief }) {
                   ? <span className="text-red-700 whitespace-pre-wrap">{c.rejectionReason || ''}</span>
                   : <StatusBadge v={c.status} />}
               </td>
-              <td className="px-4 py-3">
-                <button
-                  onClick={() => onViewBrief(c.campaignId)}
-                  className="rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1"
-                  title="View full request brief"
-                >
-                  <Icon name="eye" className="h-3.5 w-3.5" /> Brief
-                </button>
+              <td className="px-4 py-3 text-right">
+                <div className="flex justify-end">
+                  <ActionMenu align="right">
+                    <ActionMenuItem icon="eye" label="View Brief" onClick={() => onViewBrief(c.campaignId)} />
+                  </ActionMenu>
+                </div>
               </td>
             </tr>
           ))}
@@ -384,16 +380,18 @@ export function EmptyState({ message = 'No pending requests in your queue.' }) {
   )
 }
 
-function ActionButton({ label, icon, color, onClick }) {
+function ActionButton({ label, icon, color, onClick, title }) {
   const cls = color === 'green'
     ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
     : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition ${cls}`}
+      title={title}
+      className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold transition ${cls}`}
     >
-      <Icon name={icon} className="h-3.5 w-3.5" /> {label}
+      <Icon name={icon} className="h-3.5 w-3.5" />
+      {label}
     </button>
   )
 }

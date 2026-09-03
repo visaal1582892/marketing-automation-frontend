@@ -75,9 +75,16 @@ export default function MasterTablePage() {
 
   const refresh = () => setRefreshSeed((s) => s + 1)
 
+  // For resources with a code column (capabilities), the display "id" is the code,
+  // but operations use the integer id.
+  const hasCode = resource?.isCode === true
+
   const handleSave = async (form) => {
     try {
       const payload = { name: form.name, status: form.isActive ? 'ACTIVE' : 'INACTIVE' }
+      if (hasCode) {
+        payload.code = form.code
+      }
       form.id
         ? await masterApi.update(slug, form.id, payload)
         : await masterApi.create(slug, payload)
@@ -112,9 +119,20 @@ export default function MasterTablePage() {
     }
   }
 
-  const handleEditRow   = useCallback((row) => setEditing({ ...row, isActive: row.status === 'ACTIVE' }), [])
+  const handleEditRow   = useCallback((row) => {
+    const base = { ...row, isActive: row.status === 'ACTIVE' }
+    // For code resources, also pass the code field
+    if (hasCode && row.code) {
+      base.code = row.code
+    }
+    setEditing(base)
+  }, [hasCode])
+
   const handleDeleteRow = useCallback((row) => setConfirmDelete(row), [])
   const handleRestoreRow = useCallback((row) => handleRestore(row), [slug]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The display value for the "ID" / "Code" column
+  const displayId = (row) => hasCode ? (row.code || row.id) : row.id
 
   // ---------------------------------------------------------------- render
   return (
@@ -133,7 +151,7 @@ export default function MasterTablePage() {
           </div>
         </div>
         <button
-          onClick={() => setEditing({ name: '', isActive: true })}
+          onClick={() => setEditing({ name: '', isActive: true, ...(hasCode ? { code: '' } : {}) })}
           className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2
                      text-sm font-semibold text-white shadow-sm transition
                      hover:bg-brand-700 active:scale-[0.98]"
@@ -151,14 +169,14 @@ export default function MasterTablePage() {
             <thead className="bg-slate-50">
               <tr className="bg-slate-50/70 text-left text-xs font-semibold uppercase
                               tracking-wider text-slate-500">
-                <th className="w-36 px-4 py-2.5">ID</th>
+                <th className="w-36 px-4 py-2.5">{resource.isCode ? 'Code' : 'ID'}</th>
                 <th className="px-4 py-2.5">Name</th>
                 <th className="w-36 px-4 py-2.5">Status</th>
                 <th className="w-28 px-4 py-2.5 text-right">Actions</th>
               </tr>
               <tr className="border-y border-slate-100 bg-slate-50/40">
                 <th className="px-4 py-2">
-                  <FilterInput value={fId} onChange={setFId} placeholder="Filter ID…" />
+                  <FilterInput value={fId} onChange={setFId} placeholder={resource.isCode ? "Filter Code…" : "Filter ID…"} />
                 </th>
                 <th className="px-4 py-2">
                   <FilterInput value={fName} onChange={setFName} placeholder="Search name…" icon="search" />
@@ -177,7 +195,7 @@ export default function MasterTablePage() {
                 <TableStatusRow colSpan={4} className="py-12">No matching records.</TableStatusRow>
               ) : (
                 rows.map((row) => (
-                  <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} onRestore={handleRestoreRow} />
+                  <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} onRestore={handleRestoreRow} displayIdFn={displayId} />
                 ))
               )}
             </tbody>
@@ -193,7 +211,7 @@ export default function MasterTablePage() {
           <div className="space-y-2 p-3">
             <FilterInput value={fName} onChange={setFName} placeholder="Search name…" icon="search" />
             <div className="grid grid-cols-2 gap-2">
-              <FilterInput value={fId} onChange={setFId} placeholder="Filter ID…" />
+              <FilterInput value={fId} onChange={setFId} placeholder={resource.isCode ? "Filter Code…" : "Filter ID…"} />
               <FilterSelect value={fStatus} onChange={setFStatus}
                 options={[['all','All'],['active','Active'],['inactive','Inactive']]} />
             </div>
@@ -204,7 +222,7 @@ export default function MasterTablePage() {
             <div className="px-4 py-12 text-center text-sm text-slate-500">No matching records.</div>
           ) : (
             rows.map((row) => (
-              <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} onRestore={handleRestoreRow} mobile />
+              <MasterRow key={row.id} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} onRestore={handleRestoreRow} mobile displayIdFn={displayId} />
             ))
           )}
           <div className="px-4 py-1">
@@ -240,14 +258,15 @@ function singular(resource) {
   return resource.label.replace(/s$/, '')
 }
 
-const MasterRow = memo(function MasterRow({ row, onEdit, onDelete, onRestore, mobile = false }) {
+const MasterRow = memo(function MasterRow({ row, onEdit, onDelete, onRestore, mobile = false, displayIdFn }) {
   const active = row.status === 'ACTIVE'
+  const displayedId = displayIdFn ? displayIdFn(row) : row.id
   if (mobile) {
     return (
       <div className="flex items-start justify-between gap-3 px-4 py-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-xs text-slate-500">{row.id}</span>
+            <span className="font-mono text-xs text-slate-500">{displayedId}</span>
             <span className={`font-medium text-slate-800 ${!active ? 'line-through text-slate-400' : ''}`}>{row.name}</span>
           </div>
           <div className="mt-1.5">
@@ -260,7 +279,7 @@ const MasterRow = memo(function MasterRow({ row, onEdit, onDelete, onRestore, mo
   }
   return (
     <tr className={`transition hover:bg-slate-50/60 ${!active ? 'bg-slate-50/50 opacity-75' : ''}`}>
-      <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{row.id}</td>
+      <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{displayedId}</td>
       <td className={`px-4 py-2.5 font-medium text-slate-800 ${!active ? 'line-through text-slate-400' : ''}`}>{row.name}</td>
       <td className="px-4 py-2.5"><StatusPill active={active} /></td>
       <td className="px-4 py-2.5">
@@ -352,15 +371,20 @@ function IconButton({ children, onClick, title, tone = 'default' }) {
 
 function MasterFormModal({ open, resource, initial, onClose, onSave }) {
   const isEdit = Boolean(initial?.id)
+  const hasCode = resource?.isCode === true
   const [name, setName]             = useState('')
+  const [code, setCode]             = useState('')
   const [isActive, setIsActive]     = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
   useEffect(() => {
     if (open) {
       setName(initial?.name ?? '')
+      setCode(initial?.code ?? '')
       setIsActive(initial?.isActive ?? true)
       setSubmitting(false)
+      setSubmitError('')
     }
   }, [open, initial])
 
@@ -369,12 +393,25 @@ function MasterFormModal({ open, resource, initial, onClose, onSave }) {
   const submit = async (e) => {
     e.preventDefault()
     if (!name.trim()) return
+    if (hasCode && !code.trim()) return
     setSubmitting(true)
+    setSubmitError('')
     try {
-      await onSave({ id: initial?.id, name: name.trim(), isActive })
+      await onSave({ id: initial?.id, name: name.trim(), isActive, code: hasCode ? code.trim() : undefined })
+    } catch (e) {
+      const msg = e?.response?.data?.message || 'Save failed'
+      setSubmitError(msg)
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const handleNameChange = (e) => {
+    const val = e.target.value
+    setName(val)
+    // Auto-derive code from name if not manually edited
+    const derived = val.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+    setCode(derived)
   }
 
   return (
@@ -392,7 +429,7 @@ function MasterFormModal({ open, resource, initial, onClose, onSave }) {
           </button>
           <button
             onClick={submit}
-            disabled={submitting || !name.trim()}
+            disabled={submitting || !name.trim() || (hasCode && !code.trim())}
             className="rounded-md bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white
                        shadow-sm transition hover:bg-brand-700 disabled:opacity-60"
           >
@@ -402,24 +439,47 @@ function MasterFormModal({ open, resource, initial, onClose, onSave }) {
       }
     >
       <form onSubmit={submit} className="space-y-3.5">
-        {isEdit && (
+        {submitError && (
+          <div className="rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-600 ring-1 ring-red-200">
+            {submitError}
+          </div>
+        )}
+
+        {isEdit && !hasCode && (
           <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
             ID: <span className="font-mono text-slate-700">{initial.id}</span>
           </div>
         )}
+
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Name</label>
           <input
             autoFocus
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={handleNameChange}
             placeholder={`e.g. ${exampleFor(resource?.slug)}`}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm
                        text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none
                        focus:ring-2 focus:ring-brand-100"
           />
         </div>
+
+        {hasCode && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Code
+              <span className="ml-1.5 font-normal text-slate-400">(auto-generated, editable)</span>
+            </label>
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+              placeholder="e.g. GRAPHIC_DESIGNER"
+              className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 font-mono shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            />
+          </div>
+        )}
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
@@ -465,8 +525,9 @@ function ConfirmDeleteModal({ open, target, resource, onClose, onConfirm }) {
       }
     >
       <p className="text-sm text-slate-600">
-        This will <strong>deactivate</strong> <strong>{target?.name}</strong> ({target?.id}) from the
-        list of <strong>{resource?.label}</strong>. It will no longer appear in form dropdowns for new selections, but existing historical data will be preserved.
+        This will <strong>deactivate</strong> <strong>{target?.name}</strong>{' '}
+        ({target?.code || target?.id}) from the list of <strong>{resource?.label}</strong>.{' '}
+        It will no longer appear in form dropdowns for new selections, but existing historical data will be preserved.
       </p>
     </Modal>
   )
@@ -476,6 +537,7 @@ function exampleFor(slug) {
   switch (slug) {
     case 'departments':       return 'Sales Operations'
     case 'roles':             return 'Marketing Manager'
+    case 'capabilities':      return 'Graphic Designer'
     case 'requirement-types': return 'Performance Marketing Campaign'
     case 'task-types':        return 'Design'
     case 'regions':           return 'South'

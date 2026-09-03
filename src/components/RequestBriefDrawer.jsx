@@ -9,6 +9,7 @@ import { Rights } from '../constants/rights'
 import { useToast } from './Toast'
 import { printBrief } from '../utils/printBrief'
 import { formatTargetLocations, getLocationLabel, parseTargetLocations } from '../utils/targetLocations'
+import CampaignStoresBrief from './CampaignStoresBrief'
 import ConfigurableApprovalHistory from "./ConfigurableApprovalHistory"
 import TaskCyclesView from './TaskCyclesView'
 
@@ -49,7 +50,7 @@ export default function RequestBriefDrawer({
     if (!campaign) return
     setPrinting(true)
     try   { printBrief(campaign, filterTaskId) }
-    catch (e) { console.error('Print failed:', e) }
+    catch (e) { toast.error('Failed to print request brief. Please try again.') }
     finally   { setPrinting(false) }
   }, [campaign, filterTaskId])
 
@@ -107,16 +108,26 @@ export default function RequestBriefDrawer({
   }, [closing, onClose])
 
   const handleLinkedTaskClick = async (childTaskId, parentTaskId) => {
-    try {
-      const res = await tasksApi.getParentTask(childTaskId)
-      if (res.data?.campaignId) {
-        handleClose()
-        setTimeout(() => {
-          navigate(`/campaigns/${res.data.campaignId}?taskId=${parentTaskId}`)
-        }, 320)
+    if (!parentTaskId) return
+    const parentEl = document.getElementById(`task-brief-${parentTaskId}`)
+    if (parentEl) {
+      parentEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      parentEl.classList.add('ring-2', 'ring-violet-500', 'ring-offset-2')
+      setTimeout(() => {
+        parentEl.classList.remove('ring-2', 'ring-violet-500', 'ring-offset-2')
+      }, 2000)
+    } else {
+      try {
+        const res = await tasksApi.getParentTask(childTaskId)
+        if (res.data?.campaignId) {
+          handleClose()
+          setTimeout(() => {
+            navigate(`/campaigns/${res.data.campaignId}?taskId=${parentTaskId}`)
+          }, 320)
+        }
+      } catch (e) {
+        toast.error?.('Could not load parent task details.')
       }
-    } catch (e) {
-      toast.error?.('Could not load parent task details.')
     }
   }
   // ──────────────────────────────────────────────────────────────────────────
@@ -338,12 +349,20 @@ export default function RequestBriefDrawer({
                         </span>
                       )
                     })()}
-                    {c.storeId && (
+                    {c.storeId && (!c.stores || c.stores.length === 0) && (
                       <span className="text-xs text-white/60">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
                           Store ID
                         </span>
                         {c.storeId}
+                      </span>
+                    )}
+                    {c.stores && c.stores.length > 0 && (
+                      <span className="text-xs text-white/60">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
+                          Stores
+                        </span>
+                        {c.stores.length} Selected
                       </span>
                     )}
                     {c.contactNumber && (
@@ -381,8 +400,89 @@ export default function RequestBriefDrawer({
               {/* ── Approval trail ── */}
               <ApprovalTrail c={c} />
 
+              {/* ── Stores (full-width) ── */}
+              {(c.stores?.length > 0 || c.storeId) && (
+                <BriefCard title="Stores" icon="mapPin" accent="brand">
+                  <CampaignStoresBrief stores={c.stores} legacyStoreId={c.storeId} />
+                </BriefCard>
+              )}
+
               {/* ── Target Locations (full-width) ── */}
-              {parseLocations(c.targetLocation).length > 0 && (() => {
+              {(c.locations?.length > 0 || parseLocations(c.targetLocation).length > 0) && (() => {
+                if (c.locations && c.locations.length > 0) {
+                  const countryLocs = c.locations.filter(l => l.locationType === 'COUNTRY')
+                  const stateLocs   = c.locations.filter(l => l.locationType === 'STATE')
+                  const cityLocs    = c.locations.filter(l => l.locationType === 'CITY')
+
+                  return (
+                    <BriefCard title="Target Locations" icon="mapPin" accent="brand">
+                      <div className="space-y-3">
+                        {countryLocs.length > 0 && (
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1">
+                              <Icon name="globe" className="h-3 w-3 text-blue-500" />
+                              Countries ({countryLocs.length})
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {countryLocs.map((loc, idx) => (
+                                <span key={idx}
+                                  className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 text-blue-700
+                                    px-3 py-1 text-xs font-medium ring-1 ring-blue-200">
+                                  <Icon name="globe" className="h-3 w-3 shrink-0 text-blue-400" />
+                                  {loc.countryName || loc.countrySubName || loc.countryCode}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {stateLocs.length > 0 && (
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1">
+                              <Icon name="mapPin" className="h-3 w-3 text-emerald-500" />
+                              States ({stateLocs.length})
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {stateLocs.map((loc, idx) => (
+                                <span key={idx}
+                                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700
+                                    px-3 py-1 text-xs font-medium ring-1 ring-emerald-200">
+                                  <Icon name="mapPin" className="h-3 w-3 shrink-0 text-emerald-400" />
+                                  {loc.stateName || loc.stateSubName}
+                                  {(loc.countrySubName || loc.countryName) && (
+                                    <span className="text-emerald-600 text-[10px] font-normal">({loc.countrySubName || loc.countryName})</span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {cityLocs.length > 0 && (
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1">
+                              <Icon name="building" className="h-3 w-3 text-violet-500" />
+                              Cities ({cityLocs.length})
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {cityLocs.map((loc, idx) => (
+                                <span key={idx}
+                                  className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 text-violet-700
+                                    px-3 py-1 text-xs font-medium ring-1 ring-violet-200">
+                                  <Icon name="building" className="h-3 w-3 shrink-0 text-violet-400" />
+                                  {loc.cityName}
+                                  {(loc.stateSubName || loc.stateName) && (
+                                    <span className="text-violet-600 text-[10px] font-normal">({loc.stateSubName || loc.stateName})</span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </BriefCard>
+                  )
+                }
                 const locs = parseLocations(c.targetLocation)
                 const SHOW = 4
                 return (
@@ -418,7 +518,6 @@ export default function RequestBriefDrawer({
               {/* ── 3-column info sections ── */}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <BriefCard title="Campaign Overview" icon="fileText" accent="blue">
-                  {c.storeId       && <DetailRow label="Store ID"       value={c.storeId} />}
                   {c.contactNumber && <DetailRow label="Contact Number" value={c.contactNumber} />}
                   <DetailRow label="Audience Type"    value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
                   <DetailRow label="Language"         value={fmtMultiValue(c.language)} />
@@ -524,8 +623,8 @@ export default function RequestBriefDrawer({
                 >
                   <div className="space-y-4">
                     {visibleTasks.map(t => (
-                      <div key={t.taskId}
-                        className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                      <div key={t.taskId} id={`task-brief-${t.taskId}`}
+                        className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm transition-all duration-300">
                         {/* Task header */}
                         <div className="flex flex-wrap items-start justify-between gap-3
                                         bg-slate-50/70 px-4 py-3 border-b border-slate-100">
@@ -1085,8 +1184,8 @@ function TaskFilesSection({ task, campaign, canEdit, onFilesChanged }) {
         await onFilesChanged()
         toast?.success?.('Files added.')
       }
-    } catch {
-      toast?.error?.('Upload failed. Please try again.')
+    } catch (e) {
+      toast?.error?.(e?.response?.data?.message || 'Upload failed. Please try again.')
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''

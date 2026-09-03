@@ -86,7 +86,7 @@ export default function Step3TaskStateMatrix({
       const data = await eventCampaignTaskApi.getTasks(ecId, ctId);
       setMappedTaskTypeIds(data || []);
     } catch (err) {
-      console.error("Failed to fetch mapped tasks", err);
+      toast.error(err?.response?.data?.message || "Failed to load mapped tasks for this combination.");
       setMappedTaskTypeIds([]);
     } finally {
       setIsLoadingTasks(false);
@@ -258,8 +258,7 @@ export default function Step3TaskStateMatrix({
         onMatrixSaved();
       }
     } catch (err) {
-      console.error("Failed to save combination", err);
-      toast.error("Failed to save allocations. Please try again.");
+      toast.error(err?.response?.data?.message || "Failed to save allocations. Please try again.");
     } finally {
       setIsSaving(false);
     }

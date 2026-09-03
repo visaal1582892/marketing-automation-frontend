@@ -12,17 +12,19 @@ import Pagination from '../../components/Pagination'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import { LinkedTaskModal } from '../../components/tasks/LinkedTaskModal'
+import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
 import { useAuth } from '../../auth/AuthContext'
 import { Rights } from '../../constants/rights'
 import useDebounce from '../../hooks/useDebounce'
+import StoreIdDisplay from '../../components/StoreIdDisplay'
 import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
 
-const COMPLETED_TABLE_COLS = [116, 116, 208, 156, 176, 140, 272]
 const completedCellCls = 'min-w-0 overflow-hidden px-4 py-3'
 
 /** Sticky Actions column — solid bg so fixed column obvious */
 const ACTIONS_STICKY_HEADER = 'sticky right-0 z-30 bg-slate-100'
 const ACTIONS_STICKY_BODY = 'sticky right-0 z-[1] bg-slate-50'
+const COMPLETED_TABLE_COLS = [116, 100, 116, 300, 256, 176, 140, 80]
 const COMPLETED_TABLE_MIN_WIDTH = COMPLETED_TABLE_COLS.reduce((s, w) => s + w, 0)
 
 const filterWrapCls = 'min-w-0 w-full [&_.app-select__control]:!min-h-[28px] [&_.app-select__control]:!h-[28px]'
@@ -66,6 +68,7 @@ export default function CompletedTasksPage() {
   const [allTaskNames, setAllTaskNames] = useState([])
 
   const [fCampaign,    setFCampaign]    = useState('')
+  const [fStoreId,     setFStoreId]     = useState('')
   const [fTaskId,      setFTaskId]      = useState('')
   const [fTaskName,    setFTaskName]    = useState('')
   const [fTaskType,    setFTaskType]    = useState('')
@@ -79,11 +82,12 @@ export default function CompletedTasksPage() {
   const [followupTask,     setFollowupTask]      = useState(null)
 
   const dCampaign    = useDebounce(fCampaign)
+  const dStoreId     = useDebounce(fStoreId)
   const dTaskId      = useDebounce(fTaskId)
   const dCompletedBy = useDebounce(fCompletedBy)
 
   useEffect(() => { setPage(0) },
-    [dCampaign, dTaskId, fTaskName, fTaskType, dCompletedBy, fDateFrom, fDateTo]) // eslint-disable-line react-hooks/exhaustive-deps
+    [dCampaign, dStoreId, dTaskId, fTaskName, fTaskType, dCompletedBy, fDateFrom, fDateTo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let alive = true
@@ -91,6 +95,7 @@ export default function CompletedTasksPage() {
     const params = {
       page, size: PAGE_SIZE,
       ...(dCampaign    && { campaignId:   dCampaign    }),
+      ...(dStoreId     && { storeId:      dStoreId     }),
       ...(dTaskId      && { taskId:       dTaskId      }),
       ...(fTaskName    && { taskName:     fTaskName    }),
       ...(fTaskType    && { taskType:     fTaskType    }),
@@ -112,7 +117,7 @@ export default function CompletedTasksPage() {
       .catch(() => { if (alive) showToast('Failed to load completed tasks', 'error') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [dCampaign, dTaskId, fTaskName, fTaskType, dCompletedBy, fDateFrom, fDateTo, page, refreshSeed, location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dCampaign, dStoreId, dTaskId, fTaskName, fTaskType, dCompletedBy, fDateFrom, fDateTo, page, refreshSeed, location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     masterApi.list('task-types', true).then(d => setAllTaskTypes(d.map(t => t.name).sort())).catch(() => {})
@@ -123,10 +128,10 @@ export default function CompletedTasksPage() {
   const handleViewBrief   = useCallback((t) => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }, [])
   const handleFollowup    = useCallback((t) => setFollowupTask(t), [])
 
-  const hasFilters = !!(fCampaign || fTaskId || fTaskName || fTaskType || fCompletedBy || fDateFrom || fDateTo)
+  const hasFilters = !!(fCampaign || fStoreId || fTaskId || fTaskName || fTaskType || fCompletedBy || fDateFrom || fDateTo)
   const clearAll   = () => {
-    setFCampaign(''); setFTaskId(''); setFTaskName(''); setFTaskType('')
-    setFCompletedBy(''); setFDateFrom(null); setFDateTo(null)
+    setFCampaign(''); setFStoreId(''); setFTaskId(''); setFTaskName(''); setFTaskType(''); setFCompletedBy('');
+    setFDateFrom(null); setFDateTo(null)
   }
 
   const filtered = tasks
@@ -170,6 +175,7 @@ export default function CompletedTasksPage() {
             <thead className="sticky top-0 z-20 bg-slate-50">
               <tr className="bg-slate-50">
                 <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign</th>
+                <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Store ID</th>
                 <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task ID</th>
                 <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task Name</th>
                 <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task Type</th>
@@ -180,6 +186,9 @@ export default function CompletedTasksPage() {
               <tr className="border-b border-slate-200">
                 <FilterCell>
                   <input value={fCampaign} onChange={e => setFCampaign(e.target.value)} placeholder="Search…" className={colCls} />
+                </FilterCell>
+                <FilterCell>
+                  <input value={fStoreId} onChange={e => setFStoreId(e.target.value)} placeholder="Search…" className={colCls} />
                 </FilterCell>
                 <FilterCell>
                   <input value={fTaskId} onChange={e => setFTaskId(e.target.value)} placeholder="Search…" className={colCls} />
@@ -203,14 +212,14 @@ export default function CompletedTasksPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
-                <TableStatusRow colSpan={7}>
+                <TableStatusRow colSpan={8}>
                   <span className="inline-flex items-center gap-2 text-sm text-slate-400">
                     <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-brand-500" />
                     Loading…
                   </span>
                 </TableStatusRow>
               ) : filtered.length === 0 ? (
-                <TableStatusRow colSpan={7}>
+                <TableStatusRow colSpan={8}>
                   <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
                   <p className="text-sm text-slate-500">
                     {hasFilters ? 'No tasks match the current filters.' : 'No completed tasks yet.'}
@@ -254,6 +263,7 @@ export default function CompletedTasksPage() {
       {followupTask && (
         <LinkedTaskModal mode="followup"
           task={followupTask}
+          parentTaskId={followupTask.taskId}
           onClose={() => setFollowupTask(null)}
           onSuccess={() => {
             setFollowupTask(null)
@@ -286,6 +296,9 @@ const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, canAddFollowu
         </span>
       </td>
       <td className={completedCellCls}>
+        {t.storeId ? <StoreIdDisplay storeId={t.storeId} /> : <span className="text-slate-300 italic text-xs">None</span>}
+      </td>
+      <td className={completedCellCls}>
         <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">
           {t.taskId}
         </span>
@@ -309,24 +322,14 @@ const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, canAddFollowu
         </span>
       </td>
       <td className={`${completedCellCls} ${ACTIONS_STICKY_BODY}`}>
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <button onClick={() => onViewBrief(t)}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 transition"
-            title="View campaign brief">
-            <Icon name="eye" className="h-3.5 w-3.5" /> Brief
-          </button>
-          <button onClick={() => onViewAssets(t)}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-brand-200 bg-brand-50 px-2 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition"
-            title="View submitted assets">
-            <Icon name="fileText" className="h-3.5 w-3.5" /> Assets
-          </button>
-          {canAddFollowup && (
-            <button onClick={() => onFollowup(t)}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
-              title="Add followup tasks to this campaign">
-              <Icon name="plus" className="h-3.5 w-3.5" /> Followup
-            </button>
-          )}
+        <div className="flex items-center justify-end pr-1">
+          <ActionMenu align="right">
+            <ActionMenuItem icon="eye" label="View Brief" onClick={() => onViewBrief(t)} />
+            <ActionMenuItem icon="fileText" label="View Assets" onClick={() => onViewAssets(t)} />
+            {canAddFollowup && (
+              <ActionMenuItem icon="plus" label="Add Followup" onClick={() => onFollowup(t)} />
+            )}
+          </ActionMenu>
         </div>
       </td>
     </tr>

@@ -5,6 +5,8 @@ import Icon from '../../components/Icon'
 import Modal from '../../components/Modal'
 import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
+import SingleSelectDropdown from '../../components/SingleSelectDropdown'
+import MultiSelectDropdown from '../../components/MultiSelectDropdown'
 import Pagination from '../../components/Pagination'
 import useDebounce from '../../hooks/useDebounce'
 import BackToMaster from '../../components/admin/BackToMaster'
@@ -34,149 +36,17 @@ function StatusBadge({ status }) {
   )
 }
 
-// ─── Role multi-select dropdown ───────────────────────────────────────────────
-function RoleMultiSelect({ roles, selectedIds, onChange }) {
-  const [open, setOpen]       = useState(false)
-  const [search, setSearch]   = useState('')
-  const [dropUp, setDropUp]   = useState(false)
-  const containerRef          = useRef(null)
 
-  // Close on outside click
-  useEffect(() => {
-    function handleClick(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setOpen(false)
-        setSearch('')
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [])
-
-  // Decide whether to open upward based on available space below the trigger
-  useEffect(() => {
-    if (!open || !containerRef.current) return
-    const rect = containerRef.current.getBoundingClientRect()
-    const spaceBelow = window.innerHeight - rect.bottom
-    // dropdown is ~220px tall (48px max-h-48 list + search + padding)
-    setDropUp(spaceBelow < 240)
-  }, [open])
-
-  const toggle = (id) => {
-    onChange(selectedIds.includes(id)
-      ? selectedIds.filter(r => r !== id)
-      : [...selectedIds, id])
-  }
-
-  const removeChip = (id, e) => {
-    e.stopPropagation()
-    onChange(selectedIds.filter(r => r !== id))
-  }
-
-  const filtered = roles.filter(r =>
-    r.name.toLowerCase().includes(search.toLowerCase())
-  )
-  const selectedRoles = roles.filter(r => selectedIds.includes(r.id))
-
-  return (
-    <div ref={containerRef} className="relative">
-      {/* Trigger box */}
-      <div
-        onClick={() => setOpen(o => !o)}
-        className={`flex min-h-[38px] w-full cursor-pointer flex-wrap items-center gap-1.5
-                    rounded-lg border px-2.5 py-1.5 shadow-sm transition
-                    ${open ? 'border-brand-400 ring-2 ring-brand-100' : 'border-slate-200 hover:border-slate-300'}`}
-      >
-        {selectedRoles.length === 0 ? (
-          <span className="text-sm text-slate-400 select-none">Select roles…</span>
-        ) : (
-          selectedRoles.map(r => (
-            <span key={r.id}
-              className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5
-                         text-xs font-medium text-brand-700 ring-1 ring-brand-100">
-              {r.name}
-              <button type="button" onClick={(e) => removeChip(r.id, e)}
-                className="ml-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full
-                           text-brand-500 hover:bg-brand-100 hover:text-brand-800 transition">
-                ×
-              </button>
-            </span>
-          ))
-        )}
-        <span className="ml-auto text-slate-400">
-          <svg className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-            strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
-        </span>
-      </div>
-
-      {/* Dropdown — flips upward when there isn't enough space below */}
-      {open && (
-        <div className={`absolute z-50 w-full rounded-lg border border-slate-200
-                        bg-white shadow-lg shadow-slate-200/60 overflow-hidden
-                        ${dropUp ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
-          {/* Search */}
-          <div className="border-b border-slate-100 px-2.5 py-2">
-            <input
-              autoFocus
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search roles…"
-              className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-xs
-                         text-slate-800 placeholder-slate-400 outline-none
-                         focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition"
-            />
-          </div>
-          {/* Options */}
-          <ul className="max-h-48 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-xs text-slate-400">No roles match</li>
-            ) : filtered.map(r => {
-              const checked = selectedIds.includes(r.id)
-              return (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggle(r.id)}
-                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm transition
-                                hover:bg-slate-50
-                                ${checked ? 'text-brand-700' : 'text-slate-700'}`}
-                  >
-                    <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded
-                                      border transition
-                                      ${checked
-                                        ? 'border-brand-500 bg-brand-500 text-white'
-                                        : 'border-slate-300 bg-white'}`}>
-                      {checked && (
-                        <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none"
-                          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M2 6l3 3 5-5" />
-                        </svg>
-                      )}
-                    </span>
-                    {r.name}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ─── Form modal ───────────────────────────────────────────────────────────────
-function UserFormModal({ open, onClose, initial, roles, departments, designations, onSaved }) {
+function UserFormModal({ open, onClose, initial, roles, capabilities, departments, designations, onSaved }) {
   const toast  = useToast()
   const isEdit = !!initial?.userId
 
   const blank = {
     fullName: '', email: '',
     departmentId: '', designationId: '', roleIds: [],
+    capabilityIds: [],
     teamMemberIds: [],
     skillLevel: 'JUNIOR', status: 'ACTIVE',
   }
@@ -184,6 +54,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
   const [saving, setSaving] = useState(false)
   const [marketingUsers, setMarketingUsers] = useState([])
   const isTeamLeader = form.roleIds.includes('TEAM_LEADER')
+  const hasAssignee = form.roleIds.includes('ASSIGNEE')
 
   // Fetch users for Team Members dropdown
   useEffect(() => {
@@ -194,7 +65,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
       usersApi.list(filter).then(res => {
         const raw = res.data?.content || res.data || []
         setMarketingUsers(raw)
-      }).catch(err => console.error("Failed to fetch team members", err))
+      }).catch(err => toast.error(err?.response?.data?.message || "Failed to fetch team members."))
     }
   }, [isTeamLeader, departments, marketingUsers.length])
 
@@ -206,6 +77,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
         departmentId:  initial.departmentId  || '',
         designationId: initial.designationId || '',
         roleIds:       initial.roleIds       || [],
+        capabilityIds: initial.capabilityIds || [],
         teamMemberIds: initial.teamMemberIds || [],
         skillLevel:    initial.skillLevel    || 'JUNIOR',
         status:        initial.status        || 'ACTIVE',
@@ -222,6 +94,7 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
     departmentId:  form.departmentId || null,
     designationId: form.designationId || null,
     roleIds:       form.roleIds,
+    capabilityIds: hasAssignee ? form.capabilityIds : [],
     teamMemberIds: isTeamLeader ? form.teamMemberIds.filter(id => id !== initial?.userId) : [],
     skillLevel:    form.skillLevel,
     status:        form.status || 'ACTIVE',
@@ -316,13 +189,11 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
           {isEdit && (
             <div>
               <label className={labelCls}>Status</label>
-              <AppSelect
+              <SingleSelectDropdown
                 value={form.status}
                 onChange={v => set('status', v)}
                 options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}
                 placeholder="Select…"
-                isClearable={false}
-                menuPortal
               />
             </div>
           )}
@@ -333,13 +204,33 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
           <label className={labelCls}>
             Roles <span className="text-slate-400 font-normal">(select one or more)</span>
           </label>
-          <RoleMultiSelect
-            roles={roles}
-            selectedIds={form.roleIds}
+          <MultiSelectDropdown
+            options={roles}
+            value={form.roleIds}
             onChange={ids => set('roleIds', ids)}
+            placeholder="Search roles..."
           />
           {form.roleIds.length === 0 && (
             <p className="mt-1 text-xs text-amber-600">At least one role is recommended for proper access.</p>
+          )}
+        </div>
+
+        {/* Capabilities — only for users with ASSIGNEE role */}
+        <div>
+          <label className={labelCls}>
+            Capabilities <span className="text-slate-400 font-normal">(select one or more)</span>
+          </label>
+          {hasAssignee ? (
+            <MultiSelectDropdown
+              options={capabilities.map(c => ({ id: c.id, name: c.name }))}
+              value={form.capabilityIds}
+              onChange={ids => set('capabilityIds', ids)}
+              placeholder="Search capabilities..."
+            />
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-6 text-center text-xs text-slate-400">
+              Assign the <strong className="text-slate-500">ASSIGNEE</strong> role above to unlock capability assignment.
+            </div>
           )}
         </div>
 
@@ -348,21 +239,14 @@ function UserFormModal({ open, onClose, initial, roles, departments, designation
             <label className={labelCls}>
               Team Members <span className="text-slate-400 font-normal">(select direct reports)</span>
             </label>
-            <AppSelect
-              isMulti
-              value={form.teamMemberIds.map(id => {
-                const u = marketingUsers.find(mu => mu.userId === id);
-                return {
-                  value: String(id),
-                  label: u ? `${u.fullName} (${u.designationName || 'No Designation'})` : `Loading #${id}...`
-                };
-              })}
-              onChange={vals => setForm({ ...form, teamMemberIds: vals.map(v => Number(v.value)) })}
+            <MultiSelectDropdown
               options={marketingUsers
                 .filter(u => u.userId !== initial?.userId)
-                .map(u => ({ value: String(u.userId), label: `${u.fullName} (${u.designationName || 'No Designation'})` }))}
-              placeholder="— Select team members —"
-              menuPortal
+                .filter(u => u.roleIds && u.roleIds.some(r => r !== 'MANAGER' && r !== 'TEAM_LEADER'))
+                .map(u => ({ id: u.userId, name: `${u.fullName} (${u.designationName || 'No Designation'})` }))}
+              value={form.teamMemberIds}
+              onChange={ids => set('teamMemberIds', ids)}
+              placeholder="Search team members..."
             />
           </div>
         )}
@@ -421,6 +305,7 @@ export default function UserManagementPage() {
   const [totalPages,    setTotalPages]    = useState(0)
   const [page,          setPage]          = useState(0)
   const [roles,         setRoles]         = useState([])
+  const [capabilities,  setCapabilities]  = useState([])
   const [departments,   setDepartments]   = useState([])
   const [designations,  setDesignations]  = useState([])
   const [loading,       setLoading]       = useState(true)
@@ -440,6 +325,7 @@ export default function UserManagementPage() {
   const [fName,        setFName]        = useState('')
   const [fEmail,       setFEmail]       = useState('')
   const [fRole,        setFRole]        = useState('')
+  const [fCapability,  setFCapability]  = useState('')
   const [fDept,        setFDept]        = useState('')
   const [fDesignation, setFDesignation] = useState('')
   const [fSkill,       setFSkill]       = useState('')
@@ -451,7 +337,7 @@ export default function UserManagementPage() {
 
   // ── Reset page when filters change ────────────────────────────────────────
   useEffect(() => { setPage(0) },
-    [dName, dEmail, fRole, fDept, fDesignation, fSkill, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+    [dName, dEmail, fRole, fCapability, fDept, fDesignation, fSkill, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch data from backend ───────────────────────────────────────────────
   useEffect(() => {
@@ -462,6 +348,7 @@ export default function UserManagementPage() {
       ...(dName        && { name:          dName        }),
       ...(dEmail       && { email:         dEmail       }),
       ...(fRole        && { roleName:      fRole        }),
+      ...(fCapability  && { capabilityName: fCapability  }),
       ...(fDept        && { departmentId:  fDept        }),
       ...(fDesignation && { designationId: fDesignation }),
       ...(fSkill       && { skillLevel:    fSkill       }),
@@ -485,20 +372,26 @@ export default function UserManagementPage() {
       .catch(() => { if (alive) toast.error('Failed to load users.') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [dName, dEmail, fRole, fDept, fDesignation, fSkill, fStatus, page, refreshSeed]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dName, dEmail, fRole, fCapability, fDept, fDesignation, fSkill, fStatus, page, refreshSeed]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load master data for dropdowns once ──────────────────────────────────
   // Uses allSettled so a failure in one endpoint doesn't wipe the other two.
   useEffect(() => {
     Promise.allSettled([
       masterApi.list('roles', false),
+      masterApi.list('capabilities', false),
       masterApi.list('departments', false),
       masterApi.list('designations', false),
-    ]).then(([rRes, dRes, dsgRes]) => {
+    ]).then(([rRes, capRes, dRes, dsgRes]) => {
       if (rRes.status === 'fulfilled')
         setRoles(rRes.value.map(x => ({ id: x.id, name: x.name })))
       else
         toast.error('Failed to load roles.')
+
+      if (capRes.status === 'fulfilled')
+        setCapabilities(capRes.value.map(x => ({ id: x.id, name: x.name })))
+      else
+        toast.error('Failed to load capabilities.')
 
       if (dRes.status === 'fulfilled')
         setDepartments(dRes.value.map(x => ({ id: x.id, name: x.name })))
@@ -541,6 +434,7 @@ export default function UserManagementPage() {
   }
 
   const roleOptions        = roles.map(r => ({ value: r.name, label: r.name }))
+  const capabilityOptions  = capabilities.map(c => ({ value: c.name, label: c.name }))
   const deptOptions        = departments.map(x => ({ value: x.id, label: x.name }))
   const designationOptions = designations.map(x => ({ value: x.id, label: x.name }))
   const skillOptions       = SKILL_LEVELS.map(s => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase() }))
@@ -548,10 +442,10 @@ export default function UserManagementPage() {
 
   const filtered = users  // server already filtered
 
-  const hasFilter = !!(fName || fEmail || fRole || fDept || fDesignation || fSkill || fStatus)
+  const hasFilter = !!(fName || fEmail || fRole || fCapability || fDept || fDesignation || fSkill || fStatus)
   const clearFilters = () => {
     setFName(''); setFEmail('')
-    setFRole(''); setFDept(''); setFDesignation(''); setFSkill(''); setFStatus('')
+    setFRole(''); setFCapability(''); setFDept(''); setFDesignation(''); setFSkill(''); setFStatus('')
   }
 
   const th = 'px-3 pt-3 pb-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 align-top'
@@ -590,6 +484,8 @@ export default function UserManagementPage() {
                   <th className={th}>Name</th>
                   <th className={th}>Email</th>
                   <th className={th}>Roles</th>
+                  <th className={th}>Capabilities</th>
+                  <th className={th}>Team Members</th>
                   <th className={th}>Designation</th>
                   <th className={th}>Department</th>
                   <th className={th}>Skill</th>
@@ -602,6 +498,8 @@ export default function UserManagementPage() {
                   <td className="px-3 pb-2"><ColInput value={fName}  onChange={setFName}  placeholder="Filter name…" /></td>
                   <td className="px-3 pb-2"><ColInput value={fEmail} onChange={setFEmail} placeholder="Filter email…" /></td>
                   <td className="px-3 pb-2"><ColSelect value={fRole}        onChange={setFRole}        options={roleOptions}        placeholder="All roles" /></td>
+                  <td className="px-3 pb-2"><ColSelect value={fCapability}    onChange={setFCapability}    options={capabilityOptions}    placeholder="All capabilities" /></td>
+                  <td className="px-3 pb-2" />
                   <td className="px-3 pb-2"><ColSelect value={fDesignation} onChange={setFDesignation} options={designationOptions} placeholder="All designations" /></td>
                   <td className="px-3 pb-2"><ColSelect value={fDept}        onChange={setFDept}        options={deptOptions}        placeholder="All depts" /></td>
                   <td className="px-3 pb-2"><ColSelect value={fSkill}       onChange={setFSkill}       options={skillOptions}       placeholder="All skills" /></td>
@@ -613,7 +511,7 @@ export default function UserManagementPage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center">
+                    <td colSpan={12} className="py-12 text-center">
                       <span className="inline-flex items-center gap-2 text-sm text-slate-400">
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-brand-500" />
                         Loading users…
@@ -622,7 +520,7 @@ export default function UserManagementPage() {
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-slate-400">No users match the current filters.</td>
+                    <td colSpan={12} className="py-12 text-center text-slate-400">No users match the current filters.</td>
                   </tr>
                 ) : filtered.map((u) => (
                   <UserRow
@@ -654,6 +552,7 @@ export default function UserManagementPage() {
         onClose={() => setEditing(null)}
         initial={editing || null}
         roles={roles}
+        capabilities={capabilities}
         departments={departments}
         designations={designations}
         onSaved={handleSaved}
@@ -755,6 +654,50 @@ function RolePillList({ roleNames }) {
   )
 }
 
+// ─── Capability pills with overflow cap ──────────────────────────────────────
+function CapabilityPillList({ capabilityNames }) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (!capabilityNames.length) return <span className="text-slate-400 text-xs">—</span>
+
+  const visible  = expanded ? capabilityNames : capabilityNames.slice(0, MAX_VISIBLE_ROLES)
+  const overflow = capabilityNames.length - MAX_VISIBLE_ROLES
+
+  return (
+    <div className="flex flex-nowrap items-center gap-1">
+      {visible.map(c => (
+        <span key={c} className="whitespace-nowrap rounded-full bg-violet-50 px-2 py-0.5
+                                  text-xs font-medium text-violet-700 ring-1 ring-violet-200">
+          {c}
+        </span>
+      ))}
+      {!expanded && overflow > 0 && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); setExpanded(true) }}
+          title={capabilityNames.slice(MAX_VISIBLE_ROLES).join(', ')}
+          className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs
+                     font-semibold text-slate-500 ring-1 ring-slate-200
+                     hover:bg-slate-200 transition"
+        >
+          +{overflow}
+        </button>
+      )}
+      {expanded && overflow > 0 && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); setExpanded(false) }}
+          className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs
+                     font-semibold text-slate-500 ring-1 ring-slate-200
+                     hover:bg-slate-200 transition"
+        >
+          less
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Memoized table row ───────────────────────────────────────────────────────
 const UserRow = memo(function UserRow({ user: u, onEdit, onDelete, onReset }) {
   return (
@@ -764,6 +707,12 @@ const UserRow = memo(function UserRow({ user: u, onEdit, onDelete, onReset }) {
       <td className="px-3 py-2.5 text-slate-500 text-xs">{u.email}</td>
       <td className="px-3 py-2.5">
         <RolePillList roleNames={u.roleNames ?? []} />
+      </td>
+      <td className="px-3 py-2.5">
+        <CapabilityPillList capabilityNames={u.capabilityNames ?? []} />
+      </td>
+      <td className="px-3 py-2.5 text-slate-600 text-xs max-w-xs truncate" title={(u.teamMemberNames || []).join(', ')}>
+        {u.teamMemberNames && u.teamMemberNames.length > 0 ? u.teamMemberNames.join(', ') : '—'}
       </td>
       <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{u.designationName || '—'}</td>
       <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{u.departmentName || '—'}</td>

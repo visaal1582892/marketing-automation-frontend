@@ -41,8 +41,7 @@ export default function ApprovalFlowMasterPage() {
       const rs = await flowApi.supportedRoles()
       setRoles(rs)
     } catch (err) {
-      toast.error('Failed to load approval flows')
-      console.error(err)
+      toast.error(err?.response?.data?.message || 'Failed to load approval flows')
     } finally {
       setLoading(false)
     }

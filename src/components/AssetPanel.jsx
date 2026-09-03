@@ -49,7 +49,7 @@ export const openUrl = (assetUrl, filename) => {
   return assetUrl
 }
 
-export const triggerDownload = async (taskId, assetId, filename) => {
+export const triggerDownload = async (taskId, assetId, filename, onError) => {
   try {
     const resp = await api.get(
       `/collaborations/${taskId}/assets/${assetId}/download`,
@@ -64,7 +64,7 @@ export const triggerDownload = async (taskId, assetId, filename) => {
     document.body.removeChild(a)
     setTimeout(() => URL.revokeObjectURL(url), 10_000)
   } catch (e) {
-    console.error('Download failed', e)
+    if (onError) onError(e)
   }
 }
 
@@ -204,10 +204,8 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
           next[idx] = { ...next[idx], status: 'done' }
         } else {
           const raw = result.reason?.response?.data?.message || result.reason?.message || 'Upload failed'
-          const msg = raw.toLowerCase().includes('unsupported') || raw.toLowerCase().includes('format')
-            ? 'Format not supported'
-            : raw.length > 50 ? 'Upload failed' : raw
-          next[idx] = { ...next[idx], status: 'error', error: msg }
+          next[idx] = { ...next[idx], status: 'error', error: raw }
+          toast.error(raw)
         }
       })
       return next
@@ -253,10 +251,8 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
       await refreshAssets()
       toast.success?.('File uploaded.')
     } catch (e) {
-      const raw = e?.response?.data?.message || e?.message || 'Upload failed'
-      const msg = raw.toLowerCase().includes('unsupported') || raw.toLowerCase().includes('format')
-        ? 'Format not supported'
-        : raw.length > 50 ? 'Upload failed' : raw
+      const msg = e?.response?.data?.message || e?.message || 'Upload failed'
+      toast.error(msg)
       setPendingFiles(prev => {
         const next = [...prev]
         next[idx] = { ...next[idx], status: 'error', error: msg }
@@ -275,8 +271,29 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
     }
   }
 
-  const downloadAll = () => {
-    assets.forEach(a => triggerDownload(a.taskId || task.taskId, a.assetId, displayName(a)))
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false)
+
+  const downloadAll = async () => {
+    if (assets.length === 0) return
+    setIsDownloadingAll(true)
+    try {
+      const resp = await api.get(
+        `/collaborations/${task.taskId}/assets/download-all`,
+        { responseType: 'blob', timeout: 300_000 },
+      )
+      const url = URL.createObjectURL(resp.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `assets-${task.taskId}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    } catch (e) {
+      toast.error?.('Failed to download assets. Please try again.')
+    } finally {
+      setIsDownloadingAll(false)
+    }
   }
 
   const linkedTaskId = task.linkedContentTaskId
@@ -305,7 +322,9 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
         <p className="text-[10px] text-slate-400 mt-0.5">by {a.userName} · {fmtDate(a.createdAt)}</p>
         <div className="flex items-center gap-2 mt-1.5">
           <button
-            onClick={() => triggerDownload(a.taskId || task.taskId, a.assetId, displayName(a))}
+            onClick={() => triggerDownload(a.taskId || task.taskId, a.assetId, displayName(a), (e) => {
+              toast.error(`Failed to download "${displayName(a)}". Please try again.`)
+            })}
             className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-600 hover:text-brand-800 transition"
           >
             <Icon name="download" className="h-3 w-3" />
@@ -364,12 +383,12 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
         <div className={`flex items-center gap-2 ${inline ? 'ml-auto' : ''}`}>
           <button
             onClick={downloadAll}
-            disabled={assets.length === 0}
-            title={assets.length === 0 ? 'No assets to download' : `Download all ${assets.length} asset${assets.length !== 1 ? 's' : ''}`}
+            disabled={assets.length === 0 || isDownloadingAll}
+            title={assets.length === 0 ? 'No assets to download' : `Download all ${assets.length} asset${assets.length !== 1 ? 's' : ''} as ZIP`}
             className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Icon name="download" className="h-3.5 w-3.5" />
-            Download All
+            {isDownloadingAll ? 'Zipping…' : 'Download All'}
           </button>
           {canUpload && !inline && (
             <button

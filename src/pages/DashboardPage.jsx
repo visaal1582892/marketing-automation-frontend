@@ -15,7 +15,7 @@ import TeamTaskTracker from '../components/dashboard/TeamTaskTracker'
  *
  * Each role sees the KPIs and quick links that matter to it:
  *   - Requestor:              my requests by status
- *   - Head / Regional:        pending dept queue + my decisions history
+ *   - Department Head:        pending dept queue + my decisions history
  *   - Marketing Manager:      live operations overview (QC, rework, progress, completed)
  *   - Marketing Creator:      my task queue (open / QC / completed)
  *   - Admin:                  same ops overview as Marketing Manager + admin quick-access links
@@ -184,7 +184,7 @@ export default function DashboardPage() {
             </Link>
           )}
           
-          {/* New Request CTA — Requestor, Head, Regional Manager */}
+          {/* New Request CTA — Requestor, Head */}
           {canSubmitRequest && (
             <Link
               to="/campaigns/new"
@@ -216,10 +216,10 @@ export default function DashboardPage() {
               to="/tasks/approvals"
               tone="violet"
               icon="send"
-              label="Pending QC Review"
-              value={opsCounts.qcReview}
-              detail={opsCounts.qcReview > 0 ? `${mgrQcCount} mgr · ${reqQcCount} requestor` : 'All clear — nothing pending'}
-              progress={opsPct(opsCounts.qcReview)}
+              label="Pending Task Approvals"
+              value={mgrQcCount}
+              detail={mgrQcCount > 0 ? `${mgrQcCount} approval${mgrQcCount !== 1 ? 's' : ''} pending your sign-off` : 'All clear — nothing pending'}
+              progress={opsActiveTotal > 0 ? Math.min(100, Math.round(mgrQcCount / opsActiveTotal * 100)) : 0}
               sparkline={trend?.qcReview}
               trendPct={trend?.qcReviewTrend}
             />
@@ -325,7 +325,7 @@ export default function DashboardPage() {
               { to: '/admin/users',               icon: 'users',      label: 'User Management',   desc: 'Add or edit user accounts'      },
               { to: '/admin/master',               icon: 'cog',        label: 'Master',            desc: 'Config, mappings, master data…' },
               { to: '/admin/granular-tasks',       icon: 'list',       label: 'Granular Tasks',    desc: 'Configure task definitions'     },
-              { to: '/admin/role-task-mappings',   icon: 'shield',     label: 'Role → Task Map',   desc: 'Routing rules per role'         },
+              { to: '/admin/task-mappings',        icon: 'zap',        label: 'Capability → Task', desc: 'Routing rules per capability'   },
             ].map(({ to, icon, label, desc }) => (
               <Link
                 key={to}
@@ -384,7 +384,7 @@ export default function DashboardPage() {
         </Section>
       )}
 
-      {/* Request submitters — Requestor, Head, Regional Manager */}
+      {/* Request submitters — Requestor, Head */}
       {showRequestWidgets && (
         <Section title="My Requests" subtitle="The briefs you've submitted and where they stand.">
           <KpiCard
@@ -406,13 +406,13 @@ export default function DashboardPage() {
             progress={reqPct(myRequestCounts.completed)}
           />
           <KpiCard
-            to="/campaigns?status=REJECTED"
-            tone="orange"
-            icon="alertCircle"
-            label="Rejected"
-            value={myRequestCounts.rejected}
-            detail={myRequestCounts.total > 0 ? `${reqPct(myRequestCounts.rejected)}% rejection rate` : '—'}
-            progress={reqPct(myRequestCounts.rejected)}
+            to="/campaigns?status=REQUESTOR_REVIEW"
+            tone="violet"
+            icon="send"
+            label="Pending Task Reviews"
+            value={reqQcCount}
+            detail={reqQcCount > 0 ? `${reqQcCount} task${reqQcCount !== 1 ? 's' : ''} awaiting your review` : 'All clear — nothing pending'}
+            progress={myRequestCounts.total > 0 ? Math.min(100, Math.round(reqQcCount / myRequestCounts.total * 100)) : 0}
           />
           <KpiCard
             to="/campaigns?status=CANCELLED"

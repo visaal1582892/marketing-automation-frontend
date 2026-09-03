@@ -44,7 +44,7 @@ export default function BudgetProposalListPage() {
       if (active) setActiveProposalId(active.id);
       else setActiveProposalId(null);
     } catch (err) {
-      console.error("Failed to load proposals", err);
+      toast.error("Failed to load budget proposals. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,6 @@ export default function BudgetProposalListPage() {
         setProposalToApprove(id);
         setShowApprovalDialog(true);
       } else {
-        console.error(err);
         const errMsg = err.response?.data?.message || err.message || "An error occurred while processing the request.";
         toast.error(`Error: ${errMsg}`);
       }
@@ -108,9 +107,8 @@ export default function BudgetProposalListPage() {
         await loadProposals();
       }
     } catch (err) {
-      console.error(err);
       const errMsg = err.response?.data?.message || err.message || "An error occurred while processing the request.";
-      toast.error(`Error: ${errMsg}`);
+      toast.error(errMsg);
     } finally {
       setProcessing(false);
     }

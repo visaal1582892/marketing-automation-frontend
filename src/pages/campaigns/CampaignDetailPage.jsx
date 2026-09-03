@@ -58,7 +58,7 @@ export default function CampaignDetailPage() {
     if (!c) return
     setPrinting(true)
     try   { printBrief(c) }
-    catch (e) { console.error('Print failed:', e) }
+    catch (e) { showToast('Failed to print request brief. Please try again.', 'error') }
     finally   { setPrinting(false) }
   }, [c])
 

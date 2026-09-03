@@ -52,7 +52,7 @@ export default function EventCampaignTaskMaster() {
       setCampaignTypes(Array.isArray(campaigns) && campaigns.length > 0 ? campaigns : []);
       setTaskTypes(Array.isArray(tasks) && tasks.length > 0 ? tasks : []);
     } catch (err) {
-      console.error("Failed to load master data for dropdowns", err);
+      toast.error("Failed to load master data for dropdowns");
     }
   };
 
@@ -63,7 +63,6 @@ export default function EventCampaignTaskMaster() {
       setMappings(data || []);
     } catch (err) {
       toast.error('Failed to load mappings');
-      console.error(err);
     } finally {
       setIsLoading(false);
     }
@@ -123,8 +122,7 @@ export default function EventCampaignTaskMaster() {
       toast.success('Mapping deleted successfully');
       fetchMappings();
     } catch (err) {
-      toast.error('Failed to delete mapping');
-      console.error(err);
+      toast.error(err?.response?.data?.message || 'Failed to delete mapping');
     }
   };
 
@@ -156,7 +154,6 @@ export default function EventCampaignTaskMaster() {
       setIsModalOpen(false);
       fetchMappings();
     } catch (err) {
-      console.error(err);
       toast.error(err.response?.data?.message || err.message || 'Failed to save mappings');
     } finally {
       setIsSaving(false);

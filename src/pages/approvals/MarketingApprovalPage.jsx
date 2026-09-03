@@ -5,6 +5,7 @@ import campaignsApi from '../../api/campaigns'
 import managerApi from '../../api/manager'
 import Icon from '../../components/Icon'
 import { EmptyState, ActionModal, HistoryTable } from './DeptApprovalPage'
+import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import PriorityEditor from '../../components/PriorityEditor'
 
@@ -598,30 +599,25 @@ function CampaignCard({ campaign: c, onApprove, onReject, onViewBrief, checkingC
           </div>
         </div>
 
-        <div className="flex items-center gap-2 ml-3 shrink-0">
-          <button
-            onClick={onViewBrief}
-            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1"
-            title="View full request brief"
-          >
-            <Icon name="eye" className="h-3.5 w-3.5" />
-            Brief
-          </button>
+        <div className="flex items-center gap-2 ml-3 shrink-0 flex-wrap justify-end">
           <button
             onClick={onReject}
-            className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 transition flex items-center gap-1"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 transition"
           >
             <Icon name="x" className="h-3.5 w-3.5" /> Reject
           </button>
           <button
             onClick={onApprove}
             disabled={checkingCapacity}
-            className="rounded-md border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100 transition disabled:opacity-60 flex items-center gap-1"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-100 transition disabled:opacity-60"
           >
             {checkingCapacity
-              ? <><Icon name="refresh" className="h-3.5 w-3.5 animate-spin" /> Checking…</>
+              ? <><Icon name="refresh" className="h-3.5 w-3.5 animate-spin" /> Checking...</>
               : <><Icon name="check" className="h-3.5 w-3.5" /> Approve &amp; Route</>}
           </button>
+          <ActionMenu align="right">
+            <ActionMenuItem icon="eye" label="View Brief" onClick={onViewBrief} />
+          </ActionMenu>
         </div>
       </div>
 

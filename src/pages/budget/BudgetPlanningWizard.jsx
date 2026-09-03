@@ -129,7 +129,7 @@ export default function BudgetPlanningWizard() {
           await fetchProposalData(urlProposalId);
         }
       } catch (err) {
-        console.error("Failed to load master data", err);
+        toast.error(err?.response?.data?.message || "Failed to load required data. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -238,7 +238,7 @@ export default function BudgetPlanningWizard() {
         }
       }
     } catch (err) {
-      console.error("Failed to fetch proposal", err);
+      toast.error(err?.response?.data?.message || "Failed to load proposal. Please try again.");
     }
   };
 
@@ -293,9 +293,6 @@ export default function BudgetPlanningWizard() {
         Math.round(totalAllocatedStep2) !== Math.round(totalAllocatedCaps) ||
         totalAllocatedCaps === 0
       ) {
-        toast.error(
-          "Please complete the Target Matrix before proceeding to Task Distribution.",
-        );
         navigate(`/budget-planning/wizard/${proposalId || ""}/step2`, {
           replace: true,
         });
@@ -358,8 +355,7 @@ export default function BudgetPlanningWizard() {
         replace: true,
       });
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to freeze annual budget.");
+      toast.error(err?.response?.data?.message || "Failed to freeze annual budget. Please try again.");
     } finally {
       setFreezing(false);
     }
@@ -440,8 +436,7 @@ export default function BudgetPlanningWizard() {
 
       navigate("/budget-planning");
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to submit budget. Check console for details.");
+      toast.error(err?.response?.data?.message || "Failed to submit budget. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -518,13 +513,11 @@ export default function BudgetPlanningWizard() {
         toast.success("Budget Submitted for Approval!");
         navigate("/budget-planning");
       } catch (err) {
-        console.error("Save caps error:", err);
         const errMsg =
           err.response?.data?.message ||
-          err.response?.data ||
           err.message ||
-          "Failed to save vertical caps";
-        toast.error(`Error saving vertical caps: ${errMsg}`);
+          "Failed to save vertical caps. Please try again.";
+        toast.error(errMsg);
       }
     } else if (currentStep === 2) {
       if (isReadOnly) {
@@ -613,13 +606,11 @@ export default function BudgetPlanningWizard() {
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
           navigate(`/budget-planning/wizard/${proposalId}/step3`);
         } catch (err) {
-          console.error("Save targets error:", err);
           const errMsg =
             err.response?.data?.message ||
-            err.response?.data ||
             err.message ||
-            "Failed to save target caps";
-          toast.error(`Error saving targets: ${errMsg}`);
+            "Failed to save target caps. Please try again.";
+          toast.error(errMsg);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         }
       };
@@ -757,10 +748,10 @@ export default function BudgetPlanningWizard() {
         <div className="border-b border-slate-200 bg-slate-50/50">
           <nav aria-label="Progress" className="flex">
             {[1, 2, 3].map((step, idx) => {
-              const isTabDisabled = (step > 1) && (
+              const isTabDisabled = (step > 1 && (
                 (!canPropose && proposalStatus !== "ACTIVE") ||
                 (canPropose && proposalStatus !== "APPROVED" && proposalStatus !== "ACTIVE")
-              );
+              )) || (step === 3 && (Math.round(totalAllocatedStep2) !== Math.round(totalAllocatedCaps) || totalAllocatedCaps === 0));
               return (
               <button
                 key={step}

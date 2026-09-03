@@ -52,13 +52,14 @@ export const MASTER_HUB_SECTIONS = [
   {
     id: 'organization',
     title: 'Organization',
-    description: 'Departments, designations, roles, and regions for users and routing.',
+    description: 'Departments, designations, roles, capabilities, and regions for users and routing.',
     icon: 'building',
     accent: 'slate',
     items: [
       { label: 'Departments',      to: '/admin/master/departments',  icon: 'building' },
       { label: 'Designations',     to: '/admin/master/designations', icon: 'tag'      },
-      { label: 'Roles',            to: '/admin/master/roles',        icon: 'shield'   },
+      { label: 'Roles',            to: '/admin/roles',               icon: 'shield'   },
+      { label: 'Capabilities',     to: '/admin/master/capabilities', icon: 'zap'      },
       { label: 'Regions',          to: '/admin/master/regions',      icon: 'globe'    },
     ],
   },
@@ -75,14 +76,12 @@ export const MASTER_HUB_SECTIONS = [
   {
     id: 'mappings',
     title: 'Mappings',
-    description: 'Connect users, tasks, questions, QC routing, and assignment rules.',
+    description: 'Connect users, tasks, questions, and assignment rules.',
     icon: 'shield',
     accent: 'amber',
     items: [
-      { label: 'Task Mappings',    to: '/admin/task-mappings', icon: 'shield'    },
+      { label: 'Capability → Task', to: '/admin/task-mappings', icon: 'zap'     },
       { label: 'Question Library', to: '/admin/questions',     icon: 'clipboard' },
-      { label: 'QC Routing',       to: '/admin/qc-routing',    icon: 'shield', adminOnly: true },
-      { label: 'Role Rights',      to: '/admin/role-rights',   icon: 'shield', adminOnly: true },
       { label: 'Users',            to: '/admin/users',         icon: 'users'     },
     ],
   },

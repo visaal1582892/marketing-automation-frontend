@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Rights } from '../constants/rights'
@@ -170,6 +170,18 @@ export default function AppLayout() {
   const [managerOpen, setManagerOpen]   = useState(true)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
 
+  const profileMenuRef = useRef(null)
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const visibleManagerLinks = useMemo(
     () => MANAGER_NAV_LINKS.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)),
     [hasRight, hasAnyRight],
@@ -207,7 +219,7 @@ export default function AppLayout() {
     if (location.pathname === '/admin/master')                     return 'Master'
     if (location.pathname.startsWith('/admin/master/'))            return 'Master Data'
     if (location.pathname.startsWith('/admin/granular-tasks'))     return 'Granular Tasks'
-    if (location.pathname.startsWith('/admin/task-mappings')) return 'Task Mappings'
+    if (location.pathname.startsWith('/admin/task-mappings')) return 'Capability → Task'
     if (location.pathname.startsWith('/admin/questions'))           return 'Question Library'
     if (location.pathname.startsWith('/admin/qc-routing'))                  return 'QC Routing'
     if (location.pathname.startsWith('/admin/working-hours'))           return 'Working Hours'
@@ -236,7 +248,7 @@ export default function AppLayout() {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         className={`fixed inset-y-0 left-0 ${sidebarZ} ${sidebarWidth} flex flex-col
-                    border-r border-slate-100 bg-white
+                    overflow-hidden border-r border-slate-100 bg-white
                     transition-all duration-200
                     ${hovered ? 'shadow-xl shadow-slate-200/60' : ''}
                     ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
@@ -260,7 +272,7 @@ export default function AppLayout() {
         </div>
 
         {/* Nav */}
-        <nav className={`flex-1 overflow-y-auto py-3 ${collapsed ? 'px-1.5 space-y-0.5' : 'px-2 space-y-0.5'}`}>
+        <nav className={`flex-1 overflow-hidden overflow-y-auto py-3 ${collapsed ? 'px-1.5 space-y-0.5' : 'px-2 space-y-0.5'}`}>
           {TOP_NAV.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)).map((item) => (
             <SidebarLink
               key={item.to}
@@ -401,7 +413,7 @@ export default function AppLayout() {
 
           <div className="flex items-center gap-2">
             <NotificationBell />
-          <div className="relative shrink-0">
+          <div className="relative shrink-0" ref={profileMenuRef}>
             <button
               onClick={() => setMenuOpen((m) => !m)}
               className="flex items-center gap-2 rounded-lg px-2.5 py-1.5
@@ -424,7 +436,6 @@ export default function AppLayout() {
 
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-dropdown" onClick={() => setMenuOpen(false)} />
                 <div className="absolute right-0 z-dropdown mt-2 w-60 overflow-hidden rounded-xl
                                 border border-slate-100 bg-white shadow-xl shadow-slate-200/50">
                   <div className="flex items-center gap-2.5 border-b border-slate-100 px-3 py-3">

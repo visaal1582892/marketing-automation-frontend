@@ -14,51 +14,53 @@ import AssetPreviewModal from '../../components/AssetPreviewModal'
 import { useAuth } from '../../auth/AuthContext'
 import AppSelect from '../../components/AppSelect'
 import DateRangePicker from '../../components/DateRangePicker'
+import StoreIdDisplay from '../../components/StoreIdDisplay'
+import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
 import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_STYLES = {
-  ASSIGNED:             'bg-blue-50 text-blue-700 ring-blue-200',
-  IN_PROGRESS:          'bg-indigo-50 text-indigo-700 ring-indigo-200',
-  REWORK:               'bg-orange-50 text-orange-700 ring-orange-200',
-  MARKETING_REVIEW:    'bg-purple-50 text-purple-700 ring-purple-200',
-  REQUESTOR_REVIEW:  'bg-violet-50 text-violet-700 ring-violet-200',
-  COMPLETED:            'bg-green-50 text-green-700 ring-green-200',
-  CANCELLED:            'bg-slate-100 text-slate-500 ring-slate-200',
-  HELD:                 'bg-amber-50 text-amber-700 ring-amber-200',
+  ASSIGNED: 'bg-blue-50 text-blue-700 ring-blue-200',
+  IN_PROGRESS: 'bg-indigo-50 text-indigo-700 ring-indigo-200',
+  REWORK: 'bg-orange-50 text-orange-700 ring-orange-200',
+  MARKETING_REVIEW: 'bg-purple-50 text-purple-700 ring-purple-200',
+  REQUESTOR_REVIEW: 'bg-violet-50 text-violet-700 ring-violet-200',
+  COMPLETED: 'bg-green-50 text-green-700 ring-green-200',
+  CANCELLED: 'bg-slate-100 text-slate-500 ring-slate-200',
+  HELD: 'bg-amber-50 text-amber-700 ring-amber-200',
 }
 const STATUS_LABELS = {
-  ASSIGNED:             'Assigned',
-  IN_PROGRESS:          'In Progress',
-  REWORK:               'Rework',
-  MARKETING_REVIEW:    'Marketing Review',
-  REQUESTOR_REVIEW:  'Requestor Review',
-  COMPLETED:            'Completed',
-  CANCELLED:            'Cancelled',
-  REJECTED:             'Rejected',
-  HELD:                 'Held',
-  REQUESTED:            'Requested'
+  ASSIGNED: 'Assigned',
+  IN_PROGRESS: 'In Progress',
+  REWORK: 'Rework',
+  MARKETING_REVIEW: 'Marketing Review',
+  REQUESTOR_REVIEW: 'Requestor Review',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled',
+  REJECTED: 'Rejected',
+  HELD: 'Held',
+  REQUESTED: 'Requested'
 }
 const PRIORITY_STYLES = {
-  HIGH:   'bg-rose-50 text-rose-700 ring-rose-200',
+  HIGH: 'bg-rose-50 text-rose-700 ring-rose-200',
   MEDIUM: 'bg-yellow-50 text-yellow-700 ring-yellow-200',
-  LOW:    'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  LOW: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
 }
 
 const PRIORITY_OPTIONS = ['HIGH', 'MEDIUM', 'LOW']
 const BUDGET_OPTIONS = [
   { value: 'NO_BUDGET_ORGANIC', label: 'No Budget (Organic)' },
-  { value: 'UNDER_50K',         label: '< ₹50K' },
-  { value: 'FIFTY_K_TO_2L',     label: '₹50K – ₹2L' },
-  { value: 'TWO_L_TO_10L',      label: '₹2L – ₹10L' },
-  { value: 'ABOVE_10L',         label: '₹10L+' },
+  { value: 'UNDER_50K', label: '< ₹50K' },
+  { value: 'FIFTY_K_TO_2L', label: '₹50K – ₹2L' },
+  { value: 'TWO_L_TO_10L', label: '₹2L – ₹10L' },
+  { value: 'ABOVE_10L', label: '₹10L+' },
 ]
 
 // ─── Table column layout (fixed widths — keeps header / filter / body aligned) ─
 
 /** Min px per column — table scrolls horizontally when viewport narrower than sum */
-const TASK_COLS_GENERAL = [88, 116, 124, 144, 144, 164, 196, 108, 160, 112, 124, 136, 136, 172, 240]
+const TASK_COLS_GENERAL = [88, 116, 124, 144, 144, 164, 196, 108, 160, 112, 124, 136, 136, 172, 80]
 
 const cellCls = 'min-w-0 overflow-hidden px-4 py-2.5'
 
@@ -126,8 +128,8 @@ function TextFilter({ value, onChange, placeholder }) {
         className={`w-full rounded border py-1 pl-5 pr-1.5 text-xs leading-tight
                     focus:outline-none focus:ring-1 focus:ring-brand-300
                     ${value
-                      ? 'border-brand-400 bg-brand-50 text-brand-700'
-                      : 'border-slate-200 bg-white text-slate-500'}`}
+            ? 'border-brand-400 bg-brand-50 text-brand-700'
+            : 'border-slate-200 bg-white text-slate-500'}`}
       />
     </div>
   )
@@ -149,15 +151,16 @@ function FilterTd({ children, sticky = false }) {
 // For TASK-OTHER tasks, auto-route is not shown — manual assignment only.
 
 function UnholdModal({ task: t, isOther, mode, onSelectAuto, onSelectManual,
-                       eligibleUsers, loadingUsers, selectedUserId, onSelectUser,
-                       onConfirm, onClose, acting }) {
+  eligibleUsers, loadingUsers, selectedUserId, onSelectUser,
+  onConfirm, onClose, acting }) {
   const canConfirm = mode === 'auto' || (mode === 'manual' && selectedUserId)
   const [userSearch, setUserSearch] = useState('')
-  const filteredUsers = eligibleUsers.filter(u =>
-    !userSearch.trim() ||
-    u.fullName?.toLowerCase().includes(userSearch.toLowerCase()) ||
-    u.roleName?.toLowerCase().includes(userSearch.toLowerCase())
-  )
+  const filteredUsers = eligibleUsers.filter(u => {
+    const caps = Array.isArray(u.capabilityNames) ? u.capabilityNames.join(' ').toLowerCase() : ''
+    return !userSearch.trim() ||
+      u.fullName?.toLowerCase().includes(userSearch.toLowerCase()) ||
+      caps.includes(userSearch.toLowerCase())
+  })
 
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/40">
@@ -247,7 +250,7 @@ function UnholdModal({ task: t, isOther, mode, onSelectAuto, onSelectManual,
             {!loadingUsers && eligibleUsers.length > 0 && (
               <input
                 type="text"
-                placeholder="Search by name or role…"
+                placeholder="Search by name or capability…"
                 value={userSearch}
                 onChange={e => setUserSearch(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm
@@ -256,32 +259,32 @@ function UnholdModal({ task: t, isOther, mode, onSelectAuto, onSelectManual,
               />
             )}
             <div className="max-h-48 overflow-y-auto space-y-1.5">
-            {loadingUsers ? (
-              <div className="flex items-center justify-center gap-2 py-6 text-slate-400">
-                <Icon name="refresh" className="h-4 w-4 animate-spin" />
-                <span className="text-sm">Loading eligible users…</span>
-              </div>
-            ) : eligibleUsers.length === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-500">No eligible users found.</p>
-            ) : filteredUsers.length === 0 ? (
-              <p className="py-4 text-center text-sm text-slate-500">No users match your search.</p>
-            ) : filteredUsers.map(u => (
-              <label key={u.userId}
-                className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition
-                  ${selectedUserId === u.userId
-                    ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-300'
-                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
-                <input type="radio" name="assignee" checked={selectedUserId === u.userId}
-                  onChange={() => onSelectUser(u.userId)} className="accent-emerald-600" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-800 truncate">{u.fullName}</p>
-                  <p className="text-xs text-slate-500">{u.roleName}</p>
+              {loadingUsers ? (
+                <div className="flex items-center justify-center gap-2 py-6 text-slate-400">
+                  <Icon name="refresh" className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Loading eligible users…</span>
                 </div>
-                <span className="shrink-0 text-xs font-semibold text-slate-600">
-                  {u.currentActiveTasks ?? 0} active
-                </span>
-              </label>
-            ))}
+              ) : eligibleUsers.length === 0 ? (
+                <p className="py-6 text-center text-sm text-slate-500">No eligible users found.</p>
+              ) : filteredUsers.length === 0 ? (
+                <p className="py-4 text-center text-sm text-slate-500">No users match your search.</p>
+              ) : filteredUsers.map(u => (
+                <label key={u.userId}
+                  className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition
+                  ${selectedUserId === u.userId
+                      ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-300'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
+                  <input type="radio" name="assignee" checked={selectedUserId === u.userId}
+                    onChange={() => onSelectUser(u.userId)} className="accent-emerald-600" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">{u.fullName}</p>
+                    <p className="text-xs text-slate-500">{Array.isArray(u.capabilityNames) ? u.capabilityNames.join(', ') : u.role}</p>
+                  </div>
+                  <span className="shrink-0 text-xs font-semibold text-slate-600">
+                    {u.currentActiveTasks ?? 0} active
+                  </span>
+                </label>
+              ))}
             </div>
           </div>
         )}
@@ -343,53 +346,55 @@ function CancelConfirmModal({ task: t, onConfirm, onClose, acting }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function TaskManagementPage() {
-  const location  = useLocation()
-  const navigate  = useNavigate()
-  const toast     = useToast()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const toast = useToast()
 
   const PAGE_SIZE = 20
 
-  const [tasks,         setTasks]         = useState([])
+  const [tasks, setTasks] = useState([])
   const [totalElements, setTotalElements] = useState(0)
-  const [totalPages,    setTotalPages]    = useState(0)
-  const [page,          setPage]          = useState(0)
-  const [loading,       setLoading]       = useState(true)
-  const [refreshSeed,   setRefreshSeed]   = useState(0)
-  const [heldCount,        setHeldCount]        = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [page, setPage] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [refreshSeed, setRefreshSeed] = useState(0)
+  const [heldCount, setHeldCount] = useState(0)
   const { user } = useAuth()
-  const [briefId,          setBriefId]          = useState(null)
-  const [briefTaskId,      setBriefTaskId]      = useState(null)
+  const [briefId, setBriefId] = useState(null)
+  const [briefTaskId, setBriefTaskId] = useState(null)
   const [assetPreviewTask, setAssetPreviewTask] = useState(null)
 
   // ── Per-column filter state (raw — bound directly to inputs) ──────────────
   // Pre-populate status from URL query param (e.g. ?status=REWORK from dashboard)
-  const [fTaskId,         setFTaskId]         = useState('')
-  const [fCampaign,       setFCampaign]       = useState('')
-  const [fStoreId,        setFStoreId]        = useState('')
-  const [fRequestor,      setFRequestor]      = useState('')
-  const [fAssignee,       setFAssignee]       = useState('')
-  const [fTaskType,       setFTaskType]       = useState('')
-  const [fPriority,       setFPriority]       = useState('')
-  const [fStatus,         setFStatus]         = useState(() => new URLSearchParams(location.search).get('status') || '')
-  const [fActionDoneBy,   setFActionDoneBy]   = useState('')
-  const [fDateFrom,       setFDateFrom]       = useState(null)
-  const [fDateTo,         setFDateTo]         = useState(null)
+  const [fTaskId, setFTaskId] = useState('')
+  const [fParentTaskId, setFParentTaskId] = useState('')
+  const [fCampaign, setFCampaign] = useState('')
+  const [fStoreId, setFStoreId] = useState('')
+  const [fRequestor, setFRequestor] = useState('')
+  const [fAssignee, setFAssignee] = useState('')
+  const [fTaskType, setFTaskType] = useState('')
+  const [fPriority, setFPriority] = useState('')
+  const [fStatus, setFStatus] = useState(() => new URLSearchParams(location.search).get('status') || '')
+  const [fActionDoneBy, setFActionDoneBy] = useState('')
+  const [fDateFrom, setFDateFrom] = useState(null)
+  const [fDateTo, setFDateTo] = useState(null)
 
   // ── Debounced text filters (delay API call while typing) ──────────────────
-  const dTaskId       = useDebounce(fTaskId)
-  const dCampaign     = useDebounce(fCampaign)
-  const dStoreId      = useDebounce(fStoreId)
-  const dRequestor    = useDebounce(fRequestor)
-  const dAssignee     = useDebounce(fAssignee)
+  const dTaskId = useDebounce(fTaskId)
+  const dParentTaskId = useDebounce(fParentTaskId)
+  const dCampaign = useDebounce(fCampaign)
+  const dStoreId = useDebounce(fStoreId)
+  const dRequestor = useDebounce(fRequestor)
+  const dAssignee = useDebounce(fAssignee)
   const dActionDoneBy = useDebounce(fActionDoneBy)
 
   // ── Unhold modal state ────────────────────────────────────────────────────
-  const [unholdTarget,   setUnholdTarget]   = useState(null)
-  const [unholdMode,     setUnholdMode]     = useState(null)
-  const [eligibleUsers,  setEligibleUsers]  = useState([])
-  const [loadingUsers,   setLoadingUsers]   = useState(false)
+  const [unholdTarget, setUnholdTarget] = useState(null)
+  const [unholdMode, setUnholdMode] = useState(null)
+  const [eligibleUsers, setEligibleUsers] = useState([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState(null)
-  const [actingUnhold,   setActingUnhold]   = useState(false)
+  const [actingUnhold, setActingUnhold] = useState(false)
 
   // ── Cancel modal state ────────────────────────────────────────────────────
   const [cancelTarget, setCancelTarget] = useState(null)
@@ -397,7 +402,7 @@ export default function TaskManagementPage() {
 
   // ── Reset to page 0 whenever any filter changes ───────────────────────────
   useEffect(() => { setPage(0) },
-    [dTaskId, dCampaign, dStoreId, dRequestor, dAssignee, dActionDoneBy,
+    [dTaskId, dParentTaskId, dCampaign, dStoreId, dRequestor, dAssignee, dActionDoneBy,
       fTaskType, fPriority, fStatus, fDateFrom, fDateTo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch data from backend (debounced filters + page) ────────────────────
@@ -406,46 +411,47 @@ export default function TaskManagementPage() {
     setLoading(true)
     const params = {
       page, size: PAGE_SIZE,
-      ...(dTaskId       && { taskId:          dTaskId       }),
-      ...(dCampaign     && { campaignId:      dCampaign     }),
-      ...(dStoreId      && { storeId:         dStoreId      }),
-      ...(dRequestor    && { requestorName:   dRequestor    }),
-      ...(dAssignee     && { assigneeName:    dAssignee     }),
-      ...(dActionDoneBy && { actionDoneBy:    dActionDoneBy }),
-      ...(fTaskType     && { taskType:        fTaskType     }),
-      ...(fPriority     && { priority:        fPriority     }),
-      ...(fStatus       && { status:          fStatus       }),
-      ...(fDateFrom     && { dateFrom:        fDateFrom     }),
-      ...(fDateTo       && { dateTo:          fDateTo       }),
+      ...(dTaskId && { taskId: dTaskId }),
+      ...(dParentTaskId && { parentTaskId: dParentTaskId }),
+      ...(dCampaign && { campaignId: dCampaign }),
+      ...(dStoreId && { storeId: dStoreId }),
+      ...(dRequestor && { requestorName: dRequestor }),
+      ...(dAssignee && { assigneeName: dAssignee }),
+      ...(dActionDoneBy && { actionDoneBy: dActionDoneBy }),
+      ...(fTaskType && { taskType: fTaskType }),
+      ...(fPriority && { priority: fPriority }),
+      ...(fStatus && { status: fStatus }),
+      ...(fDateFrom && { dateFrom: fDateFrom }),
+      ...(fDateTo && { dateTo: fDateTo }),
     }
     const heldCountParams = { status: 'HELD', page: 0, size: 1 }
     Promise.all([
       managerApi.allTasks(params),
       managerApi.allTasks(heldCountParams),
     ]).then(([r, heldRes]) => {
-        if (!alive) return
-        const raw = r.data
-        if (Array.isArray(raw)) {
-          setTasks(raw)
-          setTotalElements(raw.length)
-          setTotalPages(1)
-        } else {
-          const d = raw || {}
-          setTasks(d.content || [])
-          setTotalElements(d.totalElements || 0)
-          setTotalPages(d.totalPages || 0)
-        }
-        const parseHeldTotal = (res) => {
-          const d = res?.data
-          if (Array.isArray(d)) return d.length
-          return d?.totalElements ?? 0
-        }
-        setHeldCount(parseHeldTotal(heldRes))
-      })
+      if (!alive) return
+      const raw = r.data
+      if (Array.isArray(raw)) {
+        setTasks(raw)
+        setTotalElements(raw.length)
+        setTotalPages(1)
+      } else {
+        const d = raw || {}
+        setTasks(d.content || [])
+        setTotalElements(d.totalElements || 0)
+        setTotalPages(d.totalPages || 0)
+      }
+      const parseHeldTotal = (res) => {
+        const d = res?.data
+        if (Array.isArray(d)) return d.length
+        return d?.totalElements ?? 0
+      }
+      setHeldCount(parseHeldTotal(heldRes))
+    })
       .catch(() => { if (alive) toast.error('Failed to load requests') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [dTaskId, dCampaign, dStoreId, dRequestor, dAssignee, dActionDoneBy,
+  }, [dTaskId, dParentTaskId, dCampaign, dStoreId, dRequestor, dAssignee, dActionDoneBy,
     fTaskType, fPriority, fStatus, fDateFrom, fDateTo, page, refreshSeed, location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Master data for filter dropdowns ─────────────────────────────────────
@@ -461,23 +467,20 @@ export default function TaskManagementPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const PRIORITY_OPTS = ['HIGH', 'MEDIUM', 'LOW']
-  const STATUS_OPTS   = ['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MARKETING_REVIEW', 'REQUESTOR_REVIEW', 'COMPLETED', 'CANCELLED', 'REJECTED', 'HELD']
-  const CONTENT_REQUEST_STATUS_OPTS = ['REQUESTED', 'ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MARKETING_REVIEW', 'REQUESTOR_REVIEW', 'COMPLETED', 'CANCELLED', 'HELD']
-
-  const taskTypeOptions  = allTaskTypeOpts
-  const priorityOptions  = PRIORITY_OPTS
-  const statusOptions    = STATUS_OPTS
-  const contentRequestStatusOptions = CONTENT_REQUEST_STATUS_OPTS
+  const STATUS_OPTS = ['ASSIGNED', 'IN_PROGRESS', 'REWORK', 'MARKETING_REVIEW', 'REQUESTOR_REVIEW', 'COMPLETED', 'CANCELLED', 'REJECTED', 'HELD']
+  const taskTypeOptions = allTaskTypeOpts
+  const priorityOptions = PRIORITY_OPTS
+  const statusOptions = STATUS_OPTS
 
   // The data shown in the table is the current page (server already filtered it)
   const filtered = tasks
 
-  const activeFilters = [fTaskId, fCampaign, fStoreId, fRequestor, fAssignee, fTaskType, fPriority, fStatus, fActionDoneBy,
+  const activeFilters = [fTaskId, fParentTaskId, fCampaign, fStoreId, fRequestor, fAssignee, fTaskType, fPriority, fStatus, fActionDoneBy,
     fDateFrom, fDateTo]
     .filter(Boolean).length
 
   const clearFilters = () => {
-    setFTaskId(''); setFCampaign(''); setFStoreId(''); setFRequestor(''); setFAssignee('')
+    setFTaskId(''); setFParentTaskId(''); setFCampaign(''); setFStoreId(''); setFRequestor(''); setFAssignee('')
     setFTaskType(''); setFPriority(''); setFStatus(''); setFActionDoneBy('')
     setFDateFrom(null); setFDateTo(null)
     // clear the URL query param if it was set from the dashboard
@@ -485,14 +488,14 @@ export default function TaskManagementPage() {
   }
 
   // ── Stable row action callbacks (for React.memo on TaskRow) ──────────────────
-  const cbHold       = useCallback((task) => handleHold(task),      []) // eslint-disable-line react-hooks/exhaustive-deps
+  const cbHold = useCallback((task) => handleHold(task), []) // eslint-disable-line react-hooks/exhaustive-deps
   const cbOpenUnhold = useCallback((task) => openUnholdModal(task), []) // eslint-disable-line react-hooks/exhaustive-deps
-  const cbSetCancel  = useCallback((task) => setCancelTarget(task), [])
-  const cbSetBrief   = useCallback((task) => {
+  const cbSetCancel = useCallback((task) => setCancelTarget(task), [])
+  const cbSetBrief = useCallback((task) => {
     setBriefId(task.campaignId)
     setBriefTaskId(task.taskId)
   }, [])
-  const cbSetAssets  = useCallback((task) => setAssetPreviewTask(task), [])
+  const cbSetAssets = useCallback((task) => setAssetPreviewTask(task), [])
 
   // ── Hold ─────────────────────────────────────────────────────────────────────
   const [holdingId, setHoldingId] = useState(null)
@@ -630,92 +633,93 @@ export default function TaskManagementPage() {
 
       {/* ── Table ── */}
       <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-          <div className="w-full flex-1 overflow-auto">
-            <table
-              className={DATA_TABLE_CLASS}
-              style={dataTableStyle(taskTableMinWidth())}
-            >
-              <DataTableColGroup widths={TASK_COLS_GENERAL} />
-              <thead className="sticky top-0 z-20 bg-slate-50">
-                <tr className="bg-slate-50">
-                  <Th>Task</Th>
-                  <Th>Parent Task</Th>
-                  <Th>Campaign</Th>
-                  <Th>Store ID</Th>
-                  <Th>Requestor</Th>
-                  <Th>Assignee</Th>
-                  <Th>Task</Th>
-                  <Th>Priority</Th>
-                  <Th>Status</Th>
-                  <Th title="Times sent back by QC manager">QC Reworks</Th>
-                  <Th title="Times sent back by requestor">Req. Reworks</Th>
-                  <Th>Created On</Th>
-                  <Th>Assigned On</Th>
-                  <Th title="Who performed the most recent action on this task">Action done by</Th>
-                  <Th align="right" sticky>Actions</Th>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <FilterTd><TextFilter value={fTaskId} onChange={setFTaskId} placeholder="e.g. 42" /></FilterTd>
-                  <FilterTd />
-                  <FilterTd><TextFilter value={fCampaign} onChange={setFCampaign} placeholder="ID…" /></FilterTd>
-                  <FilterTd><TextFilter value={fStoreId} onChange={setFStoreId} placeholder="Search…" /></FilterTd>
-                  <FilterTd><TextFilter value={fRequestor} onChange={setFRequestor} placeholder="Search…" /></FilterTd>
-                  <FilterTd><TextFilter value={fAssignee} onChange={setFAssignee} placeholder="Search…" /></FilterTd>
-                  <FilterTd><SearchSelectFilter value={fTaskType} onChange={setFTaskType} options={taskTypeOptions} /></FilterTd>
-                  <FilterTd><SelectFilter value={fPriority} onChange={setFPriority} options={priorityOptions} /></FilterTd>
-                  <FilterTd><SelectFilter value={fStatus} onChange={setFStatus} options={statusOptions} /></FilterTd>
-                  <FilterTd />
-                  <FilterTd />
-                  <FilterTd />
-                  <FilterTd />
-                  <FilterTd><TextFilter value={fActionDoneBy} onChange={setFActionDoneBy} placeholder="Search…" /></FilterTd>
-                  <FilterTd sticky />
-                </tr>
-              </thead>
-              <tbody className="bg-white">
-                {loading ? (
-                  <TableStatusRow colSpan={tableColSpan}>
-                    <LoadingState inline />
-                  </TableStatusRow>
-                ) : filtered.length === 0 ? (
-                  <TableStatusRow colSpan={tableColSpan}>
-                    <Icon name="inbox" className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-                    <p className="text-sm text-slate-500">
-                      {activeFilters > 0 ? 'No tasks match the current filters.' : 'No tasks found.'}
-                    </p>
-                    {activeFilters > 0 && (
-                      <button onClick={clearFilters} className="mt-2 text-xs text-brand-600 hover:underline">
-                        Clear all filters
-                      </button>
-                    )}
-                  </TableStatusRow>
-                ) : filtered.map((t, i) => (
-                  <TaskRow
-                    key={t.taskId}
-                    task={t}
-                    alt={i % 2 === 1}
-                    holding={holdingId === t.taskId}
-                    onHold={cbHold}
-                    onUnhold={cbOpenUnhold}
-                    onCancel={cbSetCancel}
-                    onViewBrief={cbSetBrief}
-                    onViewAssets={cbSetAssets}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="shrink-0 border-t border-slate-100 bg-slate-50 px-4 py-1">
-            <Pagination
-              page={page}
-              totalPages={totalPages}
-              totalElements={totalElements}
-              pageSize={PAGE_SIZE}
-              onPageChange={setPage}
-              loading={loading}
-            />
-          </div>
+        <div className="w-full flex-1 overflow-auto">
+          <table
+            className={DATA_TABLE_CLASS}
+            style={dataTableStyle(taskTableMinWidth())}
+          >
+            <DataTableColGroup widths={TASK_COLS_GENERAL} />
+            <thead className="sticky top-0 z-20 bg-slate-50">
+              <tr className="bg-slate-50">
+                <Th>Task</Th>
+                <Th>Parent Task</Th>
+                <Th>Campaign</Th>
+                <Th>Store ID</Th>
+                <Th>Requestor</Th>
+                <Th>Assignee</Th>
+                <Th>Task</Th>
+                <Th>Priority</Th>
+                <Th>Status</Th>
+                <Th title="Times sent back by QC manager">QC Reworks</Th>
+                <Th title="Times sent back by requestor">Req. Reworks</Th>
+                <Th>Created On</Th>
+                <Th>Assigned On</Th>
+                <Th title="Who performed the most recent action on this task">Action done by</Th>
+                <Th align="right" sticky>Actions</Th>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <FilterTd><TextFilter value={fTaskId} onChange={setFTaskId} placeholder="e.g. 42" /></FilterTd>
+                <FilterTd><TextFilter value={fParentTaskId} onChange={setFParentTaskId} placeholder="e.g. 42" /></FilterTd>
+                <FilterTd><TextFilter value={fCampaign} onChange={setFCampaign} placeholder="ID…" /></FilterTd>
+                <FilterTd><TextFilter value={fStoreId} onChange={setFStoreId} placeholder="Search…" /></FilterTd>
+                <FilterTd><TextFilter value={fRequestor} onChange={setFRequestor} placeholder="Search…" /></FilterTd>
+                <FilterTd><TextFilter value={fAssignee} onChange={setFAssignee} placeholder="Search…" /></FilterTd>
+                <FilterTd><SearchSelectFilter value={fTaskType} onChange={setFTaskType} options={taskTypeOptions} /></FilterTd>
+                <FilterTd><SelectFilter value={fPriority} onChange={setFPriority} options={priorityOptions} /></FilterTd>
+                <FilterTd><SelectFilter value={fStatus} onChange={setFStatus} options={statusOptions} /></FilterTd>
+                <FilterTd />
+                <FilterTd />
+                <FilterTd />
+                <FilterTd />
+                <FilterTd><TextFilter value={fActionDoneBy} onChange={setFActionDoneBy} placeholder="Search…" /></FilterTd>
+                <FilterTd sticky />
+              </tr>
+            </thead>
+            <tbody className="bg-white">
+              {loading ? (
+                <TableStatusRow colSpan={tableColSpan}>
+                  <LoadingState inline />
+                </TableStatusRow>
+              ) : filtered.length === 0 ? (
+                <TableStatusRow colSpan={tableColSpan}>
+                  <Icon name="inbox" className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+                  <p className="text-sm text-slate-500">
+                    {activeFilters > 0 ? 'No tasks match the current filters.' : 'No tasks found.'}
+                  </p>
+                  {activeFilters > 0 && (
+                    <button onClick={clearFilters} className="mt-2 text-xs text-brand-600 hover:underline">
+                      Clear all filters
+                    </button>
+                  )}
+                </TableStatusRow>
+              ) : filtered.map((t, i) => (
+                <TaskRow
+                  key={t.taskId}
+                  task={t}
+                  alt={i % 2 === 1}
+                  holding={holdingId === t.taskId}
+                  onHold={cbHold}
+                  onUnhold={cbOpenUnhold}
+                  onCancel={cbSetCancel}
+                  onViewBrief={cbSetBrief}
+                  onViewAssets={cbSetAssets}
+                  toast={toast}
+                />
+              ))}
+            </tbody>
+          </table>
         </div>
+        <div className="shrink-0 border-t border-slate-100 bg-slate-50 px-4 py-1">
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalElements={totalElements}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            loading={loading}
+          />
+        </div>
+      </div>
 
       {/* Assets modal — completed tasks */}
       {assetPreviewTask && (
@@ -791,26 +795,15 @@ function Th({ children, align = 'left', sticky = false, title }) {
 
 // ─── Data row ─────────────────────────────────────────────────────────────────
 
-const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onViewBrief, onViewAssets }) => {
+const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onViewBrief, onViewAssets, toast }) => {
   // Hold: ASSIGNED or REWORK (manager can pause and reassign)
-  const canHold   = t.status === 'ASSIGNED' || t.status === 'REWORK'
+  const canHold = t.status === 'ASSIGNED' || t.status === 'REWORK'
   // Unhold: only HELD
   const canUnhold = t.status === 'HELD'
   // Cancel: ASSIGNED, REWORK or HELD
   const canCancel = t.status === 'ASSIGNED' || t.status === 'REWORK' || t.status === 'HELD'
 
   const navigate = useNavigate()
-  const handleParentTaskClick = async () => {
-    try {
-      const res = await tasksApi.getParentTask(t.taskId)
-      if (res.data?.campaignId) {
-        navigate(`/campaigns/${res.data.campaignId}?taskId=${t.parentTaskId}`)
-      }
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
   return (
     <tr className={`border-b border-slate-100 transition-colors hover:bg-brand-50/30
                     ${alt ? 'bg-slate-50' : 'bg-white'}`}>
@@ -821,15 +814,11 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
         </span>
       </td>
 
-      <td className={`${cellCls} text-slate-600`}>
+      <td className={`${cellCls} text-slate-600 text-center`}>
         {t.parentTaskId ? (
-          <button
-            onClick={handleParentTaskClick}
-            className="font-mono text-[11px] text-brand-600 hover:text-brand-800 hover:underline bg-brand-50 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
-            title="View parent task"
-          >
+          <span className="font-mono text-[11px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded font-bold">
             {t.parentTaskId}
-          </button>
+          </span>
         ) : (
           <span className="text-slate-300">—</span>
         )}
@@ -846,8 +835,8 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
 
       <td className={`${cellCls} text-xs text-slate-600`}>
         {t.storeId
-          ? <span className="block truncate font-medium text-slate-700" title={t.storeId}>{t.storeId}</span>
-          : <span className="text-slate-300">—</span>}
+          ? <StoreIdDisplay storeId={t.storeId} className="block font-medium text-slate-700" />
+          : <span className="text-slate-300 italic text-xs">None</span>}
       </td>
 
       <td className={`${cellCls} text-slate-600`}>
@@ -860,9 +849,9 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
         {t.assigneeName
           ? <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full bg-slate-100 px-2 py-0.5
                              text-xs font-medium text-slate-700" title={t.assigneeName}>
-              <Icon name="users" className="h-3 w-3 shrink-0 text-slate-400" />
-              <span className="truncate">{t.assigneeName}</span>
-            </span>
+            <Icon name="users" className="h-3 w-3 shrink-0 text-slate-400" />
+            <span className="truncate">{t.assigneeName}</span>
+          </span>
           : <span className="text-slate-300">Unassigned</span>}
       </td>
 
@@ -887,8 +876,8 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
         {t.campaignPriority
           ? <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs
                               font-medium ring-1 ${PRIORITY_STYLES[t.campaignPriority] || 'bg-slate-100 text-slate-600'}`}>
-              {t.campaignPriority}
-            </span>
+            {t.campaignPriority}
+          </span>
           : <span className="text-slate-300">—</span>}
       </td>
 
@@ -896,7 +885,7 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
         <div className="flex flex-col gap-1">
           <span className={`inline-flex max-w-full truncate items-center rounded-full px-2 py-0.5 text-xs
                             font-medium ring-1 w-fit ${STATUS_STYLES[t.status] || 'bg-slate-100 text-slate-600'}`}
-                title={STATUS_LABELS[t.status] || t.status}>
+            title={STATUS_LABELS[t.status] || t.status}>
             {t.status === 'MARKETING_REVIEW' && t.pendingWithRole ? `L${t.currentApprovalLevel}: ${t.pendingWithRole}` : (STATUS_LABELS[t.status] || t.status)}
           </span>
           <ReassignedBadge assignmentCount={t.assignmentCount} />
@@ -907,8 +896,8 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
         {t.reworkCount > 0
           ? <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5
                              text-xs font-semibold text-orange-700 ring-1 ring-orange-200">
-              {t.reworkCount}
-            </span>
+            {t.reworkCount}
+          </span>
           : <span className="text-slate-300">—</span>}
       </td>
 
@@ -916,8 +905,8 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
         {t.requestorReworkCount > 0
           ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5
                              text-xs font-semibold text-purple-700 ring-1 ring-purple-200">
-              {t.requestorReworkCount}
-            </span>
+            {t.requestorReworkCount}
+          </span>
           : <span className="text-slate-300">—</span>}
       </td>
 
@@ -938,60 +927,28 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
         {t.latestActionDoneByName
           ? <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full bg-indigo-50 px-2 py-0.5
                              text-xs font-medium text-indigo-700 ring-1 ring-indigo-100" title={t.latestActionDoneByName}>
-              <span className="truncate">{t.latestActionDoneByName}</span>
-            </span>
+            <span className="truncate">{t.latestActionDoneByName}</span>
+          </span>
           : <span className="text-slate-300">N/A</span>}
       </td>
 
       <td className={`${ACTIONS_STICKY_BODY} min-w-0 overflow-hidden px-2 py-2.5`}>
         <div className="flex flex-wrap items-center justify-end gap-1">
-          {/* Brief */}
-          <button onClick={() => onViewBrief(t)} title="View brief"
-            className="rounded border border-slate-200 p-1.5 text-slate-400
-                       hover:bg-slate-50 hover:text-slate-700 transition">
-            <Icon name="eye" className="h-3.5 w-3.5" />
-          </button>
-
-          {/* Assets — completed tasks only */}
-          {t.status === 'COMPLETED' && (
-            <button onClick={() => onViewAssets(t)} title="View assets"
-              className="rounded border border-green-200 bg-green-50 p-1.5 text-green-600
-                         hover:bg-green-100 hover:text-green-800 transition">
-              <Icon name="fileText" className="h-3.5 w-3.5" />
-            </button>
-          )}
-
-
-
-          {/* Hold */}
-          {canHold && (
-            <button onClick={() => onHold(t)} disabled={holding} title="Hold task"
-              className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs
-                         font-medium text-amber-700 hover:bg-amber-100 transition disabled:opacity-50
-                         flex items-center gap-1">
-              {holding
-                ? <Icon name="refresh" className="h-3 w-3 animate-spin" />
-                : <><Icon name="pause" className="h-3 w-3" /> Hold</>}
-            </button>
-          )}
-
-          {/* Unhold → opens modal */}
-          {canUnhold && (
-            <button onClick={() => onUnhold(t)} title="Unhold task"
-              className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs
-                         font-medium text-emerald-700 hover:bg-emerald-100 transition flex items-center gap-1">
-              <Icon name="check" className="h-3 w-3" /> Unhold
-            </button>
-          )}
-
-          {/* Cancel */}
-          {canCancel && (
-            <button onClick={() => onCancel(t)} title="Cancel task"
-              className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs
-                         font-medium text-red-600 hover:bg-red-100 transition flex items-center gap-1">
-              <Icon name="x" className="h-3 w-3" /> Cancel
-            </button>
-          )}
+          <ActionMenu align="right">
+            <ActionMenuItem icon="eye" label="View Brief" onClick={() => onViewBrief(t)} />
+            {t.status === 'COMPLETED' && (
+              <ActionMenuItem icon="fileText" label="View Assets" onClick={() => onViewAssets(t)} />
+            )}
+            {canHold && (
+              <ActionMenuItem icon="pause" label="Hold Task" onClick={() => onHold(t)} disabled={holding} />
+            )}
+            {canUnhold && (
+              <ActionMenuItem icon="check" label="Unhold Task" onClick={() => onUnhold(t)} />
+            )}
+            {canCancel && (
+              <ActionMenuItem icon="x" label="Cancel Task" onClick={() => onCancel(t)} className="text-red-600 hover:text-red-700 hover:bg-red-50" />
+            )}
+          </ActionMenu>
         </div>
       </td>
     </tr>
@@ -1042,11 +999,11 @@ function EmptyState({ hasFilters, onClear }) {
       <Icon name="inbox" className="mx-auto h-10 w-10 text-slate-300 mb-3" />
       {hasFilters
         ? <>
-            <p className="text-sm font-medium text-slate-600">No tasks match your filters</p>
-            <button onClick={onClear} className="mt-3 text-sm text-brand-600 hover:underline">
-              Clear all filters
-            </button>
-          </>
+          <p className="text-sm font-medium text-slate-600">No tasks match your filters</p>
+          <button onClick={onClear} className="mt-3 text-sm text-brand-600 hover:underline">
+            Clear all filters
+          </button>
+        </>
         : <p className="text-sm font-medium text-slate-600">No work tasks found</p>}
     </div>
   )

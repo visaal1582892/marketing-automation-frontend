@@ -9,6 +9,7 @@ export const MASTER_RESOURCES = [
   { slug: 'departments',         label: 'Departments',         icon: 'building'  },
   { slug: 'designations',        label: 'Designations',        icon: 'tag'       },
   { slug: 'roles',               label: 'Roles',               icon: 'shield'    },
+  { slug: 'capabilities',        label: 'Capabilities',        icon: 'zap',       isCode: true },
   { slug: 'task-types',          label: 'Task Types',          icon: 'list'      },
   { slug: 'regions',             label: 'Regions',             icon: 'globe'     },
   // Form field dropdowns — all master-table driven
@@ -73,12 +74,16 @@ export const granularTasksApi = {
   restore: (id)         => api.put(`/master/granular-tasks/${id}/restore`).then((r) => r.data),
 }
 
-/** API for Role → Task mappings (/api/master/routing/role-task) */
+/**
+ * API for Capability → Task mappings (/api/master/routing/capability-task).
+ * Capabilities are pure business routing metadata — decoupled from IAM roles.
+ * The legacy /role-task endpoints still work (backward-compatible aliases).
+ */
 export const roleTaskApi = {
-  /** Full list (no pagination). */
+  /** Full list (no pagination) — delegates to capability-task backend. */
   list: ()              => api.get('/master/routing/role-task').then((r) => r.data),
 
-  /** Paged + filtered list for admin Role-Task Mapping table. Returns PagedResponse. */
+  /** Paged + filtered list for admin mapping table. Returns PagedResponse. */
   listPaged: ({ roleName, taskName, status, page = 0, size = 20 } = {}) =>
     api.get('/master/routing/role-task', {
       params: { roleName, taskName, status, page, size },
@@ -90,6 +95,35 @@ export const roleTaskApi = {
   update:      (mappingId, { roleId, taskId, status }) =>
     api.patch(`/master/routing/role-task/${mappingId}`, { roleId, taskId, status }).then((r) => r.data),
   remove:      (mappingId)     => api.delete(`/master/routing/role-task/${mappingId}`).then((r) => r.data),
+}
+
+/**
+ * API for Capability → Task mappings — the native capability-domain endpoints.
+ * Use these for any new capability-specific UI.
+ */
+export const capabilityTaskApi = {
+  list: ()              => api.get('/master/routing/capability-task').then((r) => r.data),
+  listPaged: ({ capabilityName, taskName, status, page = 0, size = 20 } = {}) =>
+    api.get('/master/routing/capability-task', {
+      params: { capabilityName, taskName, status, page, size },
+    }).then((r) => r.data),
+  listByCapability: (capabilityId) =>
+    api.get(`/master/routing/capability-task/${capabilityId}`).then((r) => r.data),
+  create: (capabilityId, taskId) =>
+    api.post('/master/routing/capability-task', { capabilityId, taskId }).then((r) => r.data),
+  update: (mappingId, { capabilityId, taskId, status }) =>
+    api.patch(`/master/routing/capability-task/${mappingId}`, { capabilityId, taskId, status }).then((r) => r.data),
+  remove: (mappingId) =>
+    api.delete(`/master/routing/capability-task/${mappingId}`).then((r) => r.data),
+}
+
+/** API for Requirement → Capability mappings (/api/master/routing/requirement-capability) */
+export const requirementCapabilityApi = {
+  list: () => api.get('/master/routing/requirement-capability').then((r) => r.data),
+  set: (requirementTypeId, defaultCapabilityId) =>
+    api.put(`/master/routing/requirement-capability/${requirementTypeId}`, { defaultCapabilityId }).then((r) => r.data),
+  remove: (mappingId) =>
+    api.delete(`/master/routing/requirement-capability/${mappingId}`).then((r) => r.data),
 }
 
 /** API for Campaign Task Configurations (/api/campaign-task-config) */

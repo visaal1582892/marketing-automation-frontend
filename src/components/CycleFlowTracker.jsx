@@ -107,11 +107,7 @@ export default function CycleFlowTracker({ cycle, isHistorical = false }) {
       {/* Header for the cycle (Assignee Info) */}
       <div className="flex items-center gap-2 mb-1">
         <span className="text-sm font-bold text-slate-800">{cycle.assigneeName || 'Unknown User'}</span>
-        {cycle.roleName && (
-          <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md font-medium">
-            {cycle.roleName}
-          </span>
-        )}
+
       </div>
 
       {/* Node Flow */}

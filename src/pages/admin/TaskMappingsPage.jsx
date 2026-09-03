@@ -1,5 +1,5 @@
 import { useCallback, useEffect, memo, useState, useMemo } from 'react'
-import { masterApi, granularTasksApi, roleTaskApi, campaignTaskConfigApi, campaignTypeApi } from '../../api/masterData'
+import { masterApi, granularTasksApi, capabilityTaskApi, campaignTaskConfigApi, campaignTypeApi } from '../../api/masterData'
 import campaignSpecsApi from '../../api/campaignSpecs'
 import useDebounce from '../../hooks/useDebounce'
 import Icon from '../../components/Icon'
@@ -13,7 +13,7 @@ import { TableStatusRow } from '../../components/dataTable'
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'role-task',    label: 'Role → Task',            icon: 'shield'  },
+  { id: 'capability-task',    label: 'Capability → Task',      icon: 'zap'     },
   { id: 'campaign-task', label: 'Campaign Task Config',   icon: 'list'    },
 ]
 
@@ -42,10 +42,10 @@ function FilterSelect({ value, onChange, options }) {
   return <AppSelect value={value} onChange={onChange} options={options} size="sm" isClearable={false} isSearchable menuPortal />
 }
 
-function RolePill({ name }) {
+function CapabilityPill({ name }) {
   return (
-    <span className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5
-                     text-xs font-medium text-violet-700 ring-1 ring-violet-100">
+    <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5
+                     text-xs font-medium text-amber-700 ring-1 ring-amber-200">
       {name}
     </span>
   )
@@ -62,16 +62,18 @@ function StatusPill({ status }) {
   )
 }
 
-// ─── Role → Task tab ──────────────────────────────────────────────────────────
+// ─── Capability → Task tab ────────────────────────────────────────────────────
+// Uses capability-domain APIs; the backend aliases role-task endpoints to
+// capability-task so both work. We use the native capabilityTaskApi here.
 
-function RoleTaskTab() {
+function CapabilityTaskTab() {
   const toast = useToast()
   const PAGE_SIZE = 20
 
   const [rows, setRows]                   = useState([])
   const [total, setTotal]                 = useState(0)
   const [totalPages, setTotalPages]       = useState(0)
-  const [roles, setRoles]                 = useState([])
+  const [capabilities, setCapabilities]   = useState([])
   const [granularTasks, setGranularTasks] = useState([])
   const [loading, setLoading]             = useState(true)
   const [addOpen, setAddOpen]             = useState(false)
@@ -80,25 +82,28 @@ function RoleTaskTab() {
   const [page, setPage]                   = useState(0)
   const [refreshSeed, setRefreshSeed]     = useState(0)
 
-  const [fRole,   setFRole]   = useState('')
+  // Column filters
+  const [fCapability, setFCapability] = useState('')
   const [fTask,   setFTask]   = useState('')
   const [fStatus, setFStatus] = useState('all')
 
-  const dRole = useDebounce(fRole, 400)
+  const dCapability = useDebounce(fCapability, 400)
   const dTask = useDebounce(fTask, 400)
 
-  useEffect(() => { setPage(0) }, [dRole, dTask, fStatus]) // eslint-disable-line
+  useEffect(() => { setPage(0) }, [dCapability, dTask, fStatus]) // eslint-disable-line
 
+  // Load reference data: capabilities + granular tasks
   useEffect(() => {
-    Promise.all([masterApi.list('roles', false), granularTasksApi.list(false)])
-      .then(([roleList, taskList]) => { setRoles(roleList); setGranularTasks(taskList) })
+    Promise.all([masterApi.list('capabilities', false), granularTasksApi.list(false)])
+      .then(([capList, taskList]) => { setCapabilities(capList); setGranularTasks(taskList) })
       .catch(() => {})
   }, [])
 
+  // Server-side fetch — use native capability-task API
   useEffect(() => {
     let alive = true
     setLoading(true)
-    roleTaskApi.listPaged({ roleName: dRole || undefined, taskName: dTask || undefined,
+    capabilityTaskApi.listPaged({ capabilityName: dCapability || undefined, taskName: dTask || undefined,
       status: fStatus !== 'all' ? fStatus : undefined, page, size: PAGE_SIZE })
       .then((res) => {
         if (!alive) return
@@ -110,26 +115,30 @@ function RoleTaskTab() {
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dRole, dTask, fStatus, page, refreshSeed])
+  }, [dCapability, dTask, fStatus, page, refreshSeed])
 
   const refresh = () => setRefreshSeed((s) => s + 1)
 
-  const handleAdd = async (roleId, taskId) => {
-    try { await roleTaskApi.create(roleId, taskId); setAddOpen(false); toast.success('Mapping added'); refresh() }
+  const handleAdd = async (capabilityId, taskId) => {
+    try { await capabilityTaskApi.create(capabilityId, taskId); setAddOpen(false); toast.success('Mapping added'); refresh() }
     catch (e) { toast.error(e?.response?.data?.message || 'Failed to add mapping') }
   }
-  const handleEdit = async (mappingId, roleId, taskId, status) => {
-    try { await roleTaskApi.update(mappingId, { roleId, taskId, status }); setEditRow(null); toast.success('Mapping updated'); refresh() }
+  const handleEdit = async (mappingId, capabilityId, taskId, status) => {
+    try { await capabilityTaskApi.update(mappingId, { capabilityId, taskId, status }); setEditRow(null); toast.success('Mapping updated'); refresh() }
     catch (e) { toast.error(e?.response?.data?.message || 'Update failed') }
   }
   const handleDelete = async () => {
     if (!confirmDelete) return
-    try { await roleTaskApi.remove(confirmDelete.mappingId); setConfirmDelete(null); toast.success('Mapping removed'); refresh() }
+    try { await capabilityTaskApi.remove(confirmDelete.mappingId); setConfirmDelete(null); toast.success('Mapping removed'); refresh() }
     catch (e) { toast.error(e?.response?.data?.message || 'Delete failed') }
   }
 
   const handleEditRow   = useCallback((row) => setEditRow(row), [])
   const handleDeleteRow = useCallback((row) => setConfirmDelete(row), [])
+
+  // Helper: read capability fields from row (backend returns capabilityId/capabilityName)
+  const capId = (r) => r.capabilityId || r.roleId || ''
+  const capName = (r) => r.capabilityName || r.roleName || ''
 
   return (
     <div className="space-y-4">
@@ -147,14 +156,14 @@ function RoleTaskTab() {
             <thead className="bg-slate-50">
               <tr className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <th className="w-20 px-4 py-2.5">ID</th>
-                <th className="w-48 px-4 py-2.5">Role</th>
+                <th className="w-48 px-4 py-2.5">Capability</th>
                 <th className="px-4 py-2.5">Granular Task</th>
                 <th className="w-32 px-4 py-2.5">Status</th>
                 <th className="w-24 px-4 py-2.5 text-right">Actions</th>
               </tr>
               <tr className="border-y border-slate-100 bg-slate-50/40">
                 <th />
-                <th className="px-4 py-2"><FilterInput value={fRole} onChange={setFRole} placeholder="Search role…" icon="search" /></th>
+                <th className="px-4 py-2"><FilterInput value={fCapability} onChange={setFCapability} placeholder="Search capability…" icon="search" /></th>
                 <th className="px-4 py-2"><FilterInput value={fTask} onChange={setFTask} placeholder="Search task…" icon="search" /></th>
                 <th className="px-4 py-2"><FilterSelect value={fStatus} onChange={setFStatus}
                   options={[['all','All'],['ACTIVE','Active'],['INACTIVE','Inactive']]} /></th>
@@ -167,7 +176,7 @@ function RoleTaskTab() {
               ) : rows.length === 0 ? (
                 <TableStatusRow colSpan={5} className="py-12">No matching records.</TableStatusRow>
               ) : rows.map((row) => (
-                <RoleTaskRow key={row.mappingId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} />
+                <CapabilityTaskRow key={row.mappingId} row={row} capId={capId} capName={capName} onEdit={handleEditRow} onDelete={handleDeleteRow} />
               ))}
             </tbody>
           </table>
@@ -179,7 +188,7 @@ function RoleTaskTab() {
         {/* Mobile */}
         <div className="block divide-y divide-slate-100 sm:hidden">
           <div className="space-y-2 p-3">
-            <FilterInput value={fRole} onChange={setFRole} placeholder="Search role…" icon="search" />
+            <FilterInput value={fCapability} onChange={setFCapability} placeholder="Search capability…" icon="search" />
             <FilterInput value={fTask} onChange={setFTask} placeholder="Search task…" icon="search" />
             <FilterSelect value={fStatus} onChange={setFStatus} options={[['all','All Statuses'],['ACTIVE','Active'],['INACTIVE','Inactive']]} />
           </div>
@@ -188,7 +197,7 @@ function RoleTaskTab() {
           ) : rows.length === 0 ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">No matching records.</div>
           ) : rows.map((row) => (
-            <RoleTaskRow key={row.mappingId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} mobile />
+            <CapabilityTaskRow key={row.mappingId} row={row} capId={capId} capName={capName} onEdit={handleEditRow} onDelete={handleDeleteRow} mobile />
           ))}
           <div className="px-4 py-1">
             <Pagination page={page} totalPages={totalPages} totalElements={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
@@ -196,22 +205,23 @@ function RoleTaskTab() {
         </div>
       </section>
 
-      <RoleTaskAddModal open={addOpen} roles={roles} granularTasks={granularTasks} onClose={() => setAddOpen(false)} onSave={handleAdd} />
-      <RoleTaskEditModal row={editRow} roles={roles} granularTasks={granularTasks} onClose={() => setEditRow(null)} onSave={handleEdit} />
+      <CapabilityTaskAddModal open={addOpen} capabilities={capabilities} granularTasks={granularTasks} onClose={() => setAddOpen(false)} onSave={handleAdd} />
+      <CapabilityTaskEditModal row={editRow} capabilities={capabilities} granularTasks={granularTasks} onClose={() => setEditRow(null)} onSave={handleEdit} />
       <ConfirmDeleteModal open={confirmDelete !== null} target={confirmDelete}
         onClose={() => setConfirmDelete(null)} onConfirm={handleDelete}
-        message={<>Remove mapping between <strong>{confirmDelete?.roleName || confirmDelete?.roleId}</strong> and{' '}
+        message={<>Remove mapping between <strong>{confirmDelete ? capName(confirmDelete) : ''}</strong> and{' '}
           <strong>{confirmDelete?.taskName || confirmDelete?.taskId}</strong>?</>} />
     </div>
   )
 }
 
-const RoleTaskRow = memo(function RoleTaskRow({ row, onEdit, onDelete, mobile = false }) {
+const CapabilityTaskRow = memo(function CapabilityTaskRow({ row, onEdit, onDelete, mobile = false, capId, capName }) {
   const inactive = (row.status ?? 'ACTIVE') === 'INACTIVE'
+  const displayName = capName ? capName(row) : (row.capabilityName || row.roleName || row.capabilityId || row.roleId || '')
   if (mobile) return (
     <div className={`flex items-start justify-between gap-3 px-4 py-3 ${inactive ? 'opacity-60' : ''}`}>
       <div className="min-w-0 space-y-1.5">
-        <RolePill name={row.roleName || row.roleId} />
+        <CapabilityPill name={displayName} />
         <div className="text-sm font-medium text-slate-800">{row.taskName || row.taskId}</div>
         <StatusPill status={row.status ?? 'ACTIVE'} />
       </div>
@@ -224,7 +234,7 @@ const RoleTaskRow = memo(function RoleTaskRow({ row, onEdit, onDelete, mobile = 
   return (
     <tr className={`transition hover:bg-slate-50/60 ${inactive ? 'opacity-60' : ''}`}>
       <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{row.mappingId}</td>
-      <td className="px-4 py-2.5"><RolePill name={row.roleName || row.roleId} /></td>
+      <td className="px-4 py-2.5"><CapabilityPill name={displayName} /></td>
       <td className="px-4 py-2.5 text-slate-800">
         <span className="font-medium">{row.taskName || row.taskId}</span>
         {row.taskId && <span className="ml-2 font-mono text-xs text-slate-400">{row.taskId}</span>}
@@ -697,10 +707,10 @@ function CampaignTaskModal({ title, initial, granularTasks, campTypes, verticals
 
 // ─── Shared modals ────────────────────────────────────────────────────────────
 
-function RoleTaskAddModal({ open, roles, granularTasks, onClose, onSave }) {
-  const [roleId, setRoleId]         = useState('')
-  const [taskId, setTaskId]         = useState('')
-  const [submitting, setSubmitting] = useState(false)
+function CapabilityTaskAddModal({ open, capabilities: caps, granularTasks, onClose, onSave }) {
+  const [capabilityId, setCapabilityId] = useState('')
+  const [taskId, setTaskId]             = useState('')
+  const [submitting, setSubmitting]     = useState(false)
 
   const tasksByType = useMemo(() => {
     const groups = {}
@@ -712,23 +722,23 @@ function RoleTaskAddModal({ open, roles, granularTasks, onClose, onSave }) {
     return groups
   }, [granularTasks])
 
-  useEffect(() => { if (open) { setRoleId(''); setTaskId(''); setSubmitting(false) } }, [open])
+  useEffect(() => { if (open) { setCapabilityId(''); setTaskId(''); setSubmitting(false) } }, [open])
 
   if (!open) return null
 
   const submit = async (e) => {
     e.preventDefault()
-    if (!roleId || !taskId) return
+    if (!capabilityId || !taskId) return
     setSubmitting(true)
-    try { await onSave(roleId, taskId) } finally { setSubmitting(false) }
+    try { await onSave(capabilityId, taskId) } finally { setSubmitting(false) }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Role → Task Mapping"
+    <Modal open={open} onClose={onClose} title="Add Capability → Task Mapping"
       footer={
         <>
           <button onClick={onClose} className="rounded-md px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button onClick={submit} disabled={submitting || !roleId || !taskId}
+          <button onClick={submit} disabled={submitting || !capabilityId || !taskId}
             className="rounded-md bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-60">
             {submitting ? 'Adding…' : 'Add mapping'}
           </button>
@@ -737,10 +747,10 @@ function RoleTaskAddModal({ open, roles, granularTasks, onClose, onSave }) {
     >
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Role</label>
-          <AppSelect value={roleId ? String(roleId) : ''} onChange={setRoleId}
-            options={roles.map((r) => ({ value: String(r.id), label: r.name }))}
-            placeholder="Search & select a role…" isSearchable menuPortal />
+          <label className="mb-1 block text-sm font-medium text-slate-700">Capability</label>
+          <AppSelect value={capabilityId ? String(capabilityId) : ''} onChange={setCapabilityId}
+            options={(caps || []).map((r) => ({ value: String(r.id), label: r.name }))}
+            placeholder="Search & select a capability…" isSearchable menuPortal />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Granular Task</label>
@@ -751,10 +761,10 @@ function RoleTaskAddModal({ open, roles, granularTasks, onClose, onSave }) {
             }))}
             placeholder="Search & select a task…" isSearchable menuPortal />
         </div>
-        {roleId && taskId && (
+        {capabilityId && taskId && (
           <div className="rounded-md border border-brand-100 bg-brand-50 px-3 py-2.5 text-xs text-brand-700">
             <strong className="font-semibold">Preview: </strong>
-            {roles.find((r) => String(r.id) === String(roleId))?.name ?? roleId}{' → '}
+            {(caps || []).find((r) => String(r.id) === String(capabilityId))?.name ?? capabilityId}{' → '}
             {granularTasks.find((t) => String(t.taskId) === String(taskId))?.taskName ?? taskId}
           </div>
         )}
@@ -763,11 +773,14 @@ function RoleTaskAddModal({ open, roles, granularTasks, onClose, onSave }) {
   )
 }
 
-function RoleTaskEditModal({ row, roles, granularTasks, onClose, onSave }) {
-  const [roleId, setRoleId]         = useState('')
-  const [taskId, setTaskId]         = useState('')
-  const [status, setStatus]         = useState('ACTIVE')
-  const [submitting, setSubmitting] = useState(false)
+function CapabilityTaskEditModal({ row, capabilities: caps, granularTasks, onClose, onSave }) {
+  // Support both old (roleId/roleName) and new (capabilityId/capabilityName) field names
+  const currentCapId = row ? (row.capabilityId || row.roleId) : ''
+
+  const [capabilityId, setCapabilityId] = useState('')
+  const [taskId, setTaskId]             = useState('')
+  const [status, setStatus]             = useState('ACTIVE')
+  const [submitting, setSubmitting]     = useState(false)
 
   const tasksByType = useMemo(() => {
     const groups = {}
@@ -780,16 +793,16 @@ function RoleTaskEditModal({ row, roles, granularTasks, onClose, onSave }) {
   }, [granularTasks])
 
   useEffect(() => {
-    if (row) { setRoleId(String(row.roleId ?? '')); setTaskId(String(row.taskId ?? '')); setStatus(row.status ?? 'ACTIVE'); setSubmitting(false) }
-  }, [row])
+    if (row) { setCapabilityId(String(currentCapId ?? '')); setTaskId(String(row.taskId ?? '')); setStatus(row.status ?? 'ACTIVE'); setSubmitting(false) }
+  }, [row, currentCapId])
 
   if (!row) return null
 
   const submit = async (e) => {
     e.preventDefault()
-    if (!roleId || !taskId) return
+    if (!capabilityId || !taskId) return
     setSubmitting(true)
-    try { await onSave(row.mappingId, roleId, taskId, status) } finally { setSubmitting(false) }
+    try { await onSave(row.mappingId, capabilityId, taskId, status) } finally { setSubmitting(false) }
   }
 
   return (
@@ -797,7 +810,7 @@ function RoleTaskEditModal({ row, roles, granularTasks, onClose, onSave }) {
       footer={
         <>
           <button onClick={onClose} className="rounded-md px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button onClick={submit} disabled={submitting || !roleId || !taskId}
+          <button onClick={submit} disabled={submitting || !capabilityId || !taskId}
             className="rounded-md bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-60">
             {submitting ? 'Saving…' : 'Save changes'}
           </button>
@@ -806,10 +819,10 @@ function RoleTaskEditModal({ row, roles, granularTasks, onClose, onSave }) {
     >
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Role</label>
-          <AppSelect value={roleId} onChange={setRoleId}
-            options={roles.map((r) => ({ value: String(r.id), label: r.name }))}
-            placeholder="Search & select a role…" isSearchable menuPortal />
+          <label className="mb-1 block text-sm font-medium text-slate-700">Capability</label>
+          <AppSelect value={capabilityId} onChange={setCapabilityId}
+            options={(caps || []).map((r) => ({ value: String(r.id), label: r.name }))}
+            placeholder="Search & select a capability…" isSearchable menuPortal />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Granular Task</label>
@@ -827,10 +840,10 @@ function RoleTaskEditModal({ row, roles, granularTasks, onClose, onSave }) {
             isClearable={false} />
           <p className="mt-1 text-xs text-slate-500">Inactive mappings are hidden from routing but not deleted.</p>
         </div>
-        {roleId && taskId && (
+        {capabilityId && taskId && (
           <div className="rounded-md border border-brand-100 bg-brand-50 px-3 py-2.5 text-xs text-brand-700">
             <strong className="font-semibold">Preview: </strong>
-            {roles.find((r) => String(r.id) === String(roleId))?.name ?? row.roleName ?? roleId}
+            {(caps || []).find((r) => String(r.id) === String(capabilityId))?.name ?? row.capabilityName ?? row.roleName ?? capabilityId}
             {' → '}
             {granularTasks.find((t) => String(t.taskId) === String(taskId))?.taskName ?? row.taskName ?? taskId}
           </div>
@@ -860,7 +873,7 @@ function ConfirmDeleteModal({ open, onClose, onConfirm, message }) {
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function TaskMappingsPage() {
-  const [activeTab, setActiveTab] = useState('role-task')
+  const [activeTab, setActiveTab] = useState('capability-task')
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -872,7 +885,7 @@ export default function TaskMappingsPage() {
         </span>
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Task Mappings</h1>
-          <p className="text-xs text-slate-500">Configure which tasks apply to roles and campaign specifications</p>
+          <p className="text-xs text-slate-500">Configure which tasks apply to capabilities and campaign specifications</p>
         </div>
       </header>
 
@@ -892,7 +905,7 @@ export default function TaskMappingsPage() {
 
       {/* Tab content */}
       <div>
-        {activeTab === 'role-task'     && <RoleTaskTab />}
+        {activeTab === 'capability-task'     && <CapabilityTaskTab />}
         {activeTab === 'campaign-task' && <CampaignTaskTab />}
       </div>
     </div>

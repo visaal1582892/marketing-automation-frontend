@@ -7,7 +7,7 @@ const campaignsApi = {
   create: (data) => api.post(BASE, data),
 
   /** List campaigns — server-side paged + filtered. */
-  list: (params = {}) => api.get(BASE, { params }),
+  list: ({ storeId, ...params } = {}) => api.get(BASE, { params: { storeId, ...params } }),
 
   /** Get full campaign detail with deliverables and work tasks. */
   getById: (id, targetTaskId) => api.get(`${BASE}/${id}`, { params: { targetTaskId } }),
@@ -80,7 +80,7 @@ const campaignsApi = {
    * just to find approved deliverables.
    */
   /** Completed tasks — server-side paged + filtered. */
-  completedTasks: (params = {}) => api.get(`${BASE}/completed-tasks`, { params }),
+  completedTasks: ({ storeId, ...params } = {}) => api.get(`${BASE}/completed-tasks`, { params: { storeId, ...params } }),
 
   /**
    * Toggles a bookmark for the caller on the given campaign.
