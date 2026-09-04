@@ -533,7 +533,7 @@ export default function CampaignFormComponent({
     departmentId:           initialData.departmentId || '',
     businessObjective:      '',
     businessObjectiveOther: '',
-    storeId:                initialData.storeId       || '',
+    customStoreIds:         initialData.customStoreIds || '',
     contactNumber:          initialData.contactNumber || '',
     taskTypeId:             [],
     audienceTypeIds:        [],
@@ -580,9 +580,14 @@ export default function CampaignFormComponent({
 
   // Stores
   const [stores, setStores] = useState(() => {
-    if (Array.isArray(initialData.stores) && initialData.stores.length > 0) return initialData.stores
-    if (initialData.storeId) return initialData.storeId.split(',').map(id => ({ storeId: id.trim(), name: id.trim(), pinCode: '' }))
-    return []
+    let list = []
+    if (Array.isArray(initialData.stores) && initialData.stores.length > 0) {
+      list = [...initialData.stores]
+    }
+    if (initialData.customStoreIds) {
+      list.push({ id: 'OTHER_CUSTOM_OPTION', storeId: 'OTHER_CUSTOM_OPTION', name: 'Other (Not Listed)' })
+    }
+    return list
   })
 
   // Existing files
@@ -935,9 +940,12 @@ export default function CampaignFormComponent({
       }
     })
 
+    const isOtherSelected = stores.some(s => (s.storeId || s.id) === 'OTHER_CUSTOM_OPTION')
+    const payloadStores = stores.filter(s => (s.storeId || s.id) !== 'OTHER_CUSTOM_OPTION')
+
     const payload = {
       departmentId:       form.departmentId || null,
-      storeId:            form.storeId?.trim()       || null,
+      customStoreIds:     isOtherSelected ? form.customStoreIds?.trim() || null : null,
       contactNumber:      form.contactNumber?.trim() || null,
       businessObjective:  resolve(form.businessObjective, form.businessObjectiveOther),
       audienceTypeId:     resolveArr(form.audienceTypeIds, form.audienceTypeOther),
@@ -957,7 +965,7 @@ export default function CampaignFormComponent({
       selectedCountryCodes:  targetLocations.countryCodes || [],
       selectedStateCodes:    targetLocations.stateCodes || [],
       selectedCityCodes:     targetLocations.cityCodes || [],
-      stores:             stores,
+      stores:             payloadStores,
       newTaskSpecs:       newTaskSpecs.length > 0 ? newTaskSpecs : undefined,
       taskSpecs:          newTaskSpecs.length > 0 ? newTaskSpecs : undefined,
       newFileUrls:          newFiles.filter(f => f.url).map(f => f.url),
@@ -1084,6 +1092,18 @@ export default function CampaignFormComponent({
                       onChange={setStores}
                       hasError={!!errors.stores}
                     />
+                    {stores.some(s => (s.storeId || s.id) === 'OTHER_CUSTOM_OPTION') && (
+                      <div className="mt-2">
+                        <FieldLabel>Custom / Unlisted Stores</FieldLabel>
+                        <textarea
+                          rows={2}
+                          className={`${inputCls} resize-none`}
+                          value={form.customStoreIds}
+                          onChange={e => setField('customStoreIds', e.target.value)}
+                          placeholder="Enter custom store IDs or locations (comma or newline separated)…"
+                        />
+                      </div>
+                    )}
                   </div>
                   <div>
                     <FieldLabel required>Contact Number</FieldLabel>

@@ -135,32 +135,49 @@ export default function PosStoreMultiSelect({
   }, [debouncedQuery, minQueryLength])
 
   const toggleStore = useCallback((store) => {
-    const isSelected = selectedStores.some(item => item.storeId === store.storeId)
+    const targetId = store.storeId || store.id
+    const isSelected = selectedStores.some(item => (item.storeId || item.id) === targetId)
     if (isSelected) {
-      onChange?.(selectedStores.filter(item => item.storeId !== store.storeId))
+      onChange?.(selectedStores.filter(item => (item.storeId || item.id) !== targetId))
     } else {
       onChange?.([...selectedStores, store])
     }
   }, [onChange, selectedStores])
 
   const removeStore = useCallback((storeId) => {
-    onChange?.(selectedStores.filter(item => item.storeId !== storeId))
+    onChange?.(selectedStores.filter(item => (item.storeId || item.id) !== storeId))
   }, [onChange, selectedStores])
 
-  const selectedItemsForTrigger = selectedStores.map(s => ({
-    id: s.storeId,
-    name: `${s.storeId} - ${s.pinCode || 'N/A'}`
-  }))
+  const selectedItemsForTrigger = selectedStores.map(s => {
+    const sid = s.storeId || s.id
+    if (sid === 'OTHER_CUSTOM_OPTION') {
+      return { id: sid, name: 'Other (Not Listed)' }
+    }
+    return { id: sid, name: `${sid}${s.pinCode ? ` - ${s.pinCode}` : ''}` }
+  })
+
+  const OTHER_OPTION = useMemo(() => ({
+    storeId: 'OTHER_CUSTOM_OPTION',
+    id: 'OTHER_CUSTOM_OPTION',
+    name: 'Other (Not Listed)',
+    pinCode: '',
+  }), [])
 
   const displayOptions = useMemo(() => {
-    return [...options].sort((a, b) => {
-      const aSelected = selectedStores.some(item => item.storeId === a.storeId)
-      const bSelected = selectedStores.some(item => item.storeId === b.storeId)
-      if (aSelected && !bSelected) return -1
-      if (!aSelected && bSelected) return 1
-      return 0
-    })
-  }, [options, selectedStores])
+    let baseList = []
+    if (!debouncedQuery) {
+      baseList = selectedStores.filter(s => (s.storeId || s.id) !== 'OTHER_CUSTOM_OPTION')
+    } else {
+      baseList = [...options].sort((a, b) => {
+        const aSelected = selectedStores.some(item => (item.storeId || item.id) === (a.storeId || a.id))
+        const bSelected = selectedStores.some(item => (item.storeId || item.id) === (b.storeId || b.id))
+        if (aSelected && !bSelected) return -1
+        if (!aSelected && bSelected) return 1
+        return 0
+      })
+    }
+    return [...baseList, OTHER_OPTION]
+  }, [options, selectedStores, debouncedQuery, OTHER_OPTION])
 
   const portalContent = dropdownOpen && coords ? createPortal(
     <div
@@ -205,17 +222,15 @@ export default function PosStoreMultiSelect({
         <div className="relative cursor-default select-none px-4 py-2 text-slate-500">
           Searching...
         </div>
-      ) : displayOptions.length === 0 && debouncedQuery.length >= minQueryLength ? (
-        <div className="relative cursor-default select-none px-4 py-2 text-slate-500">
-          No stores found.
-        </div>
       ) : (
         displayOptions.map((store) => {
-          const isSelected = selectedStores.some(item => item.storeId === store.storeId)
+          const sid = store.storeId || store.id
+          const isSelected = selectedStores.some(item => (item.storeId || item.id) === sid)
+          const isOther = sid === 'OTHER_CUSTOM_OPTION'
           return (
             <div
-              key={store.storeId}
-              className={`relative flex cursor-pointer select-none items-center gap-2.5 px-3 py-2 transition-colors hover:bg-brand-50 ${isSelected ? 'bg-brand-50' : ''}`}
+              key={sid}
+              className={`relative flex cursor-pointer select-none items-center gap-2.5 px-3 py-2 transition-colors hover:bg-brand-50 ${isSelected ? 'bg-brand-50' : ''} ${isOther ? 'border-t border-slate-100 font-medium text-brand-600' : ''}`}
               onClick={() => toggleStore(store)}
             >
               <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${isSelected ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white'}`}>
@@ -226,12 +241,14 @@ export default function PosStoreMultiSelect({
                 )}
               </div>
               <div className="flex flex-col">
-                <span className={`block truncate ${isSelected ? 'font-medium text-brand-800' : 'font-normal text-slate-700'}`}>
-                  {store.storeId} - {store.pinCode || 'N/A'}
+                <span className={`block truncate ${isSelected ? 'font-medium text-brand-800' : isOther ? 'font-medium text-brand-700' : 'font-normal text-slate-700'}`}>
+                  {isOther ? 'Other (Not Listed)' : `${store.storeId || store.id}${store.pinCode ? ` - ${store.pinCode}` : ''}`}
                 </span>
-                <span className="block truncate text-xs text-slate-500 mt-0.5">
-                  {store.name}
-                </span>
+                {store.name && !isOther && (
+                  <span className="block truncate text-xs text-slate-500 mt-0.5">
+                    {store.name}
+                  </span>
+                )}
               </div>
             </div>
           )

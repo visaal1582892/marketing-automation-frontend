@@ -284,12 +284,12 @@ export default function CampaignDetailPage() {
                 {fmtTargetLocation(c.targetLocation)}
               </span>
             )}
-            {c.storeId && (
+            {(c.customStoreIds || c.storeId) && (
               <span className="text-xs text-white/60">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
-                  Store ID
+                  Custom Stores
                 </span>
-                {c.storeId}
+                {c.customStoreIds || c.storeId}
               </span>
             )}
             {c.contactNumber && (
@@ -327,7 +327,7 @@ export default function CampaignDetailPage() {
       {/* ── 3-col info sections ── */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <BriefCard title="Campaign Overview" icon="fileText" accent="blue">
-          {c.storeId       && <DetailRow label="Store ID"       value={c.storeId} />}
+          {(c.customStoreIds || c.storeId) && <DetailRow label="Custom Stores" value={c.customStoreIds || c.storeId} />}
           {c.contactNumber && <DetailRow label="Contact Number" value={c.contactNumber} />}
           <DetailRow label="Audience Type"    value={fmtMultiValue(c.audienceName || c.audienceTypeId)} />
           <DetailRow label="Language"         value={fmtMultiValue(c.language)} />

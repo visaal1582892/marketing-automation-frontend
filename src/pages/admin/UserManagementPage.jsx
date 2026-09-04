@@ -53,8 +53,8 @@ function UserFormModal({ open, onClose, initial, roles, capabilities, department
   const [form, setForm] = useState(blank)
   const [saving, setSaving] = useState(false)
   const [marketingUsers, setMarketingUsers] = useState([])
-  const isTeamLeader = form.roleIds.includes('TEAM_LEADER')
-  const hasAssignee = form.roleIds.includes('ASSIGNEE')
+  const isTeamLeader = form.roleIds.some(id => roles.find(r => r.id === id)?.name === 'TEAM_LEADER' || roles.find(r => r.id === id)?.name === 'Team Leader');
+  const hasAssignee = form.roleIds.some(id => roles.find(r => r.id === id)?.name === 'ASSIGNEE' || roles.find(r => r.id === id)?.name === 'Assignee');
 
   // Fetch users for Team Members dropdown
   useEffect(() => {
@@ -76,7 +76,7 @@ function UserFormModal({ open, onClose, initial, roles, capabilities, department
         email:         initial.email         || '',
         departmentId:  initial.departmentId  || '',
         designationId: initial.designationId || '',
-        roleIds:       initial.roleIds       || [],
+        roleIds:       initial.roles ? initial.roles.map(r => r.id) : [],
         capabilityIds: initial.capabilityIds || [],
         teamMemberIds: initial.teamMemberIds || [],
         skillLevel:    initial.skillLevel    || 'JUNIOR',
@@ -242,7 +242,7 @@ function UserFormModal({ open, onClose, initial, roles, capabilities, department
             <MultiSelectDropdown
               options={marketingUsers
                 .filter(u => u.userId !== initial?.userId)
-                .filter(u => u.roleIds && u.roleIds.some(r => r !== 'MANAGER' && r !== 'TEAM_LEADER'))
+                .filter(u => u.roles && u.roles.some(r => r.roleCode !== 'MANAGER' && r.roleCode !== 'TEAM_LEADER'))
                 .map(u => ({ id: u.userId, name: `${u.fullName} (${u.designationName || 'No Designation'})` }))}
               value={form.teamMemberIds}
               onChange={ids => set('teamMemberIds', ids)}
@@ -384,7 +384,7 @@ export default function UserManagementPage() {
       masterApi.list('designations', false),
     ]).then(([rRes, capRes, dRes, dsgRes]) => {
       if (rRes.status === 'fulfilled')
-        setRoles(rRes.value.map(x => ({ id: x.id, name: x.name })))
+        setRoles(rRes.value.map(x => ({ id: parseInt(x.id, 10), name: x.name })))
       else
         toast.error('Failed to load roles.')
 
@@ -706,7 +706,7 @@ const UserRow = memo(function UserRow({ user: u, onEdit, onDelete, onReset }) {
       <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{u.fullName}</td>
       <td className="px-3 py-2.5 text-slate-500 text-xs">{u.email}</td>
       <td className="px-3 py-2.5">
-        <RolePillList roleNames={u.roleNames ?? []} />
+        <RolePillList roleNames={u.roles ? u.roles.map(r => r.roleName) : []} />
       </td>
       <td className="px-3 py-2.5">
         <CapabilityPillList capabilityNames={u.capabilityNames ?? []} />

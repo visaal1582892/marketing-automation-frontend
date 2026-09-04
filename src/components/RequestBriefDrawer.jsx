@@ -349,12 +349,12 @@ export default function RequestBriefDrawer({
                         </span>
                       )
                     })()}
-                    {c.storeId && (!c.stores || c.stores.length === 0) && (
+                    {(c.customStoreIds || c.storeId) && (!c.stores || c.stores.length === 0) && (
                       <span className="text-xs text-white/60">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 mr-2">
-                          Store ID
+                          Store ID / Other
                         </span>
-                        {c.storeId}
+                        {c.customStoreIds || c.storeId}
                       </span>
                     )}
                     {c.stores && c.stores.length > 0 && (
@@ -401,9 +401,9 @@ export default function RequestBriefDrawer({
               <ApprovalTrail c={c} />
 
               {/* ── Stores (full-width) ── */}
-              {(c.stores?.length > 0 || c.storeId) && (
+              {(c.stores?.length > 0 || c.customStoreIds || c.storeId) && (
                 <BriefCard title="Stores" icon="mapPin" accent="brand">
-                  <CampaignStoresBrief stores={c.stores} legacyStoreId={c.storeId} />
+                  <CampaignStoresBrief stores={c.stores} legacyStoreId={c.customStoreIds || c.storeId} />
                 </BriefCard>
               )}
 
