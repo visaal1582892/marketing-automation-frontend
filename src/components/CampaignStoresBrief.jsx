@@ -1,14 +1,22 @@
 import React, { useState, useMemo } from 'react'
 import Pagination from './Pagination'
 
-export default function CampaignStoresBrief({ stores, legacyStoreId }) {
+export default function CampaignStoresBrief({ stores, legacyStoreId, customStoreIds }) {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const pageSize = 10
 
-  if (!stores || stores.length === 0) {
-    if (!legacyStoreId) return <span className="text-slate-400 italic">None</span>
-    return <span>{legacyStoreId}</span>
+  const hasPosStores = Array.isArray(stores) && stores.length > 0
+  const customText = customStoreIds || (!hasPosStores ? legacyStoreId : null)
+
+  if (!hasPosStores) {
+    if (!customText) return <span className="text-slate-400 italic">None</span>
+    return (
+      <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+        <span className="block font-semibold text-xs text-slate-500 uppercase tracking-wide mb-1">Custom / Unlisted Stores</span>
+        <span className="whitespace-pre-wrap">{customText}</span>
+      </div>
+    )
   }
 
   const filteredStores = useMemo(() => {
@@ -74,6 +82,14 @@ export default function CampaignStoresBrief({ stores, legacyStoreId }) {
             pageSize={pageSize}
             onPageChange={setPage}
           />
+        </div>
+      )}
+
+      {/* Render Custom Store IDs below the stores table */}
+      {customText && (
+        <div className="bg-amber-50/60 border-t border-amber-200/80 px-3.5 py-2.5 text-xs text-amber-900 flex items-start gap-2">
+          <span className="font-semibold text-amber-800 shrink-0">Custom / Unlisted Stores:</span>
+          <span className="whitespace-pre-wrap">{customText}</span>
         </div>
       )}
     </div>

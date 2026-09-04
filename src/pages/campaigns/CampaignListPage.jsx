@@ -140,7 +140,7 @@ const CampaignRow = memo(function CampaignRow({
         </div>
       </td>
       <td className={requestorCellCls}>
-        {c.storeId ? <StoreIdDisplay storeId={c.storeId} /> : <span className="text-slate-300 italic text-xs">None</span>}
+        <StoreIdDisplay storeId={c.storeId} customStoreIds={c.customStoreIds} stores={c.stores} />
       </td>
       <td className={requestorCellCls}><PriorityBadge priority={c.priority} /></td>
       <td className={requestorCellCls}>

@@ -403,7 +403,7 @@ export default function RequestBriefDrawer({
               {/* ── Stores (full-width) ── */}
               {(c.stores?.length > 0 || c.customStoreIds || c.storeId) && (
                 <BriefCard title="Stores" icon="mapPin" accent="brand">
-                  <CampaignStoresBrief stores={c.stores} legacyStoreId={c.customStoreIds || c.storeId} />
+                  <CampaignStoresBrief stores={c.stores} legacyStoreId={c.storeId} customStoreIds={c.customStoreIds} />
                 </BriefCard>
               )}
 

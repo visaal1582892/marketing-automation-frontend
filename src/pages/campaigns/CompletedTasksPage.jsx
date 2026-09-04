@@ -296,7 +296,7 @@ const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, canAddFollowu
         </span>
       </td>
       <td className={completedCellCls}>
-        {t.storeId ? <StoreIdDisplay storeId={t.storeId} /> : <span className="text-slate-300 italic text-xs">None</span>}
+        <StoreIdDisplay storeId={t.storeId} customStoreIds={t.customStoreIds} />
       </td>
       <td className={completedCellCls}>
         <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">

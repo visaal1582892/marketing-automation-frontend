@@ -834,9 +834,7 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
       </td>
 
       <td className={`${cellCls} text-xs text-slate-600`}>
-        {t.storeId
-          ? <StoreIdDisplay storeId={t.storeId} className="block font-medium text-slate-700" />
-          : <span className="text-slate-300 italic text-xs">None</span>}
+        <StoreIdDisplay storeId={t.storeId} customStoreIds={t.customStoreIds} className="block font-medium text-slate-700" />
       </td>
 
       <td className={`${cellCls} text-slate-600`}>
