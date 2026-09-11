@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useToast } from './Toast'
-import { masterApi, granularTasksApi } from '../api/masterData'
+import { masterApi, granularTasksApi, eventCategoryApi, eventCampaignTaskApi } from '../api/masterData'
 import tasksApi from '../api/tasks'
 import api from '../api/client'
 import Icon from './Icon'
@@ -27,14 +27,14 @@ function friendlyFileName(url, index) {
 
 function parseOpts(raw) {
   if (!raw) return []
-  try { const p = JSON.parse(raw); if (Array.isArray(p)) return p } catch {}
+  try { const p = JSON.parse(raw); if (Array.isArray(p)) return p } catch { }
   return String(raw).split(',').map(s => s.trim()).filter(Boolean)
 }
 
 function parseJsonArr(s) {
   if (!s) return []
   if (Array.isArray(s)) return s.map(String)
-  try { const p = JSON.parse(s); if (Array.isArray(p)) return p.map(String) } catch {}
+  try { const p = JSON.parse(s); if (Array.isArray(p)) return p.map(String) } catch { }
   return []
 }
 
@@ -110,8 +110,8 @@ function NewTaskFileUpload({ taskId, stagedFiles = [], onFilesAdd, onFileRemove 
               ${f.error ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
               {f.uploading ? (
                 <svg className="h-3.5 w-3.5 shrink-0 animate-spin text-brand-400" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
               ) : f.error ? (
                 <Icon name="alertCircle" className="h-3.5 w-3.5 shrink-0 text-red-400" />
@@ -152,7 +152,7 @@ function TaskFilesPanel({ workTask, campaign, onChanged, markedUrls = [], onTogg
 
   const savedFiles = workTask.fileUrls || []
   const savedNames = workTask.fileOriginalNames || []
-  const markedSet  = new Set(markedUrls)
+  const markedSet = new Set(markedUrls)
   const markedCount = markedUrls.length
 
   const uploadOne = async (file) => {
@@ -276,8 +276,8 @@ function TaskFilesPanel({ workTask, campaign, onChanged, markedUrls = [], onTogg
               ${p.error ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
               {p.uploading ? (
                 <svg className="h-3.5 w-3.5 animate-spin text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
               ) : (
                 <Icon name="alertCircle" className="h-3.5 w-3.5 text-red-400 shrink-0" />
@@ -349,10 +349,10 @@ function TaskQuestion({ q, answer, onChange, readOnly = false }) {
       <label className="block text-xs font-medium text-slate-700 mb-1.5">
         {q.questionText}{req && <span className="text-red-400 ml-0.5">*</span>}
       </label>
-      {q.fieldType === 'TEXT'     && <input type="text"   value={answer ?? ''} onChange={e => onChange(e.target.value)} className={cls} placeholder="Your answer…" />}
-      {q.fieldType === 'NUMBER'   && <input type="number" value={answer ?? ''} onChange={e => onChange(e.target.value)} className={cls} placeholder="0" />}
+      {q.fieldType === 'TEXT' && <input type="text" value={answer ?? ''} onChange={e => onChange(e.target.value)} className={cls} placeholder="Your answer…" />}
+      {q.fieldType === 'NUMBER' && <input type="number" value={answer ?? ''} onChange={e => onChange(e.target.value)} className={cls} placeholder="0" />}
       {q.fieldType === 'TEXTAREA' && <textarea rows={3} value={answer ?? ''} onChange={e => onChange(e.target.value)} className={`${cls} resize-none`} placeholder="Your answer…" />}
-      {q.fieldType === 'DATE'     && <input type="date"   value={answer ?? ''} onChange={e => onChange(e.target.value)} className={cls} />}
+      {q.fieldType === 'DATE' && <input type="date" value={answer ?? ''} onChange={e => onChange(e.target.value)} className={cls} />}
       {q.fieldType === 'DROPDOWN' && (
         <AppSelect value={answer ?? ''} onChange={onChange} options={parseOpts(q.options)} placeholder="Select…" />
       )}
@@ -397,12 +397,12 @@ function AutoFocusInput({ className, value, onChange, placeholder }) {
 
 function SectionCard({ id, title, icon, children, accent = 'brand' }) {
   const colors = {
-    brand:   'border-l-brand-500 bg-brand-50/30',
-    violet:  'border-l-violet-400 bg-violet-50/30',
-    amber:   'border-l-amber-400 bg-amber-50/20',
+    brand: 'border-l-brand-500 bg-brand-50/30',
+    violet: 'border-l-violet-400 bg-violet-50/30',
+    amber: 'border-l-amber-400 bg-amber-50/20',
     emerald: 'border-l-emerald-400 bg-emerald-50/20',
-    sky:     'border-l-sky-400 bg-sky-50/20',
-    rose:    'border-l-rose-400 bg-rose-50/20',
+    sky: 'border-l-sky-400 bg-sky-50/20',
+    rose: 'border-l-rose-400 bg-rose-50/20',
   }
   return (
     <section id={id} className={`rounded-xl border border-slate-200 border-l-4 ${colors[accent]}`}>
@@ -461,20 +461,23 @@ export default function CampaignFormComponent({
   const contentRef = useRef(null)
 
   // Master data
-  const [depts,      setDepts]      = useState([])
-  const [taskTypes,  setTaskTypes]  = useState([])
-  const [audiences,  setAudiences]  = useState([])
-  const [bizObjs,    setBizObjs]    = useState([])
-  const [languages,  setLanguages]  = useState([])
-  const [tones,      setTones]      = useState([])
+  const [depts, setDepts] = useState([])
+  const [taskTypes, setTaskTypes] = useState([])
+  const [audiences, setAudiences] = useState([])
+  const [bizObjs, setBizObjs] = useState([])
+  const [languages, setLanguages] = useState([])
+  const [tones, setTones] = useState([])
   const [offerTypes, setOfferTypes] = useState([])
-  const [spTypes,    setSpTypes]    = useState([])
-  const [budgets,    setBudgets]    = useState([])
-  const [vendorTs,   setVendorTs]   = useState([])
-  const [kpis,       setKpis]       = useState([])
-  const [outputs,    setOutputs]    = useState([])
+  const [spTypes, setSpTypes] = useState([])
+  const [budgets, setBudgets] = useState([])
+  const [vendorTs, setVendorTs] = useState([])
+  const [kpis, setKpis] = useState([])
+  const [outputs, setOutputs] = useState([])
   const [availableTasks, setAvailableTasks] = useState([])
-  const [loadingMaster, setLoadingMaster]   = useState(true)
+  const [businessVerticals, setBusinessVerticals] = useState([])
+  const [filteredEventCategories, setFilteredEventCategories] = useState([])
+  const [loadingMaster, setLoadingMaster] = useState(true)
+  const [mappedTaskTypeIds, setMappedTaskTypeIds] = useState(null)
 
   // New / Added task selections
   const [newTaskSelections, setNewTaskSelections] = useState(() => {
@@ -505,19 +508,19 @@ export default function CampaignFormComponent({
     return map
   })
 
-  const [taskQuestions,   setTaskQuestions]   = useState({})
-  const [loadingQs,       setLoadingQs]       = useState({})
+  const [taskQuestions, setTaskQuestions] = useState({})
+  const [loadingQs, setLoadingQs] = useState({})
 
   // Existing task question editing (for Edit mode existing DB tasks)
-  const [expandedTask,    setExpandedTask]    = useState(null)
-  const [existingTaskQs,  setExistingTaskQs]  = useState({})
+  const [expandedTask, setExpandedTask] = useState(null)
+  const [existingTaskQs, setExistingTaskQs] = useState({})
   const [existingTaskAns, setExistingTaskAns] = useState({})
-  const [loadingExistQs,  setLoadingExistQs]  = useState({})
+  const [loadingExistQs, setLoadingExistQs] = useState({})
 
   // Files
-  const [newFiles,       setNewFiles]       = useState([])
+  const [newFiles, setNewFiles] = useState([])
   const [uploadingFiles, setUploadingFiles] = useState(false)
-  const [dragOver,       setDragOver]       = useState(false)
+  const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef(null)
 
   // Task deletion state
@@ -530,34 +533,36 @@ export default function CampaignFormComponent({
 
   // Form state
   const [form, setForm] = useState({
-    departmentId:           initialData.departmentId || '',
-    businessObjective:      '',
+    businessVerticalId: initialData.businessVerticalId || '',
+    eventCategoryId: initialData.eventCategoryId ? String(initialData.eventCategoryId) : '',
+    departmentId: initialData.departmentId || '',
+    businessObjective: '',
     businessObjectiveOther: '',
-    customStoreIds:         initialData.customStoreIds || '',
-    contactNumber:          initialData.contactNumber || '',
-    taskTypeId:             [],
-    audienceTypeIds:        [],
-    audienceTypeOther:      '',
-    languages:              [],
-    languageOther:          '',
-    hasOffer:               initialData.hasOffer || 'NO',
-    offerTypeId:            '',
-    offerTypeOther:         '',
-    keyMessage:             initialData.keyMessage || '',
-    supportingProof:        '',
-    supportingProofOther:   '',
-    tones:                  [],
-    toneOther:              '',
-    priority:               initialData.priority || 'MEDIUM',
-    budgetTier:             '',
-    budgetTierOther:        '',
-    vendorRequired:         initialData.vendorRequired || 'NO',
-    vendorTypeIds:          [],
-    vendorTypeOther:        '',
-    kpiType:                '',
-    kpiTypeOther:           '',
-    expectedOutput:         '',
-    expectedOutputOther:    '',
+    customStoreIds: initialData.customStoreIds || '',
+    contactNumber: initialData.contactNumber || '',
+    taskTypeId: [],
+    audienceTypeIds: [],
+    audienceTypeOther: '',
+    languages: [],
+    languageOther: '',
+    hasOffer: initialData.hasOffer || 'NO',
+    offerTypeId: '',
+    offerTypeOther: '',
+    keyMessage: initialData.keyMessage || '',
+    supportingProof: '',
+    supportingProofOther: '',
+    tones: [],
+    toneOther: '',
+    priority: initialData.priority || 'MEDIUM',
+    budgetTier: '',
+    budgetTierOther: '',
+    vendorRequired: initialData.vendorRequired || 'NO',
+    vendorTypeIds: [],
+    vendorTypeOther: '',
+    kpiType: '',
+    kpiTypeOther: '',
+    expectedOutput: '',
+    expectedOutputOther: '',
   })
 
   // Target Locations
@@ -565,14 +570,14 @@ export default function CampaignFormComponent({
     if (initialData.selectedCountryCodes || initialData.selectedStateCodes || initialData.selectedCityCodes) {
       return {
         countryCodes: (initialData.selectedCountryCodes || []).map(String),
-        stateCodes:   (initialData.selectedStateCodes || []).map(String),
-        cityCodes:    (initialData.selectedCityCodes || []).map(String)
+        stateCodes: (initialData.selectedStateCodes || []).map(String),
+        cityCodes: (initialData.selectedCityCodes || []).map(String)
       }
     }
     if (Array.isArray(initialData.locations) && initialData.locations.length > 0) {
       const countryCodes = [...new Set(initialData.locations.map(l => l.countryCode).filter(Boolean))].map(String)
-      const stateCodes   = [...new Set(initialData.locations.map(l => l.stateCode || l.stateSubName).filter(Boolean))].map(String)
-      const cityCodes    = initialData.locations.filter(l => l.locationType === 'CITY').map(l => l.cityCode || l.citySubName).filter(Boolean).map(String)
+      const stateCodes = [...new Set(initialData.locations.map(l => l.stateCode || l.stateSubName).filter(Boolean))].map(String)
+      const cityCodes = initialData.locations.filter(l => l.locationType === 'CITY').map(l => l.cityCode || l.citySubName).filter(Boolean).map(String)
       return { countryCodes, stateCodes, cityCodes }
     }
     return { countryCodes: [], stateCodes: [], cityCodes: [] }
@@ -610,6 +615,7 @@ export default function CampaignFormComponent({
     const nb = setter => d => setter([...d.map(i => ({ value: i.id, label: i.name })), OTHER_OPT])
     Promise.all([
       masterApi.list('departments').then(d => setDepts(d.map(i => ({ value: i.id, label: i.name })))),
+      masterApi.list('business-verticals').then(d => setBusinessVerticals(d.map(i => ({ value: String(i.id), label: i.name })))),
       masterApi.list('task-types').then(d => setTaskTypes(d.map(i => ({ value: i.id, label: i.name, subtitle: i.taskTypeName })))),
       masterApi.list('audiences').then(nb(setAudiences)),
       masterApi.list('business-objectives').then(nb(setBizObjs)),
@@ -622,8 +628,45 @@ export default function CampaignFormComponent({
       masterApi.list('kpi-types').then(nb(setKpis)),
       masterApi.list('expected-outputs').then(nb(setOutputs)),
       masterApi.list('granular-tasks').then(d => setAvailableTasks(d)),
-    ]).catch(() => {}).finally(() => setLoadingMaster(false))
+    ]).catch(() => { }).finally(() => setLoadingMaster(false))
   }, [])
+
+  // Cascading fetch for Event Categories when Business Vertical changes
+  useEffect(() => {
+    if (form.businessVerticalId) {
+      eventCategoryApi.getByVertical(form.businessVerticalId)
+        .then(cats => setFilteredEventCategories(cats.map(c => ({ value: String(c.id), label: c.name }))))
+        .catch(() => setFilteredEventCategories([]))
+    } else {
+      setFilteredEventCategories([])
+    }
+  }, [form.businessVerticalId])
+
+  // Fetch mapped task types when Vertical and Event Category are selected
+  useEffect(() => {
+    if (form.eventCategoryId && form.businessVerticalId) {
+      eventCampaignTaskApi.getTasks(form.eventCategoryId, form.businessVerticalId)
+        .then(d => {
+          const mapped = d || []
+          setMappedTaskTypeIds(mapped)
+        })
+        .catch(() => {
+          setMappedTaskTypeIds([])
+        })
+    } else {
+      setMappedTaskTypeIds(null)
+    }
+    setField('taskTypeId', [])
+  }, [form.eventCategoryId, form.businessVerticalId])
+
+  // Strict UX State Resets
+  const handleBusinessVerticalChange = (bvId) => {
+    setForm(prev => ({ ...prev, businessVerticalId: bvId, eventCategoryId: '' }))
+  }
+
+  const handleEventCategoryChange = (ecId) => {
+    setForm(prev => ({ ...prev, eventCategoryId: ecId }))
+  }
 
   // Resolve Master Option selections
   useEffect(() => {
@@ -644,30 +687,30 @@ export default function CampaignFormComponent({
       return { selected: [...knownIds, ...(otherText ? ['Other'] : [])], other: otherText }
     }
 
-    const biz = resolveId(bizObjs,    initialData.businessObjectiveId || initialData.businessObjective)
+    const biz = resolveId(bizObjs, initialData.businessObjectiveId || initialData.businessObjective)
     const off = resolveId(offerTypes, initialData.offerTypeId || initialData.offerType)
-    const sp  = resolveId(spTypes,    initialData.supportingProofId || initialData.supportingProof)
-    const bgt = resolveId(budgets,    initialData.budgetTierId || initialData.budgetTier)
-    const kpi = resolveId(kpis,       initialData.kpiTypeId || initialData.kpiType)
-    const exp = resolveId(outputs,    initialData.expectedOutputId || initialData.expectedOutput)
+    const sp = resolveId(spTypes, initialData.supportingProofId || initialData.supportingProof)
+    const bgt = resolveId(budgets, initialData.budgetTierId || initialData.budgetTier)
+    const kpi = resolveId(kpis, initialData.kpiTypeId || initialData.kpiType)
+    const exp = resolveId(outputs, initialData.expectedOutputId || initialData.expectedOutput)
 
     const aud = resolveIdArr(audiences, initialData.audienceTypeId || initialData.audience)
     const lng = resolveIdArr(languages, initialData.languageIds || initialData.language)
-    const ton = resolveIdArr(tones,     initialData.toneIds || initialData.tone)
-    const vnd = resolveIdArr(vendorTs,  initialData.vendorTypeIds || initialData.vendorType)
+    const ton = resolveIdArr(tones, initialData.toneIds || initialData.tone)
+    const vnd = resolveIdArr(vendorTs, initialData.vendorTypeIds || initialData.vendorType)
 
     setForm(prev => ({
       ...prev,
       businessObjective: biz.selected, businessObjectiveOther: biz.other,
-      offerTypeId:       off.selected, offerTypeOther:         off.other,
-      supportingProof:   sp.selected,  supportingProofOther:   sp.other,
-      budgetTier:        bgt.selected, budgetTierOther:        bgt.other,
-      kpiType:           kpi.selected, kpiTypeOther:           kpi.other,
-      expectedOutput:    exp.selected, expectedOutputOther:    exp.other,
-      audienceTypeIds:   aud.selected, audienceTypeOther:      aud.other,
-      languages:         lng.selected, languageOther:          lng.other,
-      tones:             ton.selected, toneOther:              ton.other,
-      vendorTypeIds:     vnd.selected, vendorTypeOther:        vnd.other,
+      offerTypeId: off.selected, offerTypeOther: off.other,
+      supportingProof: sp.selected, supportingProofOther: sp.other,
+      budgetTier: bgt.selected, budgetTierOther: bgt.other,
+      kpiType: kpi.selected, kpiTypeOther: kpi.other,
+      expectedOutput: exp.selected, expectedOutputOther: exp.other,
+      audienceTypeIds: aud.selected, audienceTypeOther: aud.other,
+      languages: lng.selected, languageOther: lng.other,
+      tones: ton.selected, toneOther: ton.other,
+      vendorTypeIds: vnd.selected, vendorTypeOther: vnd.other,
     }))
   }, [loadingMaster, initialData])
 
@@ -694,7 +737,7 @@ export default function CampaignFormComponent({
     return () => document.removeEventListener('mousedown', h)
   }, [])
 
-  const setField    = (name, value) => setForm(prev => ({ ...prev, [name]: value }))
+  const setField = (name, value) => setForm(prev => ({ ...prev, [name]: value }))
 
   // Task helpers
   const toggleNewTask = (taskId) => {
@@ -753,7 +796,7 @@ export default function CampaignFormComponent({
               answerMap[a.questionId] = a.answerValue ?? a.answer ?? ''
             }
             setExistingTaskAns(prev => ({ ...prev, [taskId]: answerMap }))
-          } catch {}
+          } catch { }
         }
       } catch {
         setExistingTaskQs(prev => ({ ...prev, [granularTaskId]: [] }))
@@ -840,6 +883,8 @@ export default function CampaignFormComponent({
   const handleSave = async () => {
     const newErrs = {}
 
+    if (!form.businessVerticalId) newErrs.businessVerticalId = 'Business Vertical is required'
+    if (!form.eventCategoryId) newErrs.eventCategoryId = 'Event Category is required'
     if (!form.departmentId) newErrs.departmentId = 'Department is required'
     if (!form.businessObjective) newErrs.businessObjective = 'Business Objective is required'
     if ((targetLocations.countryCodes || []).length === 0 && (targetLocations.stateCodes || []).length === 0 && (targetLocations.cityCodes || []).length === 0) {
@@ -871,7 +916,7 @@ export default function CampaignFormComponent({
     }
 
     for (const taskId of Object.keys(newTaskSelections)) {
-      const qs  = taskQuestions[taskId] || []
+      const qs = taskQuestions[taskId] || []
       const ans = newTaskSelections[taskId]?.questionnaire || {}
       for (const q of qs) {
         if (!(q.required ?? q.isRequired)) continue
@@ -893,6 +938,8 @@ export default function CampaignFormComponent({
 
       const firstErrKey = Object.keys(newErrs)[0]
       const sectionMap = {
+        businessVerticalId: 'campaign-info',
+        eventCategoryId: 'campaign-info',
         departmentId: 'campaign-info',
         businessObjective: 'campaign-info',
         targetLocations: 'campaign-info',
@@ -918,7 +965,7 @@ export default function CampaignFormComponent({
       return
     }
 
-    const resolve    = (val, other) => val === 'Other' ? (other?.trim() || null) : (val || null)
+    const resolve = (val, other) => val === 'Other' ? (other?.trim() || null) : (val || null)
     const resolveArr = (arr, other) => {
       const r = (arr || []).filter(v => v !== 'Other')
       if (arr?.includes('Other') && other?.trim()) r.push(other.trim())
@@ -926,12 +973,12 @@ export default function CampaignFormComponent({
     }
 
     const newTaskSpecs = Object.keys(newTaskSelections).map(taskId => {
-      const qn      = newTaskSelections[taskId]?.questionnaire || {}
+      const qn = newTaskSelections[taskId]?.questionnaire || {}
       const answers = Object.entries(qn)
         .filter(([, v]) => v != null && String(v).trim() !== '')
         .map(([questionId, answerValue]) => ({ questionId, answerValue }))
-      const staged    = (newTaskSelections[taskId]?.stagedFiles || []).filter(f => f.url)
-      const fileUrls  = staged.map(f => f.url)
+      const staged = (newTaskSelections[taskId]?.stagedFiles || []).filter(f => f.url)
+      const fileUrls = staged.map(f => f.url)
       const fileNames = staged.map(f => f.name || f.url.split('/').pop())
       return {
         granularTaskId: taskId,
@@ -944,35 +991,37 @@ export default function CampaignFormComponent({
     const payloadStores = stores.filter(s => (s.storeId || s.id) !== 'OTHER_CUSTOM_OPTION')
 
     const payload = {
-      departmentId:       form.departmentId || null,
-      customStoreIds:     isOtherSelected ? form.customStoreIds?.trim() || null : null,
-      contactNumber:      form.contactNumber?.trim() || null,
-      businessObjective:  resolve(form.businessObjective, form.businessObjectiveOther),
-      audienceTypeId:     resolveArr(form.audienceTypeIds, form.audienceTypeOther),
-      language:           resolveArr(form.languages, form.languageOther),
-      hasOffer:           form.hasOffer,
-      offerTypeId:        form.hasOffer === 'YES' ? resolve(form.offerTypeId, form.offerTypeOther) : null,
-      keyMessage:         form.hasOffer === 'YES' ? form.keyMessage || null : null,
-      supportingProof:    form.hasOffer === 'YES' ? resolve(form.supportingProof, form.supportingProofOther) : null,
-      tone:               resolveArr(form.tones, form.toneOther),
-      priority:           form.priority || null,
-      budgetTier:         resolve(form.budgetTier, form.budgetTierOther),
-      vendorRequired:     form.vendorRequired,
-      vendorType:         form.vendorRequired === 'YES' ? resolveArr(form.vendorTypeIds, form.vendorTypeOther) : null,
-      kpiType:            resolve(form.kpiType, form.kpiTypeOther),
-      expectedOutput:     resolve(form.expectedOutput, form.expectedOutputOther),
-      targetLocation:        [...(targetLocations.countryCodes || []), ...(targetLocations.stateCodes || []), ...(targetLocations.cityCodes || [])].join(','),
-      selectedCountryCodes:  targetLocations.countryCodes || [],
-      selectedStateCodes:    targetLocations.stateCodes || [],
-      selectedCityCodes:     targetLocations.cityCodes || [],
-      stores:             payloadStores,
-      newTaskSpecs:       newTaskSpecs.length > 0 ? newTaskSpecs : undefined,
-      taskSpecs:          newTaskSpecs.length > 0 ? newTaskSpecs : undefined,
-      newFileUrls:          newFiles.filter(f => f.url).map(f => f.url),
+      businessVerticalId: form.businessVerticalId || null,
+      eventCategoryId: form.eventCategoryId ? Number(form.eventCategoryId) : null,
+      departmentId: form.departmentId || null,
+      customStoreIds: isOtherSelected ? form.customStoreIds?.trim() || null : null,
+      contactNumber: form.contactNumber?.trim() || null,
+      businessObjective: resolve(form.businessObjective, form.businessObjectiveOther),
+      audienceTypeId: resolveArr(form.audienceTypeIds, form.audienceTypeOther),
+      language: resolveArr(form.languages, form.languageOther),
+      hasOffer: form.hasOffer,
+      offerTypeId: form.hasOffer === 'YES' ? resolve(form.offerTypeId, form.offerTypeOther) : null,
+      keyMessage: form.hasOffer === 'YES' ? form.keyMessage || null : null,
+      supportingProof: form.hasOffer === 'YES' ? resolve(form.supportingProof, form.supportingProofOther) : null,
+      tone: resolveArr(form.tones, form.toneOther),
+      priority: form.priority || null,
+      budgetTier: resolve(form.budgetTier, form.budgetTierOther),
+      vendorRequired: form.vendorRequired,
+      vendorType: form.vendorRequired === 'YES' ? resolveArr(form.vendorTypeIds, form.vendorTypeOther) : null,
+      kpiType: resolve(form.kpiType, form.kpiTypeOther),
+      expectedOutput: resolve(form.expectedOutput, form.expectedOutputOther),
+      targetLocation: [...(targetLocations.countryCodes || []), ...(targetLocations.stateCodes || []), ...(targetLocations.cityCodes || [])].join(','),
+      selectedCountryCodes: targetLocations.countryCodes || [],
+      selectedStateCodes: targetLocations.stateCodes || [],
+      selectedCityCodes: targetLocations.cityCodes || [],
+      stores: payloadStores,
+      newTaskSpecs: newTaskSpecs.length > 0 ? newTaskSpecs : undefined,
+      taskSpecs: newTaskSpecs.length > 0 ? newTaskSpecs : undefined,
+      newFileUrls: newFiles.filter(f => f.url).map(f => f.url),
       newFileOriginalNames: newFiles.filter(f => f.url).map(f => f.name || f.url.split('/').pop()),
-      fileUrls:             newFiles.filter(f => f.url).map(f => f.url),
-      fileOriginalNames:    newFiles.filter(f => f.url).map(f => f.name || f.url.split('/').pop()),
-      removedFileUrls:      existingFiles.filter(f => f.removed).map(f => f.url),
+      fileUrls: newFiles.filter(f => f.url).map(f => f.url),
+      fileOriginalNames: newFiles.filter(f => f.url).map(f => f.name || f.url.split('/').pop()),
+      removedFileUrls: existingFiles.filter(f => f.removed).map(f => f.url),
     }
 
     const meta = {
@@ -986,11 +1035,16 @@ export default function CampaignFormComponent({
 
   const selectedTypeStrs = form.taskTypeId.map(String)
   const newTasks = useMemo(() => {
-    return availableTasks
+    let filtered = availableTasks
       .filter(t => t.taskId !== 'TASK-AUTO-CONTENT')
       .filter(t => !existingIds.has(String(t.taskId)))
-      .filter(t => selectedTypeStrs.length === 0 || selectedTypeStrs.includes(String(t.taskTypeId)))
-  }, [availableTasks, existingIds, selectedTypeStrs])
+      
+    if (mappedTaskTypeIds !== null) {
+      filtered = filtered.filter(t => mappedTaskTypeIds.includes(String(t.taskTypeId)))
+    }
+    
+    return filtered.filter(t => selectedTypeStrs.length === 0 || selectedTypeStrs.includes(String(t.taskTypeId)))
+  }, [availableTasks, existingIds, selectedTypeStrs, mappedTaskTypeIds])
 
   const taskOptions = useMemo(() => {
     return newTasks.map(t => ({
@@ -1048,8 +1102,8 @@ export default function CampaignFormComponent({
         {loadingMaster ? (
           <div className="flex-1 flex items-center justify-center gap-3 py-20 text-slate-400">
             <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
             </svg>
             <span className="text-sm font-medium">Loading form data…</span>
           </div>
@@ -1059,6 +1113,7 @@ export default function CampaignFormComponent({
 
               {/* 1 – Campaign Info */}
               <SectionCard id="campaign-info" title="Campaign Info" icon="fileText" accent="brand">
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <FieldLabel required>Department</FieldLabel>
@@ -1084,6 +1139,31 @@ export default function CampaignFormComponent({
                     />
                   </div>
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <FieldLabel required>Business Vertical</FieldLabel>
+                    <SingleSelectDropdown
+                      value={form.businessVerticalId}
+                      onChange={handleBusinessVerticalChange}
+                      options={businessVerticals}
+                      placeholder="Select business vertical…"
+                      hasError={!!errors.businessVerticalId}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel required>Event Category</FieldLabel>
+                    <SingleSelectDropdown
+                      value={form.eventCategoryId}
+                      onChange={handleEventCategoryChange}
+                      options={filteredEventCategories}
+                      placeholder={form.businessVerticalId ? "Select event category…" : "Select vertical first…"}
+                      disabled={!form.businessVerticalId}
+                      hasError={!!errors.eventCategoryId}
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                   <div>
                     <FieldLabel>Store(s)</FieldLabel>
@@ -1190,7 +1270,7 @@ export default function CampaignFormComponent({
                   <div>
                     <FieldLabel required>Priority</FieldLabel>
                     <SingleSelectDropdown value={form.priority} onChange={v => setField('priority', v)}
-                      options={[{value:'HIGH',label:'High'},{value:'MEDIUM',label:'Medium'},{value:'LOW',label:'Low'}]} hasError={!!errors.priority} />
+                      options={[{ value: 'HIGH', label: 'High' }, { value: 'MEDIUM', label: 'Medium' }, { value: 'LOW', label: 'Low' }]} hasError={!!errors.priority} />
                   </div>
                   <div>
                     <FieldLabel required>Budget Tier</FieldLabel>
@@ -1252,33 +1332,32 @@ export default function CampaignFormComponent({
                     <div className="space-y-2">
                       {localWorkTasks.map(d => {
                         const markedDelete = pendingTaskDeletions.has(d.taskId)
-                        const taskName     = d.granularTaskName || d.granularTaskId
-                        const statusLabel  = d.status ? d.status.replace(/_/g, ' ') : 'PENDING'
-                        const isExpanded   = !markedDelete && expandedTask === d.taskId
-                        const qs           = existingTaskQs[d.granularTaskId] || []
-                        const ans          = existingTaskAns[d.taskId] || {}
-                        const loadingQ     = loadingExistQs[d.granularTaskId]
+                        const taskName = d.granularTaskName || d.granularTaskId
+                        const statusLabel = d.status ? d.status.replace(/_/g, ' ') : 'PENDING'
+                        const isExpanded = !markedDelete && expandedTask === d.taskId
+                        const qs = existingTaskQs[d.granularTaskId] || []
+                        const ans = existingTaskAns[d.taskId] || {}
+                        const loadingQ = loadingExistQs[d.granularTaskId]
 
                         const statusColors = {
-                          ASSIGNED:          'text-blue-600 bg-blue-50',
-                          HELD:              'text-amber-600 bg-amber-50',
-                          ACCEPTED:          'text-indigo-600 bg-indigo-50',
-                          IN_PROGRESS:       'text-emerald-600 bg-emerald-50',
+                          ASSIGNED: 'text-blue-600 bg-blue-50',
+                          HELD: 'text-amber-600 bg-amber-50',
+                          ACCEPTED: 'text-indigo-600 bg-indigo-50',
+                          IN_PROGRESS: 'text-emerald-600 bg-emerald-50',
                           MARKETING_REVIEW: 'text-purple-600 bg-purple-50',
                           REQUESTOR_REVIEW: 'text-violet-600 bg-violet-50',
-                          REWORK:            'text-orange-600 bg-orange-50',
-                          COMPLETED:         'text-green-600 bg-green-50',
-                          CANCELLED:         'text-slate-500 bg-slate-100',
+                          REWORK: 'text-orange-600 bg-orange-50',
+                          COMPLETED: 'text-green-600 bg-green-50',
+                          CANCELLED: 'text-slate-500 bg-slate-100',
                         }
                         const statusCls = statusColors[d.status] || 'text-slate-500 bg-slate-100'
 
                         return (
                           <div key={d.taskId}
-                            className={`rounded-xl border-2 transition ${
-                              markedDelete ? 'border-red-300 bg-red-50 opacity-60'
-                              : isExpanded ? 'border-sky-300 bg-sky-50/30'
-                              : 'border-slate-200 bg-white hover:border-sky-200'
-                            }`}>
+                            className={`rounded-xl border-2 transition ${markedDelete ? 'border-red-300 bg-red-50 opacity-60'
+                                : isExpanded ? 'border-sky-300 bg-sky-50/30'
+                                  : 'border-slate-200 bg-white hover:border-sky-200'
+                              }`}>
                             <div className="flex items-center gap-2 px-3 py-2">
                               <button type="button"
                                 onClick={() => !markedDelete && toggleExistingTask(d.taskId, d.granularTaskId)}
@@ -1334,7 +1413,19 @@ export default function CampaignFormComponent({
                 {/* Filter tasks by task type */}
                 <div className="mb-4">
                   <FieldLabel>Task Type <span className="text-slate-400 font-normal">(filter only)</span></FieldLabel>
-                  <MultiSelectDropdown value={form.taskTypeId} onChange={v => setField('taskTypeId', v)} options={taskTypes} />
+                  <MultiSelectDropdown 
+                    value={form.taskTypeId} 
+                    onChange={v => setField('taskTypeId', v)} 
+                    options={mappedTaskTypeIds === null ? [] : taskTypes.filter(tt => mappedTaskTypeIds.includes(String(tt.value)))} 
+                    placeholder={
+                      mappedTaskTypeIds === null
+                        ? "Select Vertical & Event first..."
+                        : mappedTaskTypeIds.length === 0
+                        ? "No task types mapped (contact Marketing team)"
+                        : "Filter by mapped task types..."
+                    }
+                    disabled={mappedTaskTypeIds === null || mappedTaskTypeIds.length === 0}
+                  />
                 </div>
 
                 {/* Select and configure tasks */}
@@ -1349,20 +1440,39 @@ export default function CampaignFormComponent({
                   </p>
 
                   <div className="space-y-3">
-                    <MultiSelectDropdown
-                      options={taskOptions}
-                      value={selectedTaskIds}
-                      onChange={handleTaskMultiSelectChange}
-                      placeholder={isEditMode ? "Search and select tasks to add…" : "Search and select tasks…"}
-                      hasError={!!errors.tasks}
-                    />
+                    {mappedTaskTypeIds !== null && mappedTaskTypeIds.length === 0 ? (
+                      <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900 shadow-2xs">
+                        <Icon name="alertCircle" className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-amber-900">No task types mapped for this combination</p>
+                          <p className="mt-0.5 text-amber-700">
+                            No allowable task types have been configured for this Business Vertical and Event Category. Please contact the Marketing team to configure task type mappings.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <MultiSelectDropdown
+                        options={taskOptions}
+                        value={selectedTaskIds}
+                        onChange={handleTaskMultiSelectChange}
+                        placeholder={
+                          mappedTaskTypeIds === null
+                            ? "Select Vertical & Event first…"
+                            : isEditMode
+                            ? "Search and select tasks to add…"
+                            : "Search and select tasks…"
+                        }
+                        disabled={mappedTaskTypeIds === null}
+                        hasError={!!errors.tasks}
+                      />
+                    )}
 
                     {/* Per-task cards */}
                     {selectedTaskIds.length > 0 && (
                       <div className="space-y-3">
                         {selectedTaskIds.map(tid => {
-                          const t      = availableTasks.find(x => String(x.taskId) === String(tid))
-                          const qs     = taskQuestions[tid] || []
+                          const t = availableTasks.find(x => String(x.taskId) === String(tid))
+                          const qs = taskQuestions[tid] || []
                           const loadQs = loadingQs[tid]
                           const staged = newTaskSelections[tid]?.stagedFiles || []
                           return (

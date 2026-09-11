@@ -18,6 +18,7 @@ import { Rights } from '../../constants/rights'
 import useDebounce from '../../hooks/useDebounce'
 import StoreIdDisplay from '../../components/StoreIdDisplay'
 import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
+import { formatTaskId } from '../../utils/formatters'
 
 const completedCellCls = 'min-w-0 overflow-hidden px-4 py-3'
 
@@ -300,7 +301,7 @@ const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, canAddFollowu
       </td>
       <td className={completedCellCls}>
         <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">
-          {t.taskId}
+          {formatTaskId(t.taskId)}
         </span>
       </td>
       <td className={`${completedCellCls} font-medium text-slate-800`}>

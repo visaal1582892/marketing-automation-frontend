@@ -315,11 +315,48 @@ const PATHS = {
       <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
     </>
   ),
+  userX: (
+    <>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="8.5" cy="7" r="4" />
+      <line x1="18" y1="8" x2="23" y2="13" />
+      <line x1="23" y1="8" x2="18" y2="13" />
+    </>
+  ),
+  userMinus: (
+    <>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="8.5" cy="7" r="4" />
+      <line x1="17" y1="11" x2="23" y2="11" />
+    </>
+  ),
+  userQuestion: (
+    <>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="8.5" cy="7" r="4" />
+      <path d="M18 8a2.5 2.5 0 0 1 4 2c0 1.5-2 2-2 3" />
+      <circle cx="20" cy="16" r="0.75" fill="currentColor" />
+    </>
+  ),
   userPlus: (
     <>
       <circle cx="10" cy="8" r="4" />
       <path d="M2 20c0-4 3.6-7 8-7s8 3 8 7" />
       <path d="M20 11v6M17 14h6" />
+    </>
+  ),
+  userCheck: (
+    <>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="8.5" cy="7" r="4" />
+      <polyline points="17 11 19 13 23 9" />
+    </>
+  ),
+  clipboardCheck: (
+    <>
+      <rect x="6" y="4" width="12" height="17" rx="2" />
+      <path d="M9 4h6v3H9z" />
+      <polyline points="9 13 11 15 15 11" />
     </>
   ),
   briefcase: (
@@ -390,10 +427,71 @@ const PATHS = {
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
     </>
   ),
+  layers: (
+    <>
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
+    </>
+  ),
+  grid: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+    </>
+  ),
+  history: (
+    <>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l4 2" />
+    </>
+  ),
+  gitMerge: (
+    <>
+      <circle cx="18" cy="18" r="3" />
+      <circle cx="6" cy="6" r="3" />
+      <path d="M6 9v12" />
+      <path d="M18 15a9 9 0 0 0-9-9H6" />
+    </>
+  ),
+  chevronDown: (
+    <polyline points="6 9 12 15 18 9" />
+  ),
+  creditCard: (
+    <>
+      <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+      <line x1="1" y1="10" x2="23" y2="10" />
+    </>
+  ),
+  receipt: (
+    <>
+      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z" />
+      <line x1="8" y1="6" x2="16" y2="6" />
+      <line x1="8" y1="10" x2="16" y2="10" />
+      <line x1="8" y1="14" x2="14" y2="14" />
+    </>
+  ),
+  sliders: (
+    <>
+      <line x1="4" y1="21" x2="4" y2="14" />
+      <line x1="4" y1="10" x2="4" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12" y2="3" />
+      <line x1="20" y1="21" x2="20" y2="16" />
+      <line x1="20" y1="12" x2="20" y2="3" />
+      <line x1="1" y1="14" x2="7" y2="14" />
+      <line x1="9" y1="8" x2="15" y2="8" />
+      <line x1="17" y1="16" x2="23" y2="16" />
+    </>
+  ),
 }
 
 export default function Icon({ name, className = 'h-5 w-5', strokeWidth = 1.7 }) {
-  const path = PATHS[name]
+  const camelName = name?.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+  const path = PATHS[name] || PATHS[camelName]
   if (!path) return null
   return (
     <svg

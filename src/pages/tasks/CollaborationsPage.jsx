@@ -11,6 +11,7 @@ import Pagination from '../../components/Pagination'
 import AssetPanel, { CHAT_OPEN_STATUSES, UploadRow, isImage, isVideo, displayName, openUrl, triggerDownload } from '../../components/AssetPanel'
 import useDebounce from '../../hooks/useDebounce'
 import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
+import { formatTaskId } from '../../utils/formatters'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -211,7 +212,7 @@ function ChatPanel({ task, onClose }) {
               </div>
               <div className="min-w-0">
                 <h3 className="text-sm font-bold text-white leading-tight truncate max-w-[240px]">
-                  {task.granularTaskName || task.taskId}
+                  {task.granularTaskName || formatTaskId(task.taskId)}
                 </h3>
                 <p className="text-[10px] text-brand-200 mt-0.5">Campaign #{task.campaignId}</p>
                 {members.length > 0 && (
@@ -406,7 +407,7 @@ function AddPeopleModal({ task, onClose, onDone }) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
           <div>
             <h3 className="text-sm font-bold text-slate-900">Add People</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[220px]">{task.granularTaskName || task.taskId}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[220px]">{task.granularTaskName || formatTaskId(task.taskId)}</p>
           </div>
           <button onClick={onClose} className="rounded-full p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition">
             <Icon name="x" className="h-4 w-4" />
@@ -493,7 +494,7 @@ function CollabCard({ task, onChat, onAssets, onBrief, onRefresh }) {
               CMP&nbsp;{task.campaignId}
             </span>
             <span className="text-[10px] font-mono text-slate-400 shrink-0">·</span>
-            <span className="text-[10px] font-mono text-slate-500 truncate">T-{task.taskId}</span>
+            <span className="text-[10px] font-mono text-slate-500 truncate">T-{formatTaskId(task.taskId)}</span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {canPauseChat && (
@@ -693,14 +694,14 @@ export default function CollaborationsPage() {
                 {taskIdFilter && (
                   <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700 ring-1 ring-brand-200">
                     <Icon name="filter" className="h-3 w-3" />
-                    {taskIdFilter}
+                    {formatTaskId(taskIdFilter)}
                   </span>
                 )}
               </h1>
               {!loading && (
                 <p className="text-xs text-slate-500">
                   {taskIdFilter
-                    ? `Showing task ${taskIdFilter}`
+                    ? `Showing task ${formatTaskId(taskIdFilter)}`
                     : `${totalElements} active collaboration${totalElements !== 1 ? 's' : ''}`}
                 </p>
               )}

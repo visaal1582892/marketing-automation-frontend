@@ -16,15 +16,12 @@ import MasterHubPage from './pages/admin/MasterHubPage'
 import MasterTablePage from './pages/admin/MasterTablePage'
 import RoleManagementPage from './pages/admin/RoleManagementPage'
 import EventCategoryMasterPage from './pages/admin/EventCategoryMasterPage'
-import CampaignTypeMasterPage from './pages/admin/CampaignTypeMasterPage'
-import EventCampaignTaskMaster from './pages/admin/EventCampaignTaskMaster'
+import EventTaskTypeMappingMasterPage from './pages/admin/EventTaskTypeMappingMasterPage'
 import GranularTaskPage from './pages/admin/GranularTaskPage'
-import TaskMappingsPage from './pages/admin/TaskMappingsPage'
+import CapabilityMasterPage from './pages/admin/CapabilityMasterPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
 import QuestionMasterPage from './pages/admin/QuestionMasterPage'
 import NotificationTemplatesPage from './pages/admin/NotificationTemplatesPage'
-import VerticalTypeMappingPage from './pages/admin/VerticalTypeMappingPage'
-import TypeFormatMappingPage from './pages/admin/TypeFormatMappingPage'
 import WorkingHoursPage from './pages/admin/WorkingHoursPage'
 import ApprovalFlowMasterPage from './pages/admin/ApprovalFlowMasterPage'
 import CampaignFormPage from './pages/campaigns/CampaignFormPage'
@@ -40,6 +37,7 @@ import TaskManagementPage from './pages/manager/TaskManagementPage'
 import AnalyticsPage from './pages/manager/AnalyticsPage'
 import BudgetPlanningWizard from './pages/budget/BudgetPlanningWizard'
 import BudgetProposalListPage from './pages/budget/BudgetProposalListPage'
+import BudgetApprovalsPage from './pages/budget/BudgetApprovalsPage'
 
 export default function App() {
   return (
@@ -176,6 +174,14 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/budget/approvals"
+                element={
+                  <ProtectedRoute requireAnyRight={[Rights.APPROVE_BUDGET_OVERRUN, Rights.APPROVE_BUDGET]}>
+                    <BudgetApprovalsPage />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* ── Admin config ── */}
               <Route
@@ -203,18 +209,19 @@ export default function App() {
                 }
               />
               <Route
-                path="/admin/master/budget/campaign-types"
+                path="/admin/master/event-task-types"
                 element={
                   <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
-                    <CampaignTypeMasterPage />
+                    <EventTaskTypeMappingMasterPage />
                   </ProtectedRoute>
                 }
               />
+
               <Route
-                path="/admin/master/budget/event-campaign-tasks"
+                path="/admin/master/capabilities"
                 element={
                   <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
-                    <EventCampaignTaskMaster />
+                    <CapabilityMasterPage />
                   </ProtectedRoute>
                 }
               />
@@ -231,14 +238,6 @@ export default function App() {
                 element={
                   <ProtectedRoute requireRight={Rights.MANAGE_GRANULAR_TASKS}>
                     <GranularTaskPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/task-mappings"
-                element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_ROUTING_CONFIG}>
-                    <TaskMappingsPage />
                   </ProtectedRoute>
                 }
               />
@@ -279,22 +278,6 @@ export default function App() {
                 element={
                   <ProtectedRoute requireRight={Rights.MANAGE_NOTIFICATION_TEMPLATES}>
                     <NotificationTemplatesPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/campaign-mappings/vertical-type"
-                element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_CAMPAIGN_SPEC_MAPPINGS}>
-                    <VerticalTypeMappingPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/campaign-mappings/type-format"
-                element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_CAMPAIGN_SPEC_MAPPINGS}>
-                    <TypeFormatMappingPage />
                   </ProtectedRoute>
                 }
               />

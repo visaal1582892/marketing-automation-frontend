@@ -11,7 +11,6 @@ export default function Step3TaskStateMatrix({
   periodId,
   verticals,
   eventCategories,
-  campaignTypes,
   taskTypes,
   states,
   step2Matrix,
@@ -30,27 +29,24 @@ export default function Step3TaskStateMatrix({
   const activeCombinations = useMemo(() => {
     const combos = [];
     Object.keys(step2Matrix).forEach(vId => {
-      Object.keys(step2Matrix[vId]).forEach(ecCtKey => {
-        const targetAmount = step2Matrix[vId][ecCtKey];
+      Object.keys(step2Matrix[vId]).forEach(ecId => {
+        const targetAmount = step2Matrix[vId][ecId];
         if (targetAmount > 0) {
-          const [ecId, ctId] = ecCtKey.split('_');
-          const vName = verticals.find(v => v.id.toString() === vId)?.name;
-          const ecName = eventCategories.find(ec => ec.id.toString() === ecId)?.name;
-          const ctName = campaignTypes.find(ct => ct.id.toString() === ctId)?.name;
+          const vName = verticals.find(v => String(v.id) === String(vId))?.name;
+          const ecName = eventCategories.find(ec => String(ec.id) === String(ecId))?.name;
           
           combos.push({
-            id: `${vId}_${ecId}_${ctId}`,
+            id: `${vId}_${ecId}`,
             verticalId: vId,
             eventCategoryId: ecId,
-            campaignTypeId: ctId,
-            label: `${vName} ➔ ${ecName} ➔ ${ctName}`,
+            label: `${vName} ➔ ${ecName}`,
             targetAmount
           });
         }
       });
     });
     return combos;
-  }, [step2Matrix, verticals, eventCategories, campaignTypes]);
+  }, [step2Matrix, verticals, eventCategories]);
 
   const [activeComboId, setActiveComboId] = useState(activeCombinations[0]?.id || '');
   const activeCombo = activeCombinations.find(c => c.id === activeComboId);
@@ -60,7 +56,7 @@ export default function Step3TaskStateMatrix({
     const ids = new Set();
     allocations.forEach(a => {
       if (a.taskAllocations && a.taskAllocations.length > 0) {
-        ids.add(`${a.verticalId}_${a.eventCategoryId}_${a.campaignTypeId}`);
+        ids.add(`${a.verticalId}_${a.eventCategoryId}`);
       }
     });
     return ids;
@@ -74,16 +70,16 @@ export default function Step3TaskStateMatrix({
 
   useEffect(() => {
     if (activeCombo) {
-      fetchMappedTasks(activeCombo.eventCategoryId, activeCombo.campaignTypeId);
+      fetchMappedTasks(activeCombo.eventCategoryId, activeCombo.verticalId);
     } else {
       setMappedTaskTypeIds([]);
     }
-  }, [activeCombo?.eventCategoryId, activeCombo?.campaignTypeId]);
+  }, [activeCombo?.eventCategoryId, activeCombo?.verticalId]);
 
-  const fetchMappedTasks = async (ecId, ctId) => {
+  const fetchMappedTasks = async (ecId, vId) => {
     setIsLoadingTasks(true);
     try {
-      const data = await eventCampaignTaskApi.getTasks(ecId, ctId);
+      const data = await eventCampaignTaskApi.getTasks(ecId, vId);
       setMappedTaskTypeIds(data || []);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to load mapped tasks for this combination.");
@@ -97,9 +93,8 @@ export default function Step3TaskStateMatrix({
   const currentComboAllocation = useMemo(() => {
     if (!activeCombo) return null;
     return allocations.find(
-      a => a.verticalId === activeCombo.verticalId && 
-           a.eventCategoryId.toString() === activeCombo.eventCategoryId && 
-           a.campaignTypeId === activeCombo.campaignTypeId
+      a => String(a.verticalId) === String(activeCombo.verticalId) && 
+           String(a.eventCategoryId) === String(activeCombo.eventCategoryId)
     );
   }, [allocations, activeCombo]);
 
@@ -109,16 +104,14 @@ export default function Step3TaskStateMatrix({
     setAllocations(prev => {
       const copy = [...prev];
       const index = copy.findIndex(
-        a => a.verticalId === activeCombo.verticalId && 
-             a.eventCategoryId.toString() === activeCombo.eventCategoryId && 
-             a.campaignTypeId === activeCombo.campaignTypeId
+        a => String(a.verticalId) === String(activeCombo.verticalId) && 
+             String(a.eventCategoryId) === String(activeCombo.eventCategoryId)
       );
 
       const newCombo = {
         periodId: periodId,
         verticalId: activeCombo.verticalId,
         eventCategoryId: Number(activeCombo.eventCategoryId),
-        campaignTypeId: activeCombo.campaignTypeId,
         taskAllocations: newTaskAllocations
       };
 
@@ -177,12 +170,12 @@ export default function Step3TaskStateMatrix({
     const allSelectedStates = new Set();
     groups.forEach((g, idx) => {
       if (idx !== groupIndex) {
-        g.stateCodes.forEach(s => allSelectedStates.add(s));
+        (g.stateCodes || []).forEach(s => allSelectedStates.add(String(s)));
       }
     });
     
     const remainingStateCodes = states
-      .map(s => s.stateCode)
+      .map(s => String(s.stateCode || s.code || s.subName))
       .filter(code => !allSelectedStates.has(code));
 
     updateGroup(taskTypeId, groupIndex, 'stateCodes', remainingStateCodes);
@@ -242,12 +235,12 @@ export default function Step3TaskStateMatrix({
         return next;
       });
       // Update local state with scrubbed data
+      // Update local state with scrubbed data
       setAllocations(prev => {
         const copy = [...prev];
         const idx = copy.findIndex(a => 
-          a.verticalId === activeCombo.verticalId && 
-          a.eventCategoryId.toString() === activeCombo.eventCategoryId && 
-          a.campaignTypeId === activeCombo.campaignTypeId
+          String(a.verticalId) === String(activeCombo.verticalId) && 
+          String(a.eventCategoryId) === String(activeCombo.eventCategoryId)
         );
         if (idx >= 0) copy[idx].taskAllocations = scrubbedAllocations;
         return copy;
@@ -291,9 +284,8 @@ export default function Step3TaskStateMatrix({
           <SearchableSelect
             options={activeCombinations.map(combo => {
               const comboAlloc = allocations.find(
-                a => a.verticalId === combo.verticalId && 
-                     a.eventCategoryId.toString() === combo.eventCategoryId && 
-                     a.campaignTypeId === combo.campaignTypeId
+                a => String(a.verticalId) === String(combo.verticalId) && 
+                     String(a.eventCategoryId) === String(combo.eventCategoryId)
               );
               
               let allocTotal = 0;
@@ -385,11 +377,15 @@ export default function Step3TaskStateMatrix({
                         <p className="text-sm text-slate-400 italic">No groups added. Click 'Add State Group' to allocate budget.</p>
                       ) : (
                         groups.map((group, gIdx) => {
-                          const stateOptions = states.map(s => ({
-                            id: s.stateCode,
-                            name: s.stateName,
-                            disabled: allSelectedStates.has(s.stateCode) && !group.stateCodes.includes(s.stateCode)
-                          }));
+                          const stateOptions = states.map(s => {
+                            const code = String(s.stateCode || s.code || s.subName || '');
+                            const name = s.stateName || s.name || s.subName || code;
+                            return {
+                              id: code,
+                              name: name,
+                              disabled: allSelectedStates.has(code) && !(group.stateCodes || []).map(String).includes(code),
+                            };
+                          });
                           
                           const groupTotal = (group.stateCodes?.length || 0) * Number(group.budgetPerState || 0);
 
@@ -420,11 +416,15 @@ export default function Step3TaskStateMatrix({
                                 </div>
                                 {isReadOnly ? (
                                   <div className="flex flex-wrap items-center gap-1 mt-1">
-                                    {(group.stateCodes || []).slice(0, 2).map(state => (
-                                      <span key={state} className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-700 rounded-md border border-slate-200">
-                                        {state}
-                                      </span>
-                                    ))}
+                                    {(group.stateCodes || []).slice(0, 2).map(state => {
+                                      const sObj = states.find(s => String(s.stateCode || s.code || s.subName) === String(state));
+                                      const displayName = sObj ? (sObj.stateName || sObj.name || sObj.subName) : state;
+                                      return (
+                                        <span key={state} className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-700 rounded-md border border-slate-200">
+                                          {displayName}
+                                        </span>
+                                      );
+                                    })}
                                     {(group.stateCodes || []).length > 2 && (
                                       <div className="relative group/badge cursor-pointer">
                                         <span className="px-2 py-1 text-xs font-medium bg-red-50 text-red-700 rounded-md border border-red-100 hover:bg-red-100 transition-colors inline-block">

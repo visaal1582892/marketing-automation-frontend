@@ -13,33 +13,34 @@ export default function GranularTaskPage() {
   const toast = useToast()
   const PAGE_SIZE = 20
 
-  const [rows, setRows]                   = useState([])
-  const [total, setTotal]                 = useState(0)
-  const [totalPages, setTotalPages]       = useState(0)
-  const [taskTypes, setTaskTypes]         = useState([])
-  const [loading, setLoading]             = useState(true)
-  const [editing, setEditing]             = useState(null)
+  const [rows, setRows] = useState([])
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [taskTypes, setTaskTypes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const [page, setPage]                   = useState(0)
-  const [refreshSeed, setRefreshSeed]     = useState(0)
+  const [page, setPage] = useState(0)
+  const [refreshSeed, setRefreshSeed] = useState(0)
 
   // Column filters
-  const [fId, setFId]             = useState('')
-  const [fName, setFName]         = useState('')
+  const [fId, setFId] = useState('')
+  const [fName, setFName] = useState('')
   const [fTaskType, setFTaskType] = useState('all')
-  const [fStatus, setFStatus]     = useState('all')
+  const [fStatus, setFStatus] = useState('all')
+  const [fNeedsPt, setFNeedsPt] = useState('all')
 
-  const dId   = useDebounce(fId,   400)
+  const dId = useDebounce(fId, 400)
   const dName = useDebounce(fName, 400)
 
   // Reset page on filter change
-  useEffect(() => { setPage(0) }, [dId, dName, fTaskType, fStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(0) }, [dId, dName, fTaskType, fStatus, fNeedsPt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load all task types (including inactive) for column search filter
   useEffect(() => {
     masterApi.list('task-types', true)
       .then((data) => setTaskTypes(data))
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   // Server-side fetch
@@ -47,10 +48,11 @@ export default function GranularTaskPage() {
     let alive = true
     setLoading(true)
     granularTasksApi.listPaged({
-      taskId:       dId         || undefined,
-      taskName:     dName       || undefined,
+      taskId: dId || undefined,
+      taskName: dName || undefined,
       taskTypeName: fTaskType !== 'all' ? taskTypes.find((t) => t.id === fTaskType)?.name : undefined,
-      status:       fStatus !== 'all' ? fStatus.toUpperCase() : 'all',
+      status: fStatus !== 'all' ? fStatus.toUpperCase() : 'all',
+      needsPaymentTracking: fNeedsPt !== 'all' ? fNeedsPt : undefined,
       page,
       size: PAGE_SIZE,
     })
@@ -63,8 +65,8 @@ export default function GranularTaskPage() {
       .catch((e) => { if (alive) toast.error(e?.response?.data?.message || 'Failed to load granular tasks') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dId, dName, fTaskType, fStatus, page, refreshSeed])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dId, dName, fTaskType, fStatus, fNeedsPt, page, refreshSeed])
 
   const refresh = () => setRefreshSeed((s) => s + 1)
 
@@ -72,10 +74,11 @@ export default function GranularTaskPage() {
   const handleSave = async (form) => {
     try {
       const payload = {
-        taskName:     form.taskName,
-        taskTypeId:   form.taskTypeId,
+        taskName: form.taskName,
+        taskTypeId: form.taskTypeId,
         taskCategory: form.taskCategory || null,
-        status:       form.isActive ? 'ACTIVE' : 'INACTIVE',
+        status: form.isActive ? 'ACTIVE' : 'INACTIVE',
+        needsPaymentTracking: form.needsPaymentTracking ? 'Y' : 'N',
       }
       form.taskId
         ? await granularTasksApi.update(form.taskId, payload)
@@ -111,7 +114,7 @@ export default function GranularTaskPage() {
     }
   }
 
-  const handleEditRow   = useCallback((row) => setEditing({ ...row, isActive: row.status === 'ACTIVE' }), [])
+  const handleEditRow = useCallback((row) => setEditing({ ...row, isActive: row.status === 'ACTIVE' }), [])
   const handleDeleteRow = useCallback((row) => setConfirmDelete(row), [])
   const handleRestoreRow = useCallback((row) => handleRestore(row), []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -158,6 +161,7 @@ export default function GranularTaskPage() {
                 <th className="w-36 px-4 py-2.5">Task ID</th>
                 <th className="px-4 py-2.5">Task Name</th>
                 <th className="w-40 px-4 py-2.5">Task Type</th>
+                <th className="w-44 px-4 py-2.5">Needs Payment Tracking</th>
                 <th className="w-28 px-4 py-2.5">Status</th>
                 <th className="w-24 px-4 py-2.5 text-right">Actions</th>
               </tr>
@@ -172,17 +176,21 @@ export default function GranularTaskPage() {
                   <FilterSelect value={fTaskType} onChange={setFTaskType} options={taskTypeOptions} />
                 </th>
                 <th className="px-4 py-2">
+                  <FilterSelect value={fNeedsPt} onChange={setFNeedsPt}
+                    options={[['all', 'All'], ['Y', 'Yes (Y)'], ['N', 'No (N)']]} />
+                </th>
+                <th className="px-4 py-2">
                   <FilterSelect value={fStatus} onChange={setFStatus}
-                    options={[['all','All'],['active','Active'],['inactive','Inactive']]} />
+                    options={[['all', 'All'], ['active', 'Active'], ['inactive', 'Inactive']]} />
                 </th>
                 <th />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
-                <TableStatusRow colSpan={5} className="py-12">Loading…</TableStatusRow>
+                <TableStatusRow colSpan={6} className="py-12">Loading…</TableStatusRow>
               ) : rows.length === 0 ? (
-                <TableStatusRow colSpan={5} className="py-12">No matching records.</TableStatusRow>
+                <TableStatusRow colSpan={6} className="py-12">No matching records.</TableStatusRow>
               ) : (
                 rows.map((row) => (
                   <GranularTaskRow key={row.taskId} row={row} onEdit={handleEditRow} onDelete={handleDeleteRow} onRestore={handleRestoreRow} />
@@ -200,10 +208,12 @@ export default function GranularTaskPage() {
         <div className="block divide-y divide-slate-100 sm:hidden">
           <div className="space-y-2 p-3">
             <FilterInput value={fName} onChange={setFName} placeholder="Search name…" icon="search" />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <FilterSelect value={fTaskType} onChange={setFTaskType} options={taskTypeOptions} />
+              <FilterSelect value={fNeedsPt} onChange={setFNeedsPt}
+                options={[['all', 'All PT'], ['Y', 'Yes'], ['N', 'No']]} />
               <FilterSelect value={fStatus} onChange={setFStatus}
-                options={[['all','All'],['active','Active'],['inactive','Inactive']]} />
+                options={[['all', 'All Status'], ['active', 'Active'], ['inactive', 'Inactive']]} />
             </div>
           </div>
           {loading ? (
@@ -247,7 +257,7 @@ function FilterInput({ value, onChange, placeholder, icon }) {
     <div className="relative">
       {icon && (
         <Icon name={icon}
-              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
       )}
       <input
         value={value}
@@ -271,8 +281,8 @@ function StatusPill({ active }) {
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium
                   ${active
-                    ? 'bg-accent-50 text-accent-700 ring-1 ring-accent-200'
-                    : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'}`}
+          ? 'bg-accent-50 text-accent-700 ring-1 ring-accent-200'
+          : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-accent-500' : 'bg-slate-400'}`} />
       {active ? 'Active' : 'Inactive'}
@@ -353,6 +363,14 @@ const GranularTaskRow = memo(function GranularTaskRow({ row, onEdit, onDelete, o
           {row.taskTypeName && (
             <div className="mt-1"><TypePill name={row.taskTypeName} /></div>
           )}
+          {row.needsPaymentTracking === 'Y' && (
+            <div className="mt-1">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Payment Tracking Required
+              </span>
+            </div>
+          )}
           <div className="mt-1.5">
             <StatusPill active={active} />
           </div>
@@ -370,6 +388,19 @@ const GranularTaskRow = memo(function GranularTaskRow({ row, onEdit, onDelete, o
           ? <TypePill name={row.taskTypeName} />
           : <span className="text-slate-400 text-xs">—</span>}
       </td>
+      <td className="px-4 py-2.5">
+        {row.needsPaymentTracking === 'Y' ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            Yes
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+            No
+          </span>
+        )}
+      </td>
       <td className="px-4 py-2.5"><StatusPill active={active} /></td>
       <td className="px-4 py-2.5">
         <RowActions row={row} onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} onRestore={onRestore} />
@@ -382,11 +413,12 @@ const GranularTaskRow = memo(function GranularTaskRow({ row, onEdit, onDelete, o
 
 function GranularTaskFormModal({ open, initial, taskTypes, onClose, onSave }) {
   const isEdit = Boolean(initial?.taskId)
-  const [taskName,     setTaskName]     = useState('')
-  const [taskTypeId,   setTaskTypeId]   = useState('')
+  const [taskName, setTaskName] = useState('')
+  const [taskTypeId, setTaskTypeId] = useState('')
   const [taskCategory, setTaskCategory] = useState('')
-  const [isActive,     setIsActive]     = useState(true)
-  const [submitting,   setSubmitting]   = useState(false)
+  const [needsPaymentTracking, setNeedsPaymentTracking] = useState(false)
+  const [isActive, setIsActive] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
   const activeTaskTypes = useMemo(() =>
     taskTypes.filter((t) => t.status === 'ACTIVE' || t.status === undefined || t.id === initial?.taskTypeId),
@@ -398,6 +430,7 @@ function GranularTaskFormModal({ open, initial, taskTypes, onClose, onSave }) {
       setTaskName(initial?.taskName ?? '')
       setTaskTypeId(initial?.taskTypeId ?? activeTaskTypes[0]?.id ?? '')
       setTaskCategory(initial?.taskCategory ?? '')
+      setNeedsPaymentTracking(initial?.needsPaymentTracking === 'Y')
       setIsActive(initial?.isActive ?? true)
       setSubmitting(false)
     }
@@ -410,7 +443,7 @@ function GranularTaskFormModal({ open, initial, taskTypes, onClose, onSave }) {
     if (!taskName.trim() || !taskTypeId) return
     setSubmitting(true)
     try {
-      await onSave({ taskId: initial?.taskId, taskName: taskName.trim(), taskTypeId, taskCategory, isActive })
+      await onSave({ taskId: initial?.taskId, taskName: taskName.trim(), taskTypeId, taskCategory, needsPaymentTracking, isActive })
     } finally {
       setSubmitting(false)
     }
@@ -489,6 +522,20 @@ function GranularTaskFormModal({ open, initial, taskTypes, onClose, onSave }) {
           />
           <p className="mt-1 text-xs text-slate-500">
             Indicates whether this task is digital or offline in nature.
+          </p>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Payment Tracking</label>
+          <AppSelect
+            value={needsPaymentTracking ? 'Y' : 'N'}
+            onChange={v => setNeedsPaymentTracking(v === 'Y')}
+            options={[{ value: 'Y', label: 'Required (Y)' }, { value: 'N', label: 'Not Required (N)' }]}
+            placeholder="Select payment tracking requirement…"
+            isClearable={false}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            When enabled, assignees must provide PO IDs or state remarks before submitting tasks of this type.
           </p>
         </div>
 

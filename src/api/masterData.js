@@ -11,7 +11,6 @@ export const MASTER_RESOURCES = [
   { slug: 'roles',               label: 'Roles',               icon: 'shield'    },
   { slug: 'capabilities',        label: 'Capabilities',        icon: 'zap',       isCode: true },
   { slug: 'task-types',          label: 'Task Types',          icon: 'list'      },
-  { slug: 'regions',             label: 'Regions',             icon: 'globe'     },
   // Form field dropdowns — all master-table driven
   { slug: 'audiences',           label: 'Audience Types',      icon: 'users'     },
   { slug: 'business-objectives', label: 'Business Objectives', icon: 'target'    },
@@ -24,10 +23,7 @@ export const MASTER_RESOURCES = [
   { slug: 'kpi-types',           label: 'KPI Types',           icon: 'barChart'  },
   { slug: 'expected-outputs',    label: 'Expected Outputs',    icon: 'download'  },
   // Campaign Specifications
-  { slug: 'campaign-types',      label: 'Campaign Types',      icon: 'tag'       },
   { slug: 'business-verticals',  label: 'Business Verticals',  icon: 'building'  },
-  { slug: 'business-types',      label: 'Business Types',      icon: 'list'      },
-  { slug: 'store-format-types',  label: 'Store / Format Types', icon: 'globe'    },
 ]
 
 export const findResource = (slug) =>
@@ -59,9 +55,9 @@ export const granularTasksApi = {
   },
 
   /** Paged + filtered list for admin Granular Tasks table. Returns PagedResponse. */
-  listPaged: ({ taskId, taskName, taskTypeName, status, page = 0, size = 20 } = {}) =>
+  listPaged: ({ taskId, taskName, taskTypeName, status, needsPaymentTracking, page = 0, size = 20 } = {}) =>
     api.get('/master/granular-tasks', {
-      params: { taskId, taskName, taskTypeName, status, page, size },
+      params: { taskId, taskName, taskTypeName, status, needsPaymentTracking, page, size },
     }).then((r) => r.data),
 
   /** Dynamic questions mapped to this granular task (new-request form). */
@@ -141,9 +137,9 @@ export const campaignTaskConfigApi = {
   deleteById: (id) => api.delete(`/campaign-task-config/${id}`).then((r) => r.data),
 
   /** Delete all rows for a combination (by query params). */
-  deleteByCombination: (campaignTypeId = '', businessVerticalId = '', businessTypeId = '', storeFormatTypeId = '') =>
+  deleteByCombination: (businessVerticalId = '', businessTypeId = '', storeFormatTypeId = '') =>
     api.delete('/campaign-task-config/combination', {
-      params: { campaignTypeId, businessVerticalId, businessTypeId, storeFormatTypeId },
+      params: { businessVerticalId, businessTypeId, storeFormatTypeId },
     }).then((r) => r.data),
 }
 
@@ -175,19 +171,15 @@ export const budgetMasterDataApi = {
 
 export const eventCategoryApi = {
   list: () => api.get('/master/event-categories').then(r => r.data),
+  getByVertical: (businessVerticalId) => api.get(`/master/event-categories/by-vertical/${businessVerticalId}`).then(r => r.data),
   create: (payload) => api.post('/master/event-categories', payload).then(r => r.data),
   update: (id, payload) => api.put(`/master/event-categories/${id}`, payload).then(r => r.data),
 }
 
-export const campaignTypeApi = {
-  list: () => api.get('/master/campaign-types').then(r => r.data),
-  create: (payload) => api.post('/master/campaign-types', payload).then(r => r.data),
-  update: (id, payload) => api.put(`/master/campaign-types/${id}`, payload).then(r => r.data),
+export const eventTaskTypeApi = {
+  listGroupedTasks: () => api.get('/master-data/event-task-types/list').then((r) => r.data),
+  getTasks: (eventCategoryId, businessVerticalId) => api.get('/master-data/event-task-types', { params: { eventCategoryId, businessVerticalId } }).then((r) => r.data),
+  saveTasks: (eventCategoryId, businessVerticalId, payload) => api.put('/master-data/event-task-types', payload, { params: { eventCategoryId, businessVerticalId } }).then((r) => r.data)
 }
 
-export const eventCampaignTaskApi = {
-  listGroupedTasks: () => api.get('/master-data/event-campaign-tasks/list').then((r) => r.data),
-  getTasks: (eventCategoryId, campaignTypeId) => api.get('/master-data/event-campaign-tasks', { params: { eventCategoryId, campaignTypeId } }).then((r) => r.data),
-  saveTasks: (eventCategoryId, campaignTypeId, payload) => api.put('/master-data/event-campaign-tasks', payload, { params: { eventCategoryId, campaignTypeId } }).then((r) => r.data)
-}
-
+export const eventCampaignTaskApi = eventTaskTypeApi;

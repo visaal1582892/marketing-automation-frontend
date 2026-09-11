@@ -15,6 +15,8 @@ import useDebounce from '../../hooks/useDebounce'
 import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
 import TimelineNodeFlow from '../../components/TimelineNodeFlow'
 import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
+import { formatTaskId } from '../../utils/formatters'
+import BudgetImpactWarningModal from '../../components/budget/BudgetImpactWarningModal'
 
 const PAGE_SIZE = 12
 
@@ -37,6 +39,7 @@ export default function ManagerQcReviewPage() {
   const [saving,   setSaving]   = useState(false)
 
   const [briefCampaignId,  setBriefCampaignId]  = useState(null)
+  const [briefTaskId,      setBriefTaskId]      = useState(null)
   const [assetPreviewTask, setAssetPreviewTask] = useState(null)
 
   const [search,    setSearch]    = useState('')
@@ -87,12 +90,10 @@ export default function ManagerQcReviewPage() {
     setComments(''); setAction('APPROVED')
   }
 
-  const submitReview = async () => {
-    if (!reviewing) return
-    if (action !== 'APPROVED' && !comments.trim()) {
-      showToast('Please add comments.', 'error')
-      return
-    }
+  const [budgetWarningStates, setBudgetWarningStates] = useState([])
+  const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false)
+
+  const executeReview = async () => {
     setSaving(true)
     try {
       await managerApi.reviewTask(reviewing.taskId, { action, comments: comments.trim() || null })
@@ -103,6 +104,7 @@ export default function ManagerQcReviewPage() {
       }
       showToast(map[action] || 'Review submitted', 'success')
       close()
+      setIsBudgetModalOpen(false)
       refresh()
     } catch (e) {
       const msg = e?.response?.data?.message || 'Action failed'
@@ -110,6 +112,38 @@ export default function ManagerQcReviewPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const submitReview = async () => {
+    if (!reviewing) return
+    if (action !== 'APPROVED' && !comments.trim()) {
+      showToast('Please add comments.', 'error')
+      return
+    }
+
+    if (action === 'APPROVED' && reviewing.needsPaymentTracking) {
+        setSaving(true)
+        try {
+            const budgetRes = await tasksApi.checkBudget(reviewing.taskId);
+            if (budgetRes.data?.overallStatus === 'HARD_BLOCK') {
+                showToast(`State budget exhausted for state ${budgetRes.data.blockedState} for this quarter. Please request a TopUp.`, 'error');
+                setSaving(false)
+                return;
+            }
+            if (budgetRes.data?.overallStatus === 'SOFT_OVERRUN') {
+                setBudgetWarningStates(budgetRes.data.stateResults.filter(s => s.status === 'SOFT_OVERRUN'));
+                setIsBudgetModalOpen(true);
+                setSaving(false)
+                return; // pause flow
+            }
+        } catch (e) {
+            showToast('Failed to perform budget check.', 'error');
+            setSaving(false)
+            return;
+        }
+    }
+
+    executeReview()
   }
 
   return (
@@ -196,8 +230,9 @@ export default function ManagerQcReviewPage() {
               key={t.taskId}
               task={t}
               onApprove={() => open(t, 'APPROVED')}
+              onReject={()    => open(t, 'REJECTED')}
               onRework={()   => open(t, 'MARKETING_REWORK')}
-              onView={()     => setBriefCampaignId(t.campaignId)}
+              onView={()     => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}
               onViewAssets={() => setAssetPreviewTask(t)}
             />
           ))}
@@ -225,7 +260,7 @@ export default function ManagerQcReviewPage() {
           saving={saving}
           onCancel={close}
           onConfirm={submitReview}
-          onViewBrief={() => setBriefCampaignId(reviewing.campaignId)}
+          onViewBrief={() => { setBriefCampaignId(reviewing.campaignId); setBriefTaskId(reviewing.taskId) }}
         />
       )}
 
@@ -239,10 +274,18 @@ export default function ManagerQcReviewPage() {
       {briefCampaignId && (
         <RequestBriefDrawer
           campaignId={briefCampaignId}
-          onClose={() => setBriefCampaignId(null)}
+          filterTaskId={briefTaskId}
+          onClose={() => { setBriefCampaignId(null); setBriefTaskId(null) }}
           onCampaignChanged={() => { refresh() }}
         />
       )}
+
+      <BudgetImpactWarningModal
+        isOpen={isBudgetModalOpen}
+        onClose={() => setIsBudgetModalOpen(false)}
+        onProceed={executeReview}
+        overrunStates={budgetWarningStates}
+      />
     </div>
   )
 }
@@ -261,7 +304,7 @@ function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
             CMP&nbsp;{task.campaignId}
           </span>
           <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
-            Task&nbsp;{task.taskId}
+            Task&nbsp;{formatTaskId(task.taskId)}
           </span>
           <PriorityBadge v={task.campaignPriority} />
           {task.reworkCount > 0 && (
@@ -410,7 +453,7 @@ function TaskRow({ task, onApprove, onRework, onViewAssets }) {
         <div className="space-y-1 flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold tabular-nums text-slate-600">
-              {task.taskId}
+              {formatTaskId(task.taskId)}
             </span>
             <span className="text-sm font-bold text-slate-900 truncate">
               {task.granularTaskName || task.taskTypeName || 'Task'}
@@ -476,10 +519,11 @@ function TaskRow({ task, onApprove, onRework, onViewAssets }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ReviewModal({ task, campaign, action, setAction, comments, setComments, saving, onCancel, onConfirm, onViewBrief }) {
-  const labels = { APPROVED: 'Approve & Deliver', MARKETING_REWORK: 'Send for Rework' }
+  const labels = { APPROVED: 'Approve & Deliver', MARKETING_REWORK: 'Send for Rework', REJECTED: 'Reject Task' }
   const tones = {
     APPROVED:     'bg-green-600 hover:bg-green-700',
     MARKETING_REWORK: 'bg-amber-600 hover:bg-amber-700',
+    REJECTED:     'bg-red-600 hover:bg-red-700',
   }
 
 
@@ -504,7 +548,7 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 space-y-0.5">
                 <div>
                   <span className="font-medium">Reviewing deliverable:</span>{' '}
-                  Task {task.taskId} — {task.granularTaskName || task.taskTypeName}
+                  Task {formatTaskId(task.taskId)} — {task.granularTaskName || task.taskTypeName}
                 </div>
                 <div>
                   <span className="font-medium">Creator:</span>{' '}
@@ -546,9 +590,10 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-1">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <ActionRadio v="APPROVED"     active={action} setActive={setAction} label="Approve" />
             <ActionRadio v="MARKETING_REWORK" active={action} setActive={setAction} label="Rework" />
+            <ActionRadio v="REJECTED" active={action} setActive={setAction} label="Reject" />
           </div>
 
 

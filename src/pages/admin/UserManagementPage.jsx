@@ -7,6 +7,7 @@ import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
 import SingleSelectDropdown from '../../components/SingleSelectDropdown'
 import MultiSelectDropdown from '../../components/MultiSelectDropdown'
+import OverflowPillList from '../../components/OverflowPillList'
 import Pagination from '../../components/Pagination'
 import useDebounce from '../../hooks/useDebounce'
 import BackToMaster from '../../components/admin/BackToMaster'
@@ -451,41 +452,48 @@ export default function UserManagementPage() {
   const th = 'px-3 pt-3 pb-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 align-top'
 
   return (
-    <div className="space-y-3">
+    <div className="mx-auto max-w-7xl space-y-5">
       <BackToMaster />
-      {/* ── Toolbar ── */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-slate-500">
-            {totalElements} user{totalElements !== 1 ? 's' : ''}
+
+      {/* Header */}
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-brand-100">
+            <Icon name="users" className="h-5 w-5" />
           </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold text-slate-900">User Management</h1>
+            <p className="text-xs text-slate-500">{totalElements} user record{totalElements === 1 ? '' : 's'} total</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
           {hasFilter && (
             <button onClick={clearFilters}
-              className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1
-                         text-xs text-slate-500 transition hover:bg-slate-50 hover:text-slate-700">
-              <Icon name="x" className="h-3 w-3" /> Clear filters
+              className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-2
+                         text-xs font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-800">
+              <Icon name="x" className="h-3.5 w-3.5" /> Clear filters
             </button>
           )}
+          <button onClick={() => setEditing(false)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2
+                       text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 active:scale-[0.98]">
+            <Icon name="plus" className="h-4 w-4" /> Add User
+          </button>
         </div>
-        <button onClick={() => setEditing(false)}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-1.5
-                     text-sm font-medium text-white shadow-sm transition hover:bg-brand-700 sm:w-auto">
-          <Icon name="plus" className="h-4 w-4" /> Add User
-        </button>
-      </div>
+      </header>
 
       {/* ── Table ── */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] text-sm">
+            <table className="w-full min-w-[1300px] text-sm">
               <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
                   <th className="px-3 pt-3 pb-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 w-24">User ID</th>
-                  <th className={th}>Name</th>
-                  <th className={th}>Email</th>
-                  <th className={th}>Roles</th>
-                  <th className={th}>Capabilities</th>
-                  <th className={th}>Team Members</th>
+                  <th className={`${th} w-44 min-w-[160px]`}>Name</th>
+                  <th className={`${th} w-48 min-w-[180px]`}>Email</th>
+                  <th className={`${th} w-52 min-w-[200px]`}>Roles</th>
+                  <th className={`${th} w-52 min-w-[200px]`}>Capabilities</th>
+                  <th className={`${th} w-60 min-w-[240px]`}>Team Members</th>
                   <th className={th}>Designation</th>
                   <th className={th}>Department</th>
                   <th className={th}>Skill</th>
@@ -608,97 +616,6 @@ export default function UserManagementPage() {
   )
 }
 
-// ─── Role pills with overflow cap ────────────────────────────────────────────
-const MAX_VISIBLE_ROLES = 2
-
-function RolePillList({ roleNames }) {
-  const [expanded, setExpanded] = useState(false)
-
-  if (!roleNames.length) return <span className="text-slate-400 text-xs">—</span>
-
-  const visible  = expanded ? roleNames : roleNames.slice(0, MAX_VISIBLE_ROLES)
-  const overflow = roleNames.length - MAX_VISIBLE_ROLES
-
-  return (
-    <div className="flex flex-nowrap items-center gap-1">
-      {visible.map(r => (
-        <span key={r} className="whitespace-nowrap rounded-full bg-brand-50 px-2 py-0.5
-                                  text-xs font-medium text-brand-700 ring-1 ring-brand-100">
-          {r}
-        </span>
-      ))}
-      {!expanded && overflow > 0 && (
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); setExpanded(true) }}
-          title={roleNames.slice(MAX_VISIBLE_ROLES).join(', ')}
-          className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs
-                     font-semibold text-slate-500 ring-1 ring-slate-200
-                     hover:bg-slate-200 transition"
-        >
-          +{overflow}
-        </button>
-      )}
-      {expanded && overflow > 0 && (
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); setExpanded(false) }}
-          className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs
-                     font-semibold text-slate-500 ring-1 ring-slate-200
-                     hover:bg-slate-200 transition"
-        >
-          less
-        </button>
-      )}
-    </div>
-  )
-}
-
-// ─── Capability pills with overflow cap ──────────────────────────────────────
-function CapabilityPillList({ capabilityNames }) {
-  const [expanded, setExpanded] = useState(false)
-
-  if (!capabilityNames.length) return <span className="text-slate-400 text-xs">—</span>
-
-  const visible  = expanded ? capabilityNames : capabilityNames.slice(0, MAX_VISIBLE_ROLES)
-  const overflow = capabilityNames.length - MAX_VISIBLE_ROLES
-
-  return (
-    <div className="flex flex-nowrap items-center gap-1">
-      {visible.map(c => (
-        <span key={c} className="whitespace-nowrap rounded-full bg-violet-50 px-2 py-0.5
-                                  text-xs font-medium text-violet-700 ring-1 ring-violet-200">
-          {c}
-        </span>
-      ))}
-      {!expanded && overflow > 0 && (
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); setExpanded(true) }}
-          title={capabilityNames.slice(MAX_VISIBLE_ROLES).join(', ')}
-          className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs
-                     font-semibold text-slate-500 ring-1 ring-slate-200
-                     hover:bg-slate-200 transition"
-        >
-          +{overflow}
-        </button>
-      )}
-      {expanded && overflow > 0 && (
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); setExpanded(false) }}
-          className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs
-                     font-semibold text-slate-500 ring-1 ring-slate-200
-                     hover:bg-slate-200 transition"
-        >
-          less
-        </button>
-      )}
-    </div>
-  )
-}
-
-// ─── Memoized table row ───────────────────────────────────────────────────────
 const UserRow = memo(function UserRow({ user: u, onEdit, onDelete, onReset }) {
   return (
     <tr className="hover:bg-slate-50/60 transition">
@@ -706,13 +623,13 @@ const UserRow = memo(function UserRow({ user: u, onEdit, onDelete, onReset }) {
       <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{u.fullName}</td>
       <td className="px-3 py-2.5 text-slate-500 text-xs">{u.email}</td>
       <td className="px-3 py-2.5">
-        <RolePillList roleNames={u.roles ? u.roles.map(r => r.roleName) : []} />
+        <OverflowPillList items={u.roles ? u.roles.map(r => r.roleName) : []} maxVisible={2} color="brand" />
       </td>
       <td className="px-3 py-2.5">
-        <CapabilityPillList capabilityNames={u.capabilityNames ?? []} />
+        <OverflowPillList items={u.capabilityNames ?? []} maxVisible={2} color="brand" />
       </td>
-      <td className="px-3 py-2.5 text-slate-600 text-xs max-w-xs truncate" title={(u.teamMemberNames || []).join(', ')}>
-        {u.teamMemberNames && u.teamMemberNames.length > 0 ? u.teamMemberNames.join(', ') : '—'}
+      <td className="px-3 py-2.5">
+        <OverflowPillList items={u.teamMemberNames ?? []} maxVisible={2} color="brand" />
       </td>
       <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{u.designationName || '—'}</td>
       <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{u.departmentName || '—'}</td>

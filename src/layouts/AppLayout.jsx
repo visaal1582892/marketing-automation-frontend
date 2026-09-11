@@ -136,8 +136,11 @@ function ChangePasswordModal({ open, onClose }) {
   )
 }
 
-const TOP_NAV = [
+const OVERVIEW_NAV_LINKS = [
   { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+]
+
+const MY_WORKSPACE_NAV_LINKS = [
   {
     to: '/campaigns',
     label: 'My Requests',
@@ -151,10 +154,64 @@ const TOP_NAV = [
     right: Rights.VIEW_MY_TASKS,
   },
   {
+    to: '/requestor/review-center',
+    label: 'Review Center',
+    icon: 'eye',
+    right: Rights.VIEW_REQUESTOR_QC_QUEUE,
+  },
+  {
+    to: '/campaigns/completed',
+    label: 'Completed Tasks',
+    icon: 'checkSquare',
+    right: Rights.VIEW_OWN_COMPLETED_TASKS,
+  },
+  {
     to: '/collaborations',
     label: 'Collaborations',
     icon: 'users',
     right: Rights.ACCESS_COLLABORATIONS,
+  },
+]
+
+const MANAGER_TOOLS_NAV_LINKS = [
+  {
+    to: '/manager/task-management',
+    label: 'Task Management',
+    icon: 'layers',
+    anyRight: [Rights.ACCESS_MANAGER_TOOLS, Rights.VIEW_TEAM_TASKS],
+  },
+  {
+    to: '/tasks/approvals',
+    label: 'Task Approvals',
+    icon: 'userCheck',
+    anyRight: [Rights.REVIEW_MANAGER_QC, Rights.APPROVE_TEAM_TASKS],
+  },
+  {
+    to: '/manager/analytics',
+    label: 'Analytics',
+    icon: 'barChart',
+    anyRight: [Rights.VIEW_ANALYTICS_REPORTS, Rights.ACCESS_MANAGER_TOOLS, Rights.VIEW_TEAM_ANALYTICS],
+  },
+]
+
+const ADMINISTRATION_NAV_LINKS = [
+  {
+    to: '/budget-planning',
+    label: 'Budget Planning',
+    icon: 'dollar',
+    anyRight: BUDGET_RIGHTS,
+  },
+  {
+    to: '/budget/approvals',
+    label: 'Budget Approvals',
+    icon: 'userCheck',
+    anyRight: [Rights.APPROVE_BUDGET_OVERRUN, Rights.APPROVE_BUDGET],
+  },
+  {
+    to: '/admin/master',
+    label: 'Master Data',
+    icon: 'cog',
+    right: Rights.MANAGE_MASTER_DATA,
   },
 ]
 
@@ -167,7 +224,6 @@ export default function AppLayout() {
   const [hovered, setHovered]           = useState(false)
   const [mobileOpen, setMobileOpen]     = useState(false)
   const [menuOpen, setMenuOpen]         = useState(false)
-  const [managerOpen, setManagerOpen]   = useState(true)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
 
   const profileMenuRef = useRef(null)
@@ -182,25 +238,22 @@ export default function AppLayout() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const visibleManagerLinks = useMemo(
-    () => MANAGER_NAV_LINKS.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)),
+  const visibleOverview = useMemo(
+    () => OVERVIEW_NAV_LINKS.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)),
     [hasRight, hasAnyRight],
   )
-  const managerGroupLinks = useMemo(
-    () => visibleManagerLinks.filter(item => item.to !== '/manager/analytics'),
-    [visibleManagerLinks],
+  const visibleMyWorkspace = useMemo(
+    () => MY_WORKSPACE_NAV_LINKS.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)),
+    [hasRight, hasAnyRight],
   )
-  const showManagerTools = managerGroupLinks.length > 0
-  const showAnalyticsInGroup = showManagerTools &&
-    visibleManagerLinks.some(item => item.to === '/manager/analytics')
-  const showAnalyticsOnly = !showManagerTools &&
-    hasAnyRight(Rights.VIEW_ANALYTICS_REPORTS, Rights.ACCESS_MANAGER_TOOLS)
-  const showBudgetPlanning = hasAnyRight(...BUDGET_RIGHTS)
-
-  // Auto-expand groups based on current URL
-  useEffect(() => {
-    if (location.pathname.startsWith('/manager')) setManagerOpen(true)
-  }, [location.pathname])
+  const visibleManagerTools = useMemo(
+    () => MANAGER_TOOLS_NAV_LINKS.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)),
+    [hasRight, hasAnyRight],
+  )
+  const visibleAdministration = useMemo(
+    () => ADMINISTRATION_NAV_LINKS.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)),
+    [hasRight, hasAnyRight],
+  )
 
   const handleLogout = () => {
     logout()
@@ -236,6 +289,7 @@ export default function AppLayout() {
     if (location.pathname.startsWith('/manager/task-management'))  return 'Task Management'
     if (location.pathname.startsWith('/tasks/approvals'))          return 'Task Approvals'
     if (location.pathname.startsWith('/manager/analytics'))       return 'Analytics'
+    if (location.pathname.startsWith('/budget/approvals'))        return 'Budget Overrun Approvals'
     if (location.pathname.startsWith('/budget-planning'))         return 'Budget & Planning'
     if (location.pathname === '/dashboard')                        return 'Dashboard'
     return 'Marketing Automation'
@@ -248,23 +302,27 @@ export default function AppLayout() {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         className={`fixed inset-y-0 left-0 ${sidebarZ} ${sidebarWidth} flex flex-col
-                    overflow-hidden border-r border-slate-100 bg-white
-                    transition-all duration-200
-                    ${hovered ? 'shadow-xl shadow-slate-200/60' : ''}
+                    overflow-hidden border-r border-slate-200/80 bg-white
+                    transition-all duration-200 ease-in-out
+                    ${hovered ? 'shadow-2xl shadow-slate-900/5' : ''}
                     ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
       >
-        {/* Brand row — when collapsed, only the logo shows (centered, fixed 36px) */}
-        <div className={`flex h-[60px] shrink-0 items-center border-b border-slate-100
+        {/* Brand row — when collapsed, centered logo; when expanded, logo + styled brand badge */}
+        <div className={`flex h-[60px] shrink-0 items-center border-b border-slate-100/80 bg-white
                          ${collapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
           {collapsed ? (
-            <Logo size={32} />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50/50 transition hover:bg-brand-50">
+              <Logo size={28} />
+            </div>
           ) : (
             <div className="flex min-w-0 items-center gap-2.5">
-              <Logo size={32} />
+              <Logo size={30} />
               <div className="min-w-0 leading-tight">
-                <div className="truncate text-[13px] font-bold tracking-tight text-slate-900">MedPlus</div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-400">
-                  Brand &amp; Buzz
+                <div className="truncate text-sm font-bold tracking-tight text-slate-900">MedPlus</div>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="inline-block rounded bg-brand-50 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-brand-600 border border-brand-100/80 leading-none">
+                    Brand &amp; Buzz
+                  </span>
                 </div>
               </div>
             </div>
@@ -272,115 +330,119 @@ export default function AppLayout() {
         </div>
 
         {/* Nav */}
-        <nav className={`flex-1 overflow-hidden overflow-y-auto py-3 ${collapsed ? 'px-1.5 space-y-0.5' : 'px-2 space-y-0.5'}`}>
-          {TOP_NAV.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)).map((item) => (
-            <SidebarLink
-              key={item.to}
-              to={item.to}
-              label={item.label}
-              icon={item.icon}
-              collapsed={collapsed}
-              onNavigate={() => setMobileOpen(false)}
-              badge={0}
-            />
-          ))}
-
-          {hasRight(Rights.VIEW_OWN_COMPLETED_TASKS) && (
-            <SidebarLink
-              to="/campaigns/completed"
-              label="Completed Tasks"
-              icon="check"
-              collapsed={collapsed}
-              onNavigate={() => setMobileOpen(false)}
-            />
-          )}
-
-          {REQUESTOR_NAV_LINKS.filter(item => canAccessNavItem(item, hasRight, hasAnyRight)).map((item) => (
-            <SidebarLink
-              key={item.to}
-              to={item.to}
-              label={item.label}
-              icon={item.icon}
-              collapsed={collapsed}
-              onNavigate={() => setMobileOpen(false)}
-            />
-          ))}
-
-          {/* Manager ops — ACCESS_MANAGER_TOOLS only */}
-          {showManagerTools && (
-            <SidebarGroup
-              label="Manager Tools"
-              icon="shield"
-              collapsed={collapsed}
-              open={managerOpen}
-              onToggle={() => setManagerOpen((o) => !o)}
-            >
-              {managerGroupLinks.map((item) => (
+        <nav className={`flex-1 overflow-hidden overflow-y-auto py-2.5 ${collapsed ? 'px-2 space-y-2' : 'px-2.5 space-y-3'}`}>
+          {/* Section 1: Overview */}
+          {visibleOverview.length > 0 && (
+            <div className="space-y-0.5">
+              {visibleOverview.map(item => (
                 <SidebarLink
                   key={item.to}
                   to={item.to}
                   label={item.label}
                   icon={item.icon}
                   collapsed={collapsed}
-                  nested
                   onNavigate={() => setMobileOpen(false)}
                 />
               ))}
-              {showAnalyticsInGroup && (
-                <SidebarLink
-                  to="/manager/analytics"
-                  label="Analytics"
-                  icon="barChart"
-                  collapsed={collapsed}
-                  nested
-                  onNavigate={() => setMobileOpen(false)}
-                />
+            </div>
+          )}
+
+          {/* Section 2: My Workspace */}
+          {visibleMyWorkspace.length > 0 && (
+            <div>
+              {!collapsed ? (
+                <div className="px-3 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 select-none">
+                  My Workspace
+                </div>
+              ) : (
+                <div className="my-1.5 mx-2 border-t border-slate-200/80" />
               )}
-            </SidebarGroup>
+              <div className="space-y-0.5">
+                {visibleMyWorkspace.map(item => (
+                  <SidebarLink
+                    key={item.to}
+                    to={item.to}
+                    label={item.label}
+                    icon={item.icon}
+                    collapsed={collapsed}
+                    onNavigate={() => setMobileOpen(false)}
+                  />
+                ))}
+              </div>
+            </div>
           )}
 
-          {showAnalyticsOnly && (
-            <SidebarLink
-              to="/manager/analytics"
-              label="Analytics"
-              icon="barChart"
-              collapsed={collapsed}
-              onNavigate={() => setMobileOpen(false)}
-            />
+          {/* Section 3: Manager Tools */}
+          {visibleManagerTools.length > 0 && (
+            <div>
+              {!collapsed ? (
+                <div className="px-3 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 select-none">
+                  Manager Tools
+                </div>
+              ) : (
+                <div className="my-1.5 mx-2 border-t border-slate-200/80" />
+              )}
+              <div className="space-y-0.5">
+                {visibleManagerTools.map(item => (
+                  <SidebarLink
+                    key={item.to}
+                    to={item.to}
+                    label={item.label}
+                    icon={item.icon}
+                    collapsed={collapsed}
+                    onNavigate={() => setMobileOpen(false)}
+                  />
+                ))}
+              </div>
+            </div>
           )}
 
-          {showBudgetPlanning && (
-            <SidebarLink
-              to="/budget-planning"
-              label="Budget Planning"
-              icon="dollar"
-              collapsed={collapsed}
-              onNavigate={() => setMobileOpen(false)}
-            />
+          {/* Section 4: Administration & Planning */}
+          {visibleAdministration.length > 0 && (
+            <div>
+              {!collapsed ? (
+                <div className="px-3 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 select-none">
+                  Administration
+                </div>
+              ) : (
+                <div className="my-1.5 mx-2 border-t border-slate-200/80" />
+              )}
+              <div className="space-y-0.5">
+                {visibleAdministration.map(item => (
+                  <SidebarLink
+                    key={item.to}
+                    to={item.to}
+                    label={item.label}
+                    icon={item.icon}
+                    collapsed={collapsed}
+                    onNavigate={() => setMobileOpen(false)}
+                  />
+                ))}
+              </div>
+            </div>
           )}
-
-          <HasRight right={Rights.MANAGE_MASTER_DATA}>
-            <SidebarLink
-              to="/admin/master"
-              label="Master Data"
-              icon="cog"
-              collapsed={collapsed}
-              onNavigate={() => setMobileOpen(false)}
-            />
-          </HasRight>
         </nav>
 
         {/* Footer: sign out */}
-        <div className="shrink-0 border-t border-slate-100 p-2">
+        <div className="shrink-0 border-t border-slate-100 p-2 bg-slate-50/40">
           <button
             onClick={handleLogout}
-            title={collapsed ? 'Sign out' : undefined}
-            className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm
-                        font-medium text-slate-500 transition hover:bg-rose-50 hover:text-rose-600
-                        ${collapsed ? 'justify-center' : ''}`}
+            className={`group relative flex w-full items-center rounded-xl text-slate-500 transition-all duration-150 hover:bg-rose-50 hover:text-rose-600 ${
+              collapsed
+                ? 'mx-auto h-9 w-9 justify-center'
+                : 'px-3 py-2 text-xs font-medium gap-2.5'
+            }`}
           >
-            <Icon name="logout" className="h-[18px] w-[18px] shrink-0" />
-            {!collapsed && <span>Sign out</span>}
+            <Icon name="logout" className="h-[18px] w-[18px] shrink-0 group-hover:scale-110 transition-transform" />
+            {!collapsed && <span className="font-medium">Sign out</span>}
+            {collapsed && (
+              <div className="pointer-events-none absolute left-full ml-3 z-50 hidden group-hover:flex items-center">
+                <div className="relative rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-medium text-white shadow-xl whitespace-nowrap animate-in fade-in duration-100">
+                  Sign out
+                  <div className="absolute top-1/2 -left-1 -translate-y-1/2 border-4 border-transparent border-r-slate-900" />
+                </div>
+              </div>
+            )}
           </button>
         </div>
       </aside>
@@ -496,51 +558,87 @@ export default function AppLayout() {
 /* Sidebar primitives                                                */
 /* ----------------------------------------------------------------- */
 
+/* ----------------------------------------------------------------- */
+/* Sidebar primitives                                                */
+/* ----------------------------------------------------------------- */
+
 function SidebarLink({ to, label, icon, collapsed, nested = false, onNavigate, badge = 0 }) {
-  const iconClass = collapsed
-    ? 'h-[18px] w-[18px] shrink-0'
-    : nested
-      ? 'h-[15px] w-[15px] shrink-0 opacity-70'
-      : 'h-[17px] w-[17px] shrink-0'
-
-  const baseClass = collapsed
-    ? 'group relative mx-auto flex h-9 w-9 items-center justify-center rounded-lg transition'
-    : `group relative flex items-center gap-2.5 rounded-lg transition
-       ${nested ? 'px-2.5 py-1.5 text-[13px]' : 'px-2.5 py-2 text-[13.5px] font-medium'}`
-
   return (
     <NavLink
       to={to}
       onClick={onNavigate}
       end={!nested}
-      title={collapsed ? label : undefined}
       className={({ isActive }) =>
-        `${baseClass} ${isActive
-          ? 'bg-brand-50 text-brand-700'
-          : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`
+        `group relative flex items-center transition-all duration-150 select-none ${
+          collapsed
+            ? 'mx-auto justify-center h-9 w-9 rounded-xl my-0.5'
+            : `rounded-lg my-0.5 ${
+                nested
+                  ? 'px-3 py-1.5 text-[13px] ml-2'
+                  : 'px-3 py-2 text-[13.5px] font-medium'
+              }`
+        } ${
+          isActive
+            ? collapsed
+              ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-200/80 shadow-xs'
+              : 'bg-gradient-to-r from-brand-50 to-brand-50/20 text-brand-700 font-semibold'
+            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+        }`
       }
     >
       {({ isActive }) => (
         <>
+          {/* Active indicator line in expanded mode */}
           {isActive && !collapsed && (
-            <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r-full bg-brand-600" />
+            <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r-full bg-brand-600 shadow-xs" />
           )}
-          {/* Badge dot on icon when collapsed */}
-          <span className="relative shrink-0">
-            <Icon name={icon} className={iconClass} strokeWidth={isActive && !collapsed ? 2 : 1.7} />
+
+          {/* Icon */}
+          <span
+            className={`relative flex items-center justify-center shrink-0 transition-transform duration-150 ${
+              isActive
+                ? 'text-brand-600'
+                : 'text-slate-500 group-hover:text-slate-800 group-hover:scale-110'
+            }`}
+          >
+            <Icon
+              name={icon}
+              className={
+                collapsed
+                  ? 'h-[18px] w-[18px]'
+                  : nested
+                  ? 'h-[15.5px] w-[15.5px]'
+                  : 'h-[17.5px] w-[17.5px]'
+              }
+              strokeWidth={isActive ? 2 : 1.75}
+            />
             {badge > 0 && collapsed && (
-              <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center
-                               rounded-full bg-brand-600 text-[8px] font-bold text-white ring-1 ring-white">
+              <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-brand-600 text-[8px] font-bold text-white ring-2 ring-white">
                 {badge > 99 ? '99+' : badge}
               </span>
             )}
           </span>
-          {!collapsed && <span className="truncate flex-1">{label}</span>}
+
+          {/* Label in expanded mode */}
+          {!collapsed && (
+            <span className="ml-2.5 truncate flex-1 tracking-tight">{label}</span>
+          )}
+
+          {/* Badge in expanded mode */}
           {!collapsed && badge > 0 && (
-            <span className="ml-auto shrink-0 rounded-full bg-brand-600 px-1.5 py-0.5
-                             text-[10px] font-bold leading-none text-white">
+            <span className="ml-auto shrink-0 rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
               {badge > 99 ? '99+' : badge}
             </span>
+          )}
+
+          {/* Creative floating tooltip in contracted / collapsed mode */}
+          {collapsed && (
+            <div className="pointer-events-none absolute left-full ml-3 z-50 hidden group-hover:flex items-center">
+              <div className="relative rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-medium text-white shadow-xl whitespace-nowrap animate-in fade-in duration-100">
+                {label}
+                <div className="absolute top-1/2 -left-1 -translate-y-1/2 border-4 border-transparent border-r-slate-900" />
+              </div>
+            </div>
           )}
         </>
       )}
@@ -550,39 +648,52 @@ function SidebarLink({ to, label, icon, collapsed, nested = false, onNavigate, b
 
 function SidebarGroup({ label, icon, collapsed, open, onToggle, children }) {
   if (collapsed) {
-    // Icon-only mode: group icon acts as a toggle; children show when open
     return (
-      <div className="pt-2">
-        <div className="mx-2 mb-1.5 border-t border-slate-100" />
-        <button
-          onClick={onToggle}
-          title={label}
-          className={`mx-auto flex h-9 w-9 items-center justify-center rounded-lg transition
-            ${open
-              ? 'bg-brand-50 text-brand-600'
-              : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
-        >
-          <Icon name={icon} className="h-[18px] w-[18px]" />
-        </button>
-        {open && <div className="mt-0.5 space-y-0.5">{children}</div>}
+      <div className="py-1">
+        <div className="my-1.5 mx-2.5 border-t border-slate-200/80" />
+        <div className="group relative mx-auto flex justify-center">
+          <button
+            onClick={onToggle}
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-150 ${
+              open
+                ? 'bg-slate-100 text-brand-600 font-medium'
+                : 'text-slate-400 hover:bg-slate-100/80 hover:text-slate-700'
+            }`}
+          >
+            <Icon name={icon} className="h-[18px] w-[18px]" />
+          </button>
+          {/* Tooltip for section group header */}
+          <div className="pointer-events-none absolute left-full ml-3 top-1/2 -translate-y-1/2 z-50 hidden group-hover:flex items-center">
+            <div className="relative rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-medium text-white shadow-xl whitespace-nowrap">
+              {label}
+              <div className="absolute top-1/2 -left-1 -translate-y-1/2 border-4 border-transparent border-r-slate-900" />
+            </div>
+          </div>
+        </div>
+        {open && <div className="mt-1 space-y-0.5">{children}</div>}
       </div>
     )
   }
+
   return (
-    <div className="pt-3">
+    <div className="pt-3 pb-0.5">
       <button
         onClick={onToggle}
-        className="flex w-full select-none items-center justify-between px-2.5 py-1
-                   text-[10px] font-semibold uppercase tracking-widest text-slate-400
-                   transition-colors hover:text-slate-600"
+        className="group flex w-full select-none items-center justify-between px-3 py-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-400 transition-colors hover:text-slate-600"
       >
         <span>{label}</span>
         <Icon
           name="chevron"
-          className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`}
+          className={`h-3 w-3 text-slate-400 transition-transform duration-200 group-hover:text-slate-600 ${
+            open ? 'rotate-90' : ''
+          }`}
         />
       </button>
-      {open && <div className="mt-1 space-y-0.5">{children}</div>}
+      {open && (
+        <div className="mt-0.5 space-y-0.5 border-l border-slate-200/80 ml-3 pl-0.5">
+          {children}
+        </div>
+      )}
     </div>
   )
 }

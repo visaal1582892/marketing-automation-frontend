@@ -17,6 +17,7 @@ import useDebounce from '../../hooks/useDebounce'
 import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
 import tasksApi from '../../api/tasks'
 import MultiSelectDropdown from '../../components/MultiSelectDropdown'
+import { formatTaskId } from '../../utils/formatters'
 
 function FieldLabel({ children, required }) {
   return (
@@ -219,7 +220,7 @@ export function LinkedTaskModal({ task, onClose, onSuccess, parentTaskId, defaul
           <div>
             <h3 className="text-base font-bold text-slate-900">+ Followup Task</h3>
             <p className="mt-0.5 text-xs text-slate-500 font-medium">
-              Campaign {task.campaignId} &bull; {task.granularTaskName || task.taskTypeName || task.taskId}
+              Campaign {task.campaignId} &bull; {task.granularTaskName || task.taskTypeName || formatTaskId(task.taskId)}
             </p>
           </div>
           <button onClick={onClose}

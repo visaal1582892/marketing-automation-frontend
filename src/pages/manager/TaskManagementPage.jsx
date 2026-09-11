@@ -17,6 +17,7 @@ import DateRangePicker from '../../components/DateRangePicker'
 import StoreIdDisplay from '../../components/StoreIdDisplay'
 import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
 import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
+import { formatTaskId } from '../../utils/formatters'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -170,7 +171,7 @@ function UnholdModal({ task: t, isOther, mode, onSelectAuto, onSelectManual,
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
             <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-600">
-              {t.taskId}
+              {formatTaskId(t.taskId)}
             </span>
             <h3 className="text-sm font-semibold text-slate-900">
               Assign: {t.granularTaskName || t.taskTypeName || 'Task'}
@@ -320,7 +321,7 @@ function CancelConfirmModal({ task: t, onConfirm, onClose, acting }) {
           </div>
           <h3 className="text-base font-semibold text-slate-900">Cancel Task?</h3>
           <p className="mt-1.5 text-sm text-slate-500">
-            Task <span className="font-medium text-slate-700">#{t.taskId}</span> (
+            Task <span className="font-medium text-slate-700">#{formatTaskId(t.taskId)}</span> (
             {t.granularTaskName || t.taskTypeName || 'Task'}) will be permanently cancelled.
             This cannot be undone.
           </p>
@@ -372,6 +373,7 @@ export default function TaskManagementPage() {
   const [fStoreId, setFStoreId] = useState('')
   const [fRequestor, setFRequestor] = useState('')
   const [fAssignee, setFAssignee] = useState('')
+  const [fUnassigned, setFUnassigned] = useState(() => new URLSearchParams(location.search).get('unassigned') === 'true')
   const [fTaskType, setFTaskType] = useState('')
   const [fPriority, setFPriority] = useState('')
   const [fStatus, setFStatus] = useState(() => new URLSearchParams(location.search).get('status') || '')
@@ -403,7 +405,7 @@ export default function TaskManagementPage() {
   // ── Reset to page 0 whenever any filter changes ───────────────────────────
   useEffect(() => { setPage(0) },
     [dTaskId, dParentTaskId, dCampaign, dStoreId, dRequestor, dAssignee, dActionDoneBy,
-      fTaskType, fPriority, fStatus, fDateFrom, fDateTo]) // eslint-disable-line react-hooks/exhaustive-deps
+      fTaskType, fPriority, fStatus, fDateFrom, fDateTo, fUnassigned]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch data from backend (debounced filters + page) ────────────────────
   useEffect(() => {
@@ -423,6 +425,7 @@ export default function TaskManagementPage() {
       ...(fStatus && { status: fStatus }),
       ...(fDateFrom && { dateFrom: fDateFrom }),
       ...(fDateTo && { dateTo: fDateTo }),
+      ...(fUnassigned && { unassigned: true }),
     }
     const heldCountParams = { status: 'HELD', page: 0, size: 1 }
     Promise.all([
@@ -452,7 +455,7 @@ export default function TaskManagementPage() {
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [dTaskId, dParentTaskId, dCampaign, dStoreId, dRequestor, dAssignee, dActionDoneBy,
-    fTaskType, fPriority, fStatus, fDateFrom, fDateTo, page, refreshSeed, location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+    fTaskType, fPriority, fStatus, fDateFrom, fDateTo, fUnassigned, page, refreshSeed, location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Master data for filter dropdowns ─────────────────────────────────────
   const [allTaskTypeOpts, setAllTaskTypeOpts] = useState([])
@@ -476,13 +479,13 @@ export default function TaskManagementPage() {
   const filtered = tasks
 
   const activeFilters = [fTaskId, fParentTaskId, fCampaign, fStoreId, fRequestor, fAssignee, fTaskType, fPriority, fStatus, fActionDoneBy,
-    fDateFrom, fDateTo]
+    fDateFrom, fDateTo, fUnassigned]
     .filter(Boolean).length
 
   const clearFilters = () => {
     setFTaskId(''); setFParentTaskId(''); setFCampaign(''); setFStoreId(''); setFRequestor(''); setFAssignee('')
     setFTaskType(''); setFPriority(''); setFStatus(''); setFActionDoneBy('')
-    setFDateFrom(null); setFDateTo(null)
+    setFDateFrom(null); setFDateTo(null); setFUnassigned(false)
     // clear the URL query param if it was set from the dashboard
     if (location.search) navigate('/manager/task-management', { replace: true })
   }
@@ -504,7 +507,7 @@ export default function TaskManagementPage() {
     setHoldingId(task.taskId)
     try {
       await managerApi.holdTask(task.taskId)
-      toast.success(`Task ${task.taskId} is now on hold.`)
+      toast.success(`Task ${formatTaskId(task.taskId)} is now on hold.`)
       setRefreshSeed(s => s + 1)
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Hold failed.')
@@ -560,10 +563,10 @@ export default function TaskManagementPage() {
     try {
       if (unholdMode === 'auto') {
         await managerApi.unholdTask(unholdTarget.taskId)
-        toast.success(`Task ${unholdTarget.taskId} auto-routed successfully.`)
+        toast.success(`Task ${formatTaskId(unholdTarget.taskId)} auto-routed successfully.`)
       } else {
         await managerApi.assignHeldTask(unholdTarget.taskId, selectedUserId)
-        toast.success(`Task ${unholdTarget.taskId} assigned successfully.`)
+        toast.success(`Task ${formatTaskId(unholdTarget.taskId)} assigned successfully.`)
       }
       closeUnholdModal()
       setRefreshSeed(s => s + 1)
@@ -580,7 +583,7 @@ export default function TaskManagementPage() {
     setActingCancel(true)
     try {
       await managerApi.cancelTask(cancelTarget.taskId)
-      toast.success(`Task ${cancelTarget.taskId} cancelled.`)
+      toast.success(`Task ${formatTaskId(cancelTarget.taskId)} cancelled.`)
       setCancelTarget(null)
       setRefreshSeed(s => s + 1)
     } catch (e) {
@@ -610,6 +613,15 @@ export default function TaskManagementPage() {
             label={`${heldCount} task${heldCount !== 1 ? 's' : ''} on hold`}
             color="amber"
           />
+          <label className="flex items-center gap-1.5 cursor-pointer bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-100 transition select-none">
+            <input
+              type="checkbox"
+              checked={fUnassigned}
+              onChange={e => setFUnassigned(e.target.checked)}
+              className="rounded border-slate-300 text-brand-600 focus:ring-brand-500 h-3.5 w-3.5"
+            />
+            Show Unassigned Only
+          </label>
           {activeFilters > 0 && (
             <button onClick={clearFilters}
               className="flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50
@@ -725,7 +737,7 @@ export default function TaskManagementPage() {
       {assetPreviewTask && (
         <AssetPreviewModal
           taskId={assetPreviewTask.taskId}
-          taskName={assetPreviewTask.granularTaskName || `Task ${assetPreviewTask.taskId}`}
+          taskName={assetPreviewTask.granularTaskName || `Task ${formatTaskId(assetPreviewTask.taskId)}`}
           currentUserId={user?.id}
           onClose={() => setAssetPreviewTask(null)}
         />
@@ -810,14 +822,14 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
 
       <td className={cellCls}>
         <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-600">
-          {t.taskId}
+          {formatTaskId(t.taskId)}
         </span>
       </td>
 
       <td className={`${cellCls} text-slate-600 text-center`}>
         {t.parentTaskId ? (
           <span className="font-mono text-[11px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded font-bold">
-            {t.parentTaskId}
+            {formatTaskId(t.parentTaskId)}
           </span>
         ) : (
           <span className="text-slate-300">—</span>

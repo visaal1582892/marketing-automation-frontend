@@ -18,7 +18,7 @@ import ReactSelect, { components } from 'react-select'
 
 // brand palette (from index.css CSS vars)
 const B = {
-  50:  '#fef2f2',
+  50: '#fef2f2',
   100: '#fde3e3',
   200: '#fbcaca',
   300: '#f7a3a3',
@@ -31,9 +31,9 @@ const PORTAL_ZINDEX = 9999
 
 function buildStyles(size) {
   const isSmall = size === 'sm'
-  const ctrlH   = isSmall ? '28px' : '36px'
-  const fs      = isSmall ? '0.75rem' : '0.875rem'
-  const optPad  = isSmall ? '4px 8px' : '6px 10px'
+  const ctrlH = isSmall ? '28px' : '36px'
+  const fs = isSmall ? '0.75rem' : '0.875rem'
+  const optPad = isSmall ? '4px 8px' : '6px 10px'
 
   return {
     // This is the critical one: controls the portal wrapper's z-index so it
@@ -164,9 +164,9 @@ function makeLimitedValueContainer(max) {
 function normalise(options = []) {
   return options.map(o => {
     if (typeof o === 'string') return { value: o, label: o }
-    if (Array.isArray(o))     return { value: String(o[0]), label: String(o[1]) }
+    if (Array.isArray(o)) return { value: String(o[0]), label: String(o[1]) }
     // react-select group: { label, options[] }
-    if (o.options)            return { label: o.label, options: normalise(o.options) }
+    if (o.options) return { label: o.label, options: normalise(o.options) }
     return { ...o, value: String(o.value) }
   })
 }
@@ -186,7 +186,7 @@ export default function AppSelect({
   menuPortal = false
 }) {
   const normOpts = normalise(options)
-  const styles   = buildStyles(size)
+  const styles = buildStyles(size)
   const isAutoScrolling = useRef(false)
   const selectRef = useRef(null)
 
@@ -198,13 +198,13 @@ export default function AppSelect({
         if (rect.bottom > window.innerHeight) {
           isAutoScrolling.current = true
           setTimeout(() => { isAutoScrolling.current = false }, 500)
-          
+
           const scrollAmount = rect.bottom - window.innerHeight + 20
-          
+
           const controlEl = document.querySelector('.app-select__control--menu-is-open')
           let parent = controlEl ? controlEl.parentElement : null
           let scrolled = false
-          
+
           while (parent && parent !== document.documentElement) {
             const style = window.getComputedStyle(parent)
             if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
@@ -214,7 +214,7 @@ export default function AppSelect({
             }
             parent = parent.parentElement
           }
-          
+
           if (!scrolled) {
             window.scrollBy({ top: scrollAmount, behavior: 'smooth' })
           }
@@ -224,15 +224,21 @@ export default function AppSelect({
   }
 
   const handleCloseMenuOnScroll = (e) => {
-    // Only close if it's not currently animating an auto-scroll
-    return !isAutoScrolling.current
+    if (isAutoScrolling.current) return false
+    if (e && e.target && e.target.nodeType === 1) {
+      const menuEl = document.querySelector('.app-select__menu')
+      if (menuEl && menuEl.contains(e.target)) {
+        return false
+      }
+    }
+    return true
   }
 
   // Multi mode: normalise value items to strings so they match normOpts
   if (isMulti) {
     const normValue = (value ?? []).map(v => ({ ...v, value: String(v.value) }))
     const LimitedVC = makeLimitedValueContainer(maxMultiValues)
-    
+
     const handleChange = (opts, actionMeta) => {
       onChange(opts || [])
       if (actionMeta?.action === 'select-option' && actionMeta.option?.value === 'Other') {
@@ -291,7 +297,7 @@ export default function AppSelect({
 
   // Single mode: value is a raw string
   const flatOpts = normOpts.flatMap(o => o.options ?? [o])
-  const strVal   = value != null && value !== '' ? String(value) : null
+  const strVal = value != null && value !== '' ? String(value) : null
   const selected = strVal ? (flatOpts.find(o => o.value === strVal) ?? null) : null
 
   const handleChange = (opt) => onChange(opt ? opt.value : '')

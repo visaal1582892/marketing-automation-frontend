@@ -502,6 +502,48 @@ function RequestorCampaignView({ onTotalChange, onNewRequest }) {
         />
       )}
 
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <Modal
+          open={!!deleteTarget}
+          onClose={() => !deleting && setDeleteTarget(null)}
+          title="Delete Campaign Request"
+          size="sm"
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+                className="rounded-lg bg-red-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition shadow-sm"
+              >
+                {deleting ? 'Deleting…' : 'Delete Campaign'}
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-3 py-1">
+            <div className="flex items-center gap-3 rounded-xl bg-red-50 p-3.5 border border-red-100">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-100 text-red-600 shrink-0">
+                <Icon name="trash" className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-red-900">Are you sure you want to delete Campaign #{deleteTarget.campaignId}?</p>
+                <p className="text-xs text-red-700 mt-0.5">This action cannot be undone. All tasks associated with this request will be removed.</p>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
 
     </div>
   )

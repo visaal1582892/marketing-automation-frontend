@@ -38,7 +38,7 @@ export default function DashboardPage() {
   const [tasks,                setTasks]                = useState([])
   const [workerCounts,         setWorkerCounts]         = useState({ open: 0, inFlight: 0, qc: 0, done: 0 })
   const [opsQcSummary,         setOpsQcSummary]         = useState({ managerQcPending: 0, requestorQcPending: 0 })
-  const [opsCounts,            setOpsCounts]            = useState({ qcReview: 0, rework: 0, inProgress: 0, completed: 0, assigned: 0, held: 0, cancelled: 0 })
+  const [opsCounts,            setOpsCounts]            = useState({ qcReview: 0, rework: 0, inProgress: 0, completed: 0, assigned: 0, held: 0, unassigned: 0 })
   const [completedTasksCount,  setCompletedTasksCount]  = useState(0)
   const [loading,              setLoading]              = useState(true)
   const [trend,                setTrend]                = useState(null)
@@ -51,6 +51,9 @@ export default function DashboardPage() {
     cancelled: 0,
     active: 0,
   })
+
+  // Requestor-specific: pending task reviews (REQUESTOR_REVIEW tasks on my campaigns)
+  const [requestorPendingReviews, setRequestorPendingReviews] = useState(0)
 
   useEffect(() => {
     let alive = true
@@ -78,6 +81,9 @@ export default function DashboardPage() {
       need(showWorkerWidgets, () => tasksApi.listMy(null, 'DONE', 0, 1).then(r => r.data)),
       // Worker: recent task list for the feed (first page, default size)
       need(showWorkerWidgets, () => tasksApi.listMy().then(r => r.data)),
+      // Requestor: pending task reviews (REQUESTOR_REVIEW tasks on my campaigns) — separate
+      // endpoint accessible to all requestors regardless of ops rights
+      need(showRequestWidgets, () => tasksApi.myApprovals({ queueType: 'REQUESTOR', page: 0, size: 1 }).then(r => r.data?.totalElements ?? 0)),
       // Ops: QC pending (full list — usually small)
       need(showOpsWidgets, () => managerApi.qcSummary().then(r => r.data)),
       // Ops: per-status counts — fetch size=1 so backend returns totalElements accurately
@@ -86,9 +92,9 @@ export default function DashboardPage() {
       need(showOpsWidgets, () => managerApi.allTasks({ status: 'COMPLETED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets, () => managerApi.allTasks({ status: 'ASSIGNED',    size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets, () => managerApi.allTasks({ status: 'HELD',        size: 1 }).then(r => r.data?.totalElements ?? 0)),
-      need(showOpsWidgets, () => managerApi.allTasks({ status: 'CANCELLED',   size: 1 }).then(r => r.data?.totalElements ?? 0)),
+      need(showOpsWidgets, () => managerApi.allTasks({ unassigned: true, size: 1 }).then(r => r.data?.totalElements ?? 0)),
       need(showOpsWidgets, () => managerApi.dashboardTrend().then(r => r.data)),
-    ]).then(([cs, completedTasks, openData, qcData, doneData, ts, qcSummary, rework, inProgress, completed, assigned, held, cancelled, trendData]) => {
+    ]).then(([cs, completedTasks, openData, qcData, doneData, ts, reqPendingReviews, qcSummary, rework, inProgress, completed, assigned, held, unassigned, trendData]) => {
       if (!alive) return
       setCampaignSummary(cs ?? {
         total: 0,
@@ -111,6 +117,7 @@ export default function DashboardPage() {
         done:     toTotal(doneData),
       })
 
+      setRequestorPendingReviews(reqPendingReviews ?? 0)
       setOpsQcSummary(qcSummary ?? { managerQcPending: 0, requestorQcPending: 0 })
       setOpsCounts({
         qcReview:   (qcSummary?.managerQcPending ?? 0) + (qcSummary?.requestorQcPending ?? 0),
@@ -119,7 +126,7 @@ export default function DashboardPage() {
         completed:  completed  ?? 0,
         assigned:   assigned   ?? 0,
         held:       held       ?? 0,
-        cancelled:  cancelled  ?? 0,
+        unassigned: unassigned ?? 0,
       })
       if (trendData) setTrend(trendData)
     }).finally(() => alive && setLoading(false))
@@ -134,7 +141,13 @@ export default function DashboardPage() {
 
   // ── Derived analytics for card detail lines ───────────────────────────────
   const mgrQcCount = opsQcSummary.managerQcPending ?? 0
-  const reqQcCount = opsQcSummary.requestorQcPending ?? 0
+  // For requestors: use the dedicated requestorPendingReviews count (fetched from a
+  // requestor-accessible endpoint). For ops users who also see the My Requests section,
+  // prefer opsQcSummary.requestorQcPending if available, otherwise fall back to the
+  // requestor count.
+  const reqQcCount = showOpsWidgets
+    ? (opsQcSummary.requestorQcPending ?? requestorPendingReviews)
+    : requestorPendingReviews
 
   // "Active" = everything not yet terminal
   const opsActiveTotal = opsCounts.assigned + opsCounts.inProgress + opsCounts.qcReview + opsCounts.rework + opsCounts.held
@@ -296,15 +309,13 @@ export default function DashboardPage() {
               trendPct={trend?.heldTrend}
             />
             <KpiCard
-              to="/manager/task-management?status=CANCELLED"
-              tone="rose"
-              icon="x"
-              label="Cancelled"
-              value={opsCounts.cancelled}
-              detail={allOpsTotal > 0 ? `${Math.round(opsCounts.cancelled / allOpsTotal * 100)}% attrition rate` : 'No cancellations'}
-              progress={allOpsTotal > 0 ? Math.round(opsCounts.cancelled / allOpsTotal * 100) : 0}
-              sparkline={trend?.cancelled}
-              trendPct={trend?.cancelledTrend}
+              to="/manager/task-management?unassigned=true"
+              tone="indigo"
+              icon="user-minus"
+              label="Unassigned Tasks"
+              value={opsCounts.unassigned}
+              detail={opsCounts.unassigned > 0 ? `${opsCounts.unassigned} awaiting assignment` : 'All tasks assigned'}
+              progress={opsPct(opsCounts.unassigned)}
             />
           </Section>
         </>
@@ -453,6 +464,9 @@ const TONES = {
   violet:  'from-violet-400 to-violet-600',
   orange:  'from-orange-400 to-orange-600',
   rose:    'from-rose-400 to-rose-600',
+  indigo:  'from-indigo-500 to-indigo-700',
+  purple:  'from-purple-500 to-purple-700',
+  slate:   'from-slate-500 to-slate-700',
 }
 
 // Solid fill colours for recharts Area (must be a plain colour, not a gradient class)
@@ -463,6 +477,9 @@ const TONE_COLOURS = {
   violet:  '#8b5cf6',
   orange:  '#f97316',
   rose:    '#f43f5e',
+  indigo:  '#6366f1',
+  purple:  '#a855f7',
+  slate:   '#64748b',
 }
 
 function KpiCard({ to, tone = 'brand', icon, label, value, detail, progress, sparkline, trendPct }) {

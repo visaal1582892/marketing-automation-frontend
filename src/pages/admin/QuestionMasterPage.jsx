@@ -7,6 +7,8 @@ import Modal from '../../components/Modal'
 import Pagination from '../../components/Pagination'
 import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
+import MultiSelectDropdown from '../../components/MultiSelectDropdown'
+import OverflowPillList from '../../components/OverflowPillList'
 import BackToMaster from '../../components/admin/BackToMaster'
 import { TableStatusRow } from '../../components/dataTable'
 
@@ -432,17 +434,14 @@ export default function QuestionMasterPage() {
                 <span className="ml-1.5 font-normal text-slate-400">({form.granularTaskIds.length} selected)</span>
               )}
             </label>
-            <AppSelect
-              isMulti
-              isSearchable
-              menuPortal
-              value={granularTasks
-                .filter(t => form.granularTaskIds.includes(String(t.taskId)))
-                .map(t => ({ value: String(t.taskId), label: t.taskName }))}
-              onChange={(selected) =>
-                setForm(f => ({ ...f, granularTaskIds: (selected || []).map(s => s.value) }))
-              }
-              options={granularTasks.map(t => ({ value: String(t.taskId), label: t.taskName }))}
+            <MultiSelectDropdown
+              options={granularTasks.map(t => ({
+                id: String(t.taskId),
+                name: t.taskName || String(t.taskId),
+                subtitle: String(t.taskId),
+              }))}
+              value={form.granularTaskIds}
+              onChange={ids => setForm(f => ({ ...f, granularTaskIds: ids }))}
               placeholder="Search and select tasks…"
             />
           </div>
@@ -610,30 +609,11 @@ const QuestionRow = memo(function QuestionRow({ question: q, onEdit, onDelete, o
         )}
       </td>
       <td className="px-4 py-2.5">
-        {(q.mappedTasks || []).length === 0 ? (
-          <span className="text-slate-400 text-xs">—</span>
-        ) : (
-          <div className="flex flex-wrap gap-1">
-            {q.mappedTasks.slice(0, 3).map((t) => (
-              <span
-                key={t.granularTaskId}
-                className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5
-                  text-xs font-medium text-brand-700 ring-1 ring-brand-100"
-              >
-                {t.granularTaskName}
-              </span>
-            ))}
-            {q.mappedTasks.length > 3 && (
-              <span
-                title={q.mappedTasks.slice(3).map(t => t.granularTaskName).join(', ')}
-                className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5
-                  text-xs font-medium text-slate-600 ring-1 ring-slate-200 cursor-default"
-              >
-                +{q.mappedTasks.length - 3}
-              </span>
-            )}
-          </div>
-        )}
+        <OverflowPillList
+          items={(q.mappedTasks || []).map(t => t.granularTaskName)}
+          maxVisible={2}
+          color="brand"
+        />
       </td>
       <td className="px-4 py-2.5">
         <RowActions question={q} onEdit={() => onEdit(q)} onDelete={() => onDelete(q)} onReactivate={onReactivate} />

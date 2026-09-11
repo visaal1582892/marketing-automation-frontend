@@ -103,6 +103,22 @@ const tasksApi = {
    */
   removeTaskFile: (taskId, fileUrl) =>
     api.delete(`${BASE}/${taskId}/files`, { data: { fileUrl } }),
+
+  // ── PO Payment Tracking ──────────────────────────────────────────────────
+
+  /** Saved PO entries for a task from local work_task_pos table */
+  getTaskPos: (taskId) => api.get(`${BASE}/${taskId}/pos`),
+  checkBudget: (taskId) => api.get(`${BASE}/${taskId}/budget-check`),
+  saveTaskPos: (taskId, entries) => api.post(`${BASE}/${taskId}/pos`, { entries }),
+
+  /** Bulk delete PO entries for a task */
+  deleteTaskPos: (taskId, poIds) => api.delete(`${BASE}/${taskId}/pos`, { data: { poIds } }),
+
+  /** Lookup PO preview details from external DB by comma-separated PO IDs */
+  lookupPoIds: (taskId, poIds) => api.get(`${BASE}/${taskId}/pos/lookup`, { params: { poIds } }),
+
+  /** Fetch full detail for a single PO (for brief modal view) */
+  getPoDetail: (taskId, poId) => api.get(`${BASE}/${taskId}/pos/${poId}/detail`),
 }
 
 export default tasksApi

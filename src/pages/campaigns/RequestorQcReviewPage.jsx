@@ -13,6 +13,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
 import TimelineNodeFlow from '../../components/TimelineNodeFlow'
 import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
+import { formatTaskId } from '../../utils/formatters'
 
 const PAGE_SIZE = 20
 
@@ -34,6 +35,7 @@ export default function RequestorQcReviewPage() {
   const [saving,   setSaving]   = useState(false)
 
   const [briefCampaignId,  setBriefCampaignId]  = useState(null)
+  const [briefTaskId,      setBriefTaskId]      = useState(null)
   const [assetPreviewTask, setAssetPreviewTask] = useState(null)
 
   const [search,    setSearch]    = useState('')
@@ -87,17 +89,15 @@ export default function RequestorQcReviewPage() {
     if (!reviewing) return
     setSaving(true)
     try {
-      if (action === 'APPROVE') {
-        await campaignsApi.requestorApprove(reviewing.campaignId, reviewing.taskId, comments.trim() || null)
-        showToast('Task approved — marked as completed!', 'success')
+      if (action === 'REWORK') {
+        const res = await campaignsApi.requestorRework(reviewingCampaign.campaignId, reviewing.taskId, comments)
+        setTasks(prev => prev.map(t => t.taskId === reviewing.taskId ? res.data : t))
+      } else if (action === 'REJECTED') {
+        const res = await campaignsApi.requestorReject(reviewingCampaign.campaignId, reviewing.taskId, comments)
+        setTasks(prev => prev.map(t => t.taskId === reviewing.taskId ? res.data : t))
       } else {
-        if (!comments.trim()) {
-          showToast('Please add a rework message.', 'error')
-          setSaving(false)
-          return
-        }
-        await campaignsApi.requestorRework(reviewing.campaignId, reviewing.taskId, comments.trim())
-        showToast('Task sent back for rework.', 'success')
+        const res = await campaignsApi.requestorApprove(reviewingCampaign.campaignId, reviewing.taskId, comments)
+        setTasks(prev => prev.map(t => t.taskId === reviewing.taskId ? res.data : t))
       }
       close()
       refresh()
@@ -198,8 +198,9 @@ export default function RequestorQcReviewPage() {
               key={t.taskId}
               task={t}
               onApprove={() => open(t, 'APPROVE')}
+              onReject={() => open(t, 'REJECTED')}
               onRework={() => open(t, 'REWORK')}
-              onView={() => setBriefCampaignId(t.campaignId)}
+              onView={() => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}
               onViewAssets={() => setAssetPreviewTask(t)}
             />
           ))}
@@ -227,7 +228,7 @@ export default function RequestorQcReviewPage() {
           saving={saving}
           onCancel={close}
           onConfirm={submitAction}
-          onViewBrief={() => setBriefCampaignId(reviewing.campaignId)}
+          onViewBrief={() => { setBriefCampaignId(reviewing.campaignId); setBriefTaskId(reviewing.taskId) }}
         />
       )}
 
@@ -238,7 +239,8 @@ export default function RequestorQcReviewPage() {
       {briefCampaignId && (
         <RequestBriefDrawer
           campaignId={briefCampaignId}
-          onClose={() => setBriefCampaignId(null)}
+          filterTaskId={briefTaskId}
+          onClose={() => { setBriefCampaignId(null); setBriefTaskId(null) }}
           onCampaignChanged={() => refresh()}
         />
       )}
@@ -248,7 +250,7 @@ export default function RequestorQcReviewPage() {
 
 // ─── Task Card ───────────────────────────────────────────────────────────────
 
-function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
+function FlatTaskCard({ task, onApprove, onReject, onRework, onView, onViewAssets }) {
   const { user } = useAuth()
   const currentUserId = user?.userId ?? user?.id
   const fmt = ts => new Date(ts).toLocaleString('en-IN', {
@@ -264,7 +266,7 @@ function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
             CMP&nbsp;{task.campaignId}
           </span>
           <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
-            Task&nbsp;{task.taskId}
+            Task&nbsp;{formatTaskId(task.taskId)}
           </span>
           <PriorityBadge v={task.campaignPriority} />
           {task.requestorReworkCount > 0 && (
@@ -313,6 +315,10 @@ function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <button onClick={onReject}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 transition">
+              <Icon name="xCircle" className="h-3.5 w-3.5" /> Reject
+            </button>
             <button onClick={onRework}
               className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition">
               <Icon name="refresh" className="h-3.5 w-3.5" /> Request Rework
@@ -347,8 +353,12 @@ function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
 
 function ReviewModal({ task, campaign, action, setAction, comments, setComments, saving, onCancel, onConfirm, onViewBrief }) {
   const [showAssets, setShowAssets] = useState(false)
-  const labels = { APPROVE: 'Approve Task', REWORK: 'Request Rework' }
-  const tones  = { APPROVE: 'bg-green-600 hover:bg-green-700', REWORK: 'bg-amber-600 hover:bg-amber-700' }
+  const labels = { APPROVE: 'Approve Task', REWORK: 'Request Rework', REJECTED: 'Reject Task' }
+  const tones = {
+    APPROVE: 'bg-green-600 hover:bg-green-700',
+    REWORK: 'bg-amber-600 hover:bg-amber-700',
+    REJECTED: 'bg-red-600 hover:bg-red-700'
+  }
 
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
@@ -367,7 +377,7 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 space-y-0.5">
                 <div>
                   <span className="font-medium">Reviewing deliverable:</span>{' '}
-                  Task {task.taskId} — {task.granularTaskName || task.taskTypeName}
+                  Task {formatTaskId(task.taskId)} — {task.granularTaskName || task.taskTypeName}
                 </div>
                 <div>
                   <span className="font-medium">Creator:</span>{' '}
@@ -403,9 +413,10 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-1">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
             <ActionRadio v="APPROVE" active={action} setActive={setAction} label="Approve" />
-            <ActionRadio v="REWORK"  active={action} setActive={setAction} label="Request Rework" />
+            <ActionRadio v="REWORK" active={action} setActive={setAction} label="Rework" />
+            <ActionRadio v="REJECTED" active={action} setActive={setAction} label="Reject" />
           </div>
 
           <div>

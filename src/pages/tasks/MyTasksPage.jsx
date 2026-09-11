@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import tasksApi from '../../api/tasks'
 import useDebounce from '../../hooks/useDebounce'
@@ -16,6 +16,9 @@ import { Rights } from '../../constants/rights'
 import { LinkedTaskModal } from '../../components/tasks/LinkedTaskModal'
 import workingHoursApi from '../../api/workingHours'
 import { normalizeSnapshot, formatWorkingElapsed } from '../../utils/workingHours'
+import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
+import { formatTaskId } from '../../utils/formatters'
+import BudgetImpactWarningModal from '../../components/budget/BudgetImpactWarningModal'
 
 /**
  * Module 3 — Employee Dashboard.
@@ -58,6 +61,9 @@ export default function MyTasksPage() {
   const [commentText,    setCommentText]    = useState('')
   const [commentSaving,  setCommentSaving]  = useState(false)
 
+  const [budgetWarningStates, setBudgetWarningStates] = useState([])
+  const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false)
+
 
   // Full-brief drawer (any task → click "View brief")
   const [briefCampaignId, setBriefCampaignId] = useState(null)
@@ -70,6 +76,8 @@ export default function MyTasksPage() {
   // Task-specific dynamic questions and worker's current answers
   const [taskQuestions, setTaskQuestions] = useState([])
   const [taskAnswers,   setTaskAnswers]   = useState({}) // { [questionId]: string }
+
+  const [savedPoEntries, setSavedPoEntries] = useState([])
 
   const [hoursSnapshot, setHoursSnapshot] = useState(null)
 
@@ -185,12 +193,19 @@ export default function MyTasksPage() {
     setSubmittingCampaign(null)
     setTaskQuestions([])
     setTaskAnswers({})
+    setSavedPoEntries([])
     // Pre-fill notes from the previous submission so the worker can amend them.
     setSubmitForm({ submissionNotes: task.submissionNotes || '' })
 
     campaignsApi.getById(task.campaignId)
       .then(res => setSubmittingCampaign(res.data))
       .catch(() => { /* show task-only modal */ })
+
+    if (task.needsPaymentTracking) {
+      tasksApi.getTaskPos(task.taskId)
+        .then(res => setSavedPoEntries(res.data || []))
+        .catch(() => setSavedPoEntries([]))
+    }
 
     // Fetch task-specific questions and any previously saved answers
     try {
@@ -209,21 +224,7 @@ export default function MyTasksPage() {
     }
   }
 
-  const submitForQc = async () => {
-    if (!submitting) return
-
-    // Validate required questions
-    const missing = taskQuestions.filter(q => {
-      if (!q.isRequired) return false
-      const val = taskAnswers[q.questionId]
-      return !val || (typeof val === 'string' && val.trim() === '') ||
-             (val === '[]')
-    })
-    if (missing.length > 0) {
-      showToast(`Please answer ${missing.length} required question${missing.length > 1 ? 's' : ''}.`, 'error')
-      return
-    }
-
+  const executeSubmitForQc = async () => {
     setSavingId(submitting.taskId)
     try {
       // Save question answers first (if any exist)
@@ -243,6 +244,8 @@ export default function MyTasksPage() {
       setSubmitting(null)
       setTaskQuestions([])
       setTaskAnswers({})
+      setSavedPoEntries([])
+      setIsBudgetModalOpen(false)
       refresh()
     } catch (e) {
       const msg = e?.response?.data?.message || 'Could not submit task'
@@ -250,6 +253,86 @@ export default function MyTasksPage() {
     } finally {
       setSavingId(null)
     }
+  }
+
+  const submitForQc = async () => {
+    if (!submitting) return
+
+    // Validate PO tracking if task requires payment tracking
+    if (submitting.needsPaymentTracking) {
+      const locs = submittingCampaign?.locations || []
+      const requiredStates = Array.from(new Set(
+        locs.filter(l => l.locationType === 'STATE' || l.locationType === 'CITY')
+            .map(l => l.stateSubName)
+            .filter(Boolean)
+      ))
+
+      if (requiredStates.length === 0) {
+        // Country-Only Edge Case: Bypass missing state remarks, but require at least one valid PO
+        const hasValidPo = savedPoEntries.some(e => {
+          const po = e.po_id || e.poId
+          return po && po.trim().length > 0
+        })
+        if (!hasValidPo) {
+          showToast('This task requires payment tracking. Please provide at least one valid PO ID before submitting.', 'error')
+          return
+        }
+      } else {
+        const savedMap = {}
+        for (const e of savedPoEntries) {
+          const st = e.state_sub_name || e.stateSubName
+          if (st) savedMap[st] = e
+        }
+        const missing = requiredStates.filter(st => {
+          const e = savedMap[st]
+          if (!e) return true
+          const po = e.po_id || e.poId
+          const rem = e.remarks
+          return (!po || !po.trim()) && (!rem || !rem.trim())
+        })
+        if (missing.length > 0) {
+          showToast(`Please provide PO IDs or remarks for required state(s): ${missing.join(', ')}`, 'error')
+          return
+        }
+      }
+    }
+
+    // Validate required questions
+    const missing = taskQuestions.filter(q => {
+      if (!q.isRequired) return false
+      const val = taskAnswers[q.questionId]
+      return !val || (typeof val === 'string' && val.trim() === '') ||
+             (val === '[]')
+    })
+    if (missing.length > 0) {
+      showToast(`Please answer ${missing.length} required question${missing.length > 1 ? 's' : ''}.`, 'error')
+      return
+    }
+
+    // Budget Check Interceptor
+    if (submitting.needsPaymentTracking) {
+        setSavingId(submitting.taskId)
+        try {
+            const budgetRes = await tasksApi.checkBudget(submitting.taskId);
+            if (budgetRes.data?.overallStatus === 'HARD_BLOCK') {
+                showToast(`State budget exhausted for state ${budgetRes.data.blockedState} for this quarter. Please request a TopUp.`, 'error');
+                setSavingId(null)
+                return;
+            }
+            if (budgetRes.data?.overallStatus === 'SOFT_OVERRUN') {
+                setBudgetWarningStates(budgetRes.data.stateResults.filter(s => s.status === 'SOFT_OVERRUN'));
+                setIsBudgetModalOpen(true);
+                setSavingId(null)
+                return; // pause flow
+            }
+        } catch (e) {
+            showToast('Failed to perform budget check.', 'error');
+            setSavingId(null)
+            return;
+        }
+    }
+
+    executeSubmitForQc()
   }
 
   // Upload a single fileItem to the image server and update its state in-place.
@@ -453,11 +536,14 @@ export default function MyTasksPage() {
           campaign={submittingCampaign}
           form={submitForm}
           setForm={setSubmitForm}
+          savedPoEntries={savedPoEntries}
+          setSavedPoEntries={setSavedPoEntries}
           onCancel={() => {
             setSubmitting(null)
             setSubmittingCampaign(null)
             setTaskQuestions([])
             setTaskAnswers({})
+            setSavedPoEntries([])
           }}
           onConfirm={submitForQc}
           onViewBrief={() => { setBriefCampaignId(submitting.campaignId); setBriefTaskId(submitting.taskId) }}
@@ -498,6 +584,13 @@ export default function MyTasksPage() {
           }}
         />
       )}
+
+      <BudgetImpactWarningModal
+        isOpen={isBudgetModalOpen}
+        onClose={() => setIsBudgetModalOpen(false)}
+        onProceed={executeSubmitForQc}
+        overrunStates={budgetWarningStates}
+      />
     </div>
   )
 }
@@ -531,7 +624,7 @@ function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFligh
         <div className="flex-1 min-w-[240px]">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-600">
-              {task.taskId}
+              {formatTaskId(task.taskId)}
             </span>
             <span className="text-sm font-semibold text-slate-800">
               {task.granularTaskName || task.taskTypeName || 'Task'}
@@ -650,16 +743,6 @@ function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFligh
             </button>
           )}
 
-          {(isAssigned || isActiveWork) && !isCancelled && (
-            <button
-              onClick={onComment}
-              className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition"
-              title="Add a comment and pause this task"
-            >
-              <Icon name="messageSquare" className="h-3.5 w-3.5" />
-              Add Comment
-            </button>
-          )}
           {isSelfHeld && (
             <button
               onClick={onWorkerUnhold}
@@ -670,26 +753,31 @@ function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFligh
               {busy ? 'Resuming…' : 'Resume Task'}
             </button>
           )}
-          {!closed && (
-            <button
-              onClick={onView}
-              className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition flex items-center gap-1"
-              title="View full request brief"
-            >
-              <Icon name="eye" className="h-3.5 w-3.5" />
-              View Brief
-            </button>
-          )}
-          {isActiveWork && (
-            <button
-              onClick={onCollaborate}
-              className="flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100 transition"
-              title="Open collaboration chat for this task"
-            >
-              <Icon name="users" className="h-3.5 w-3.5" />
-              Collaborate
-            </button>
-          )}
+
+          <ActionMenu align="right">
+            {!closed && (
+              <ActionMenuItem
+                icon="eye"
+                label="View Brief"
+                onClick={onView}
+              />
+            )}
+            {isActiveWork && (
+              <ActionMenuItem
+                icon="users"
+                label="Collaborate"
+                onClick={onCollaborate}
+              />
+            )}
+            {(isAssigned || isActiveWork) && !isCancelled && (
+              <ActionMenuItem
+                icon="messageSquare"
+                label="Add Comment"
+                variant="warning"
+                onClick={onComment}
+              />
+            )}
+          </ActionMenu>
         </div>
       </div>
 
@@ -892,13 +980,474 @@ function ActiveCommentsList({ taskId, comments, onAnswered }) {
 // ─── Submit-for-QC modal ──────────────────────────────────────────────────────
 // ── Helpers shared with SubmitModal ─────────────────────────────────────────
 
+function PoTrackingSection({ task, campaign, savedEntries, onEntriesSaved, isManageMode, setIsManageMode }) {
+  const toast = useToast()
+  const [poInput, setPoInput]               = useState('')
+  const [lookupLoading, setLookupLoading]   = useState(false)
+  const [lookupResults, setLookupResults]   = useState([])
+  const [lookupError, setLookupError]       = useState(null)
+  const [savingPos, setSavingPos]           = useState(false)
+  const [editingRemarks, setEditingRemarks] = useState({})
+  const [selectedPoIds, setSelectedPoIds]   = useState([])
+
+  const requiredStates = useMemo(() => {
+    const locs = campaign?.locations || []
+    const states = locs
+      .filter(l => l.locationType === 'STATE' || l.locationType === 'CITY')
+      .map(l => l.stateSubName)
+      .filter(Boolean)
+    return Array.from(new Set(states))
+  }, [campaign])
+
+  const handleLookup = async () => {
+    if (!poInput.trim()) return
+    setLookupLoading(true)
+    setLookupError(null)
+    try {
+      const res = await tasksApi.lookupPoIds(task.taskId, poInput.trim())
+      setLookupResults(res.data || [])
+    } catch (e) {
+      setLookupError(e?.response?.data?.message || 'Failed to fetch PO details from database.')
+      setLookupResults([])
+    } finally {
+      setLookupLoading(false)
+    }
+  }
+
+  const handleSaveLookupResults = async () => {
+    const validRows = lookupResults.filter(r => !r.notFound && r.stateSubName)
+    if (validRows.length === 0) {
+      toast.error?.('No valid PO entries with state information to save.')
+      return
+    }
+
+    const uniqueStates = new Set(validRows.map(r => r.stateSubName));
+    if (uniqueStates.size !== validRows.length) {
+      toast.error?.('You cannot submit multiple POs for the same state in one batch.');
+      return;
+    }
+
+    // Deduplication check: State collision
+    const statesWithPo = new Set(
+      savedEntries
+        .filter(e => (e.po_id || e.poId) && String(e.po_id || e.poId).trim().length > 0)
+        .map(e => e.state_sub_name || e.stateSubName)
+    )
+
+    const conflictingRows = validRows.filter(r => statesWithPo.has(r.stateSubName))
+    if (conflictingRows.length > 0) {
+      const conflictingStates = conflictingRows.map(r => r.stateSubName).join(', ')
+      toast.error?.(`A PO is already added for state(s): ${conflictingStates}. Please delete it first.`)
+      return
+    }
+
+    // Deduplication check: PO ID collision
+    const existingPoIds = new Set(savedEntries.map(e => e.po_id || e.poId).filter(Boolean))
+    const newRows = validRows.filter(r => !existingPoIds.has(r.taxInvoice))
+
+    if (newRows.length === 0) {
+      toast.error?.('All fetched POs are already added.')
+      return
+    }
+
+    setSavingPos(true)
+    try {
+      // Create payload combining existing entries and the new deduplicated rows
+      // We pass the new rows to the backend, which upserts them.
+      const newPayload = newRows.map(r => ({
+        stateSubName: r.stateSubName,
+        poId: r.taxInvoice,
+        amount: r.amount,
+        totalDiscount: r.discount,
+        remarks: null,
+      }))
+      // Pre-Check Budget Overruns
+      const budgetCheckRes = await tasksApi.checkBudget(task.taskId, newPayload)
+      const budgetCheckData = budgetCheckRes.data;
+      
+      if (budgetCheckData.overallStatus === 'NO_BUDGET') {
+         toast.error?.(`Budget for this year is not defined yet.`)
+         setSavingPos(false)
+         return
+      }
+
+      if (budgetCheckData.overallStatus === 'HARD_BLOCK') {
+         toast.error?.(`Budget for ${budgetCheckData.blockedState} is exhausted for this quarter. A Top-Up must be approved before any new POs can be submitted for this state.`)
+         setSavingPos(false)
+         return
+      }
+
+      if (budgetCheckData.overallStatus === 'SOFT_OVERRUN') {
+         // Show an alert or toast, but we still proceed with saving
+         toast.error?.(`Warning: Saving these POs will exceed the remaining budget. This task will be routed to Budget Review.`)
+      }
+
+      const res = await tasksApi.saveTaskPos(task.taskId, newPayload)
+      toast.success?.('PO entries added successfully.')
+      setLookupResults([])
+      setPoInput('')
+      onEntriesSaved(res.data || [])
+    } catch (e) {
+      toast.error?.(e?.response?.data?.message || 'Failed to add PO entries.')
+    } finally {
+      setSavingPos(false)
+    }
+  }
+
+  const handleSaveRemarkForState = async (stateSubName, remarkText) => {
+    if (!remarkText?.trim()) {
+      toast.error?.('Please enter a remark reason for ' + stateSubName)
+      return
+    }
+    setSavingPos(true)
+    try {
+      const existing = savedEntries.find(e => (e.state_sub_name || e.stateSubName) === stateSubName)
+      const payload = [{
+        stateSubName,
+        poId: existing?.po_id || existing?.poId || null,
+        amount: existing?.amount || null,
+        totalDiscount: existing?.total_discount || existing?.totalDiscount || null,
+        remarks: remarkText.trim(),
+      }]
+      // Pre-Check Budget Overruns
+      const budgetCheckRes = await tasksApi.checkBudget(task.taskId, payload)
+      const budgetCheckData = budgetCheckRes.data;
+      
+      if (budgetCheckData.overallStatus === 'NO_BUDGET') {
+         toast.error?.(`Budget for this year is not defined yet.`)
+         setSavingPos(false)
+         return
+      }
+
+      if (budgetCheckData.overallStatus === 'HARD_BLOCK') {
+         toast.error?.(`Budget for ${budgetCheckData.blockedState} is exhausted for this quarter. A Top-Up must be approved before any new POs can be submitted for this state.`)
+         setSavingPos(false)
+         return
+      }
+
+      if (budgetCheckData.overallStatus === 'SOFT_OVERRUN') {
+         toast.error?.(`Warning: Saving these POs will exceed the remaining budget. This task will be routed to Budget Review.`)
+      }
+
+      const res = await tasksApi.saveTaskPos(task.taskId, payload)
+      toast.success?.(`Remark saved for state ${stateSubName}.`)
+      onEntriesSaved(res.data || [])
+    } catch (e) {
+      toast.error?.(e?.response?.data?.message || 'Failed to save remark.')
+    } finally {
+      setSavingPos(false)
+    }
+  }
+
+  const savedMap = useMemo(() => {
+    const map = {}
+    for (const e of savedEntries) {
+      const st = e.state_sub_name || e.stateSubName
+      if (st) map[st] = e
+    }
+    return map
+  }, [savedEntries])
+
+  const handleDeleteSelected = async () => {
+    if (selectedPoIds.length === 0) return
+    setSavingPos(true)
+    try {
+      const res = await tasksApi.deleteTaskPos(task.taskId, selectedPoIds)
+      toast.success?.('Selected entries deleted.')
+      setSelectedPoIds([])
+      setIsManageMode(false)
+      onEntriesSaved(res.data || [])
+    } catch (e) {
+      toast.error?.(e?.response?.data?.message || 'Failed to delete entries.')
+    } finally {
+      setSavingPos(false)
+    }
+  }
+
+  const toggleSelectPo = (idOrState) => {
+    setSelectedPoIds(prev => prev.includes(idOrState) ? prev.filter(x => x !== idOrState) : [...prev, idOrState])
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedPoIds.length === savedEntries.length) {
+      setSelectedPoIds([])
+    } else {
+      setSelectedPoIds(savedEntries.map(e => e.po_id || e.poId || e.state_sub_name || e.stateSubName))
+    }
+  }
+
+  const missingStates = useMemo(() => {
+    if (requiredStates.length === 0) return []
+    return requiredStates.filter(st => {
+      const e = savedMap[st]
+      if (!e) return true
+      const po = e.po_id || e.poId
+      const rem = e.remarks
+      return (!po || !po.trim()) && (!rem || !rem.trim())
+    })
+  }, [requiredStates, savedMap])
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Icon name="creditCard" className="h-4 w-4 text-amber-600" />
+          <h4 className="text-xs font-bold uppercase tracking-wider text-amber-900">
+            PO Payment Tracking Required
+          </h4>
+        </div>
+        <span className="rounded-full bg-amber-100 border border-amber-300 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+          {requiredStates.length > 0 ? `${requiredStates.length} State(s) Required` : 'Country Level PO'}
+        </span>
+      </div>
+
+      {requiredStates.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 text-xs">
+          {requiredStates.map(st => {
+            const entry = savedMap[st]
+            const hasPo = entry && (entry.po_id || entry.poId)
+            const hasRem = entry && entry.remarks
+            const isResolved = hasPo || hasRem
+            return (
+              <span
+                key={st}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border ${
+                  isResolved
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}
+              >
+                {isResolved ? (
+                  <Icon name="checkCircle" className="h-3 w-3 text-emerald-600" />
+                ) : (
+                  <Icon name="alertCircle" className="h-3 w-3 text-rose-500" />
+                )}
+                {st} {hasPo ? `(PO: ${entry.po_id || entry.poId})` : hasRem ? '(Remarked)' : '(Missing PO/Remark)'}
+              </span>
+            )
+          })}
+        </div>
+      )}
+
+      <div>
+        <label className="block text-xs font-semibold text-slate-700 mb-1">
+          Fetch Purchase Order (PO) Details
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={poInput}
+            onChange={e => setPoInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleLookup())}
+            placeholder="Enter comma-separated Tax Invoice / PO IDs (e.g., INV001, INV002)…"
+            className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-200"
+          />
+          <button
+            type="button"
+            onClick={handleLookup}
+            disabled={lookupLoading || !poInput.trim()}
+            className="rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+          >
+            {lookupLoading ? 'Fetching…' : 'Fetch Details'}
+          </button>
+        </div>
+        {lookupError && <p className="mt-1 text-xs text-rose-600">{lookupError}</p>}
+      </div>
+
+      {lookupResults.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm space-y-2 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700">PO Preview ({lookupResults.length})</span>
+            <button
+              type="button"
+              onClick={handleSaveLookupResults}
+              disabled={savingPos}
+              className="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {savingPos ? 'Adding…' : 'Confirm & Add PO Entries'}
+            </button>
+          </div>
+          <div className="overflow-x-auto max-h-64 overflow-y-auto">
+            <table className="w-full text-left text-xs relative">
+              <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold sticky top-0 z-10">
+                <tr>
+                  <th className="p-2 bg-slate-50">PO ID</th>
+                  <th className="p-2 bg-slate-50">State</th>
+                  <th className="p-2 bg-slate-50">Amount</th>
+                  <th className="p-2 bg-slate-50">From</th>
+                  <th className="p-2 bg-slate-50">To</th>
+                  <th className="p-2 bg-slate-50">GRN Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {lookupResults.map(r => {
+                  if (r.notFound) {
+                    return (
+                      <tr key={r.taxInvoice} className="bg-rose-50/70 text-rose-800">
+                        <td className="p-2 font-mono font-bold" title={r.taxInvoice}>{r.taxInvoice}</td>
+                        <td colSpan={5} className="p-2 text-rose-600 font-medium">
+                          PO not found in database. Please check PO ID.
+                        </td>
+                      </tr>
+                    )
+                  }
+                  return (
+                    <tr key={r.taxInvoice} className="hover:bg-slate-50">
+                      <td className="p-2 font-mono font-semibold text-slate-900" title={r.taxInvoice}>{r.taxInvoice}</td>
+                      <td className="p-2 font-bold text-amber-700" title={r.stateSubName || '—'}>{r.stateSubName || '—'}</td>
+                      <td className="p-2 font-mono">₹{Number(r.amount || 0).toLocaleString('en-IN')}</td>
+                      <td className="p-2 text-slate-600 truncate max-w-[120px]" title={r.fromAccountName || '—'}>{r.fromAccountName || '—'}</td>
+                      <td className="p-2 text-slate-600 truncate max-w-[120px]" title={r.toAccountName || '—'}>{r.toAccountName || '—'}</td>
+                      <td className="p-2">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          r.grnStatus === 'Completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                        }`} title={r.grnStatus}>
+                          {r.grnStatus}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-800">Saved PO Entries</span>
+          {savedEntries.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsManageMode(!isManageMode)
+                setSelectedPoIds([])
+              }}
+              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 transition"
+            >
+              <Icon name="settings" className="h-3.5 w-3.5" />
+              {isManageMode ? 'Done' : 'Manage'}
+            </button>
+          )}
+        </div>
+
+        {isManageMode && savedEntries.length > 0 && (
+          <div className="flex items-center justify-between rounded-lg border border-rose-100 bg-rose-50 px-3 py-2">
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              className="text-xs font-semibold text-rose-700 hover:text-rose-800 transition"
+            >
+              {selectedPoIds.length === savedEntries.length ? 'Clear Selection' : 'Select All'}
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteSelected}
+              disabled={selectedPoIds.length === 0 || savingPos}
+              className="rounded bg-rose-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-rose-700 disabled:opacity-50 transition"
+            >
+              Delete Selected ({selectedPoIds.length})
+            </button>
+          </div>
+        )}
+
+        {savedEntries.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-amber-300 bg-white p-3 text-center text-xs text-amber-700">
+            No PO entries saved yet. Please fetch PO details above or provide state remarks.
+          </div>
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm max-h-64 overflow-y-auto">
+            <table className="w-full text-left text-xs relative">
+              <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold sticky top-0 z-10">
+                <tr>
+                  {isManageMode && (
+                    <th className="p-2 bg-slate-50 w-8 text-center">
+                      <Icon name="checkSquare" className="h-4 w-4 inline-block text-slate-400" />
+                    </th>
+                  )}
+                  <th className="p-2 bg-slate-50">State</th>
+                  <th className="p-2 bg-slate-50">PO ID</th>
+                  <th className="p-2 bg-slate-50">Amount</th>
+                  <th className="p-2 bg-slate-50">Total Discount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {savedEntries.map(e => {
+                  const stateCode = e.state_sub_name || e.stateSubName
+                  const poId = e.po_id || e.poId
+                  const amt = e.amount
+                  const discount = e.total_discount ?? e.totalDiscount ?? e.discount
+                  const idOrState = poId || stateCode
+
+                  return (
+                    <tr key={stateCode} className={`hover:bg-slate-50 ${selectedPoIds.includes(idOrState) ? 'bg-rose-50/50' : ''}`}>
+                      {isManageMode && (
+                        <td className="p-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedPoIds.includes(idOrState)}
+                            onChange={() => toggleSelectPo(idOrState)}
+                            className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                          />
+                        </td>
+                      )}
+                      <td className="p-2 font-bold text-slate-900" title={stateCode}>{stateCode}</td>
+                      <td className="p-2 font-mono" title={poId}>{poId ? <span className="font-semibold text-brand-600">{poId}</span> : <span className="text-slate-400 italic">No PO</span>}</td>
+                      <td className="p-2 font-mono">{amt != null ? `₹${Number(amt).toLocaleString('en-IN')}` : '—'}</td>
+                      <td className="p-2 font-mono">{discount != null ? `₹${Number(discount).toLocaleString('en-IN')}` : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {missingStates.length > 0 && (
+        <div className="rounded-lg bg-amber-100/60 border border-amber-200 p-3 space-y-2 max-h-64 overflow-y-auto">
+          <span className="text-xs font-semibold text-amber-900 block">
+            Missing PO/Remark for state(s): <span className="font-bold text-rose-700">{missingStates.join(', ')}</span>
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {missingStates.map(st => (
+              <div key={st} className="flex gap-1.5 items-center">
+                <span className="text-xs font-bold text-amber-800">{st}:</span>
+                <input
+                  type="text"
+                  placeholder={`Reason for ${st}…`}
+                  value={editingRemarks[st] || ''}
+                  onChange={ev => setEditingRemarks(prev => ({ ...prev, [st]: ev.target.value }))}
+                  title={editingRemarks[st] || ''}
+                  className="rounded border border-amber-300 px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSaveRemarkForState(st, editingRemarks[st])}
+                  disabled={savingPos || !editingRemarks[st]?.trim()}
+                  className="rounded bg-amber-700 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+                >
+                  Save Remark
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SubmitModal({
-  task, campaign, form, setForm,
+  task, campaign, form, setForm, savedPoEntries, setSavedPoEntries,
   onCancel, onConfirm, onViewBrief, saving,
 }) {
+  const [isManageMode, setIsManageMode] = useState(false)
+
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl flex flex-col max-h-[92vh]">
+      <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl flex flex-col max-h-[92vh]">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
@@ -931,6 +1480,18 @@ function SubmitModal({
             <AssetPanel task={task} allowUpload inline />
           </div>
 
+          {/* ── PO Tracking section if required ── */}
+          {task.needsPaymentTracking && (
+            <PoTrackingSection
+              task={task}
+              campaign={campaign}
+              savedEntries={savedPoEntries || []}
+              onEntriesSaved={setSavedPoEntries}
+              isManageMode={isManageMode}
+              setIsManageMode={setIsManageMode}
+            />
+          )}
+
           {/* ── Submission notes ── */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Submission notes</label>
@@ -947,16 +1508,15 @@ function SubmitModal({
 
         {/* Footer */}
         <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 shrink-0">
-          <button onClick={onCancel}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+          <button onClick={onCancel} disabled={saving}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition disabled:opacity-60">
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            disabled={saving}
-            className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition disabled:opacity-60 flex items-center gap-2"
+            disabled={saving || isManageMode}
+            className={`rounded-md px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-50 ${isManageMode ? 'bg-slate-400' : 'bg-emerald-600 hover:bg-emerald-700'}`}
           >
-            <Icon name="send" className="h-3.5 w-3.5" />
             {saving ? 'Submitting…' : 'Submit for QC'}
           </button>
         </div>
@@ -996,7 +1556,7 @@ function CommentModal({ task, comment, onCommentChange, onConfirm, onClose, savi
           <div>
             <h3 className="text-sm font-bold text-slate-900">Add Comment &amp; Hold Task</h3>
             <p className="mt-0.5 text-xs text-slate-500">
-              Task <span className="font-medium text-slate-700">#{task.taskId}</span> —{' '}
+              Task <span className="font-medium text-slate-700">#{formatTaskId(task.taskId)}</span> —{' '}
               {task.granularTaskName || task.taskTypeName || 'Task'}
             </p>
           </div>
@@ -1135,7 +1695,7 @@ function CollaborateModal({ task, onClose }) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
             <h3 className="text-sm font-bold text-slate-900">Invite Collaborators</h3>
-            <p className="text-xs text-slate-500 mt-0.5">{task.granularTaskName || task.taskId}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{task.granularTaskName || formatTaskId(task.taskId)}</p>
           </div>
           <button onClick={onClose} className="rounded-full p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
             <Icon name="x" className="h-4 w-4" />
@@ -1236,7 +1796,7 @@ function ReferenceTaskPanel({ taskId, parentTaskId }) {
         <Icon name="link" className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
         <span className="text-xs font-semibold text-indigo-700 whitespace-nowrap shrink-0">Reference Task:</span>
         <span className="text-xs text-indigo-900 truncate">
-          {parent.taskId} — {parent.granularTaskName || parent.taskTypeName}
+          {formatTaskId(parent.taskId)} — {parent.granularTaskName || parent.taskTypeName}
         </span>
         <span className="shrink-0 text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-medium">
           {parent.status}

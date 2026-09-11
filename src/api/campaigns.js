@@ -71,6 +71,13 @@ const campaignsApi = {
   requestorApprove: (campaignId, taskId, comment) =>
     api.post(`${BASE}/${campaignId}/tasks/${taskId}/requestor-approve`, { comment }),
 
+  /**
+   * Requestor rejects a REQUESTOR_REVIEW task.
+   * Task moves back to REJECTED state.
+   */
+  requestorReject: (campaignId, taskId, message) =>
+    api.post(`${BASE}/${campaignId}/tasks/${taskId}/requestor-reject`, { message }),
+
   /** Paged REQUESTOR_REVIEW tasks for the current user's campaigns. */
   requestorQcTasks: (params = {}) => api.get(`${BASE}/requestor-qc-tasks`, { params }),
 

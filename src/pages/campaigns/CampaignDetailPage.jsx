@@ -11,6 +11,7 @@ import { formatTargetLocations } from '../../utils/targetLocations'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
 import TaskCyclesView from '../../components/TaskCyclesView'
 import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
+import { formatTaskId } from '../../utils/formatters'
 
 const STATUS_STYLES = {
   IN_PROGRESS:                'bg-blue-50 text-blue-700 ring-blue-200',
@@ -365,7 +366,7 @@ export default function CampaignDetailPage() {
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
                 <span className="flex items-center justify-center rounded-full
                                  bg-brand-100 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 whitespace-nowrap">
-                  {d.taskId}
+                  {formatTaskId(d.taskId)}
                 </span>
                 <span className="text-xs font-medium text-slate-700">
                   {d.granularTaskName || d.granularTaskId}
@@ -396,7 +397,7 @@ export default function CampaignDetailPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5
                                        text-[10px] font-bold tabular-nums text-slate-600">
-                        {t.taskId}
+                        {formatTaskId(t.taskId)}
                       </span>
                       <span className="text-sm font-bold text-slate-900">
                         {t.granularTaskName || 'Task'}
@@ -480,7 +481,7 @@ export default function CampaignDetailPage() {
       {assetPreviewTask && (
         <AssetPreviewModal
           taskId={assetPreviewTask.taskId}
-          taskName={assetPreviewTask.granularTaskName || `Task ${assetPreviewTask.taskId}`}
+          taskName={assetPreviewTask.granularTaskName || `Task ${formatTaskId(assetPreviewTask.taskId)}`}
           currentUserId={myUserId}
           onClose={() => setAssetPreviewTask(null)}
         />
@@ -610,7 +611,7 @@ function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClo
             <h3 className="text-sm font-bold text-slate-900">Request Rework</h3>
             <p className="mt-0.5 text-xs text-slate-500">
               Tell the team what needs to be changed for task{' '}
-              <span className="font-medium text-slate-700">#{task.taskId}</span>.
+              <span className="font-medium text-slate-700">#{formatTaskId(task.taskId)}</span>.
             </p>
           </div>
           <button onClick={onClose}
@@ -625,7 +626,7 @@ function RequestorReworkModal({ task, message, onMessageChange, onConfirm, onClo
             {task.granularTaskName || 'Task'}
           </p>
           <p className="text-xs text-slate-500">
-            Task {task.taskId} · Currently{' '}
+            Task {formatTaskId(task.taskId)} · Currently{' '}
             <span className="font-medium text-green-700">Delivered</span>
           </p>
         </div>

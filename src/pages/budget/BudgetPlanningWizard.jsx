@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   budgetMasterDataApi,
   masterApi,
-  campaignTypeApi,
   eventCategoryApi,
 } from "../../api/masterData";
+import { posDataApi } from "../../api/posData";
 import { budgetPlanningApi } from "../../api/budgetPlanning";
 import Icon from "../../components/Icon";
 import { useToast } from "../../components/Toast";
@@ -32,9 +32,14 @@ export default function BudgetPlanningWizard() {
 
   const [isQuarterEditMode, setIsQuarterEditMode] = useState(false);
 
+  const [searchParams] = useSearchParams();
+  const urlReadOnly = searchParams.get("readOnly") === "true";
+
   const isReadOnly =
-    !canPropose
+    urlReadOnly
       ? true
+      : !canPropose
+        ? true
       : proposalStatus === "ACTIVE"
         ? !isQuarterEditMode
         : currentStep === 1
@@ -50,7 +55,6 @@ export default function BudgetPlanningWizard() {
 
   // Master Data State
   const [verticals, setVerticals] = useState([]);
-  const [campaignTypes, setCampaignTypes] = useState([]);
   const [taskTypes, setTaskTypes] = useState([]);
   const [eventCategories, setEventCategories] = useState([]);
   const [states, setStates] = useState([]);
@@ -111,15 +115,13 @@ export default function BudgetPlanningWizard() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [vData, ctData, ttData, ecData, stData] = await Promise.all([
+        const [vData, ttData, ecData, stData] = await Promise.all([
           masterApi.list("business-verticals"),
-          campaignTypeApi.list(),
           masterApi.list("task-types"),
           eventCategoryApi.list(),
-          budgetMasterDataApi.getStates(),
+          posDataApi.getStates("1"),
         ]);
         setVerticals(vData || []);
-        setCampaignTypes(ctData || []);
         setTaskTypes(ttData || []);
         setEventCategories(ecData || []);
         setStates(stData || []);
@@ -185,8 +187,7 @@ export default function BudgetPlanningWizard() {
         if (proposal.targetCaps) {
           proposal.targetCaps.forEach((cap) => {
             if (!loadedStep2[cap.verticalId]) loadedStep2[cap.verticalId] = {};
-            const matrixKey = `${cap.eventCategoryId}_${cap.campaignTypeId}`;
-            loadedStep2[cap.verticalId][matrixKey] = cap.allocatedCap;
+            loadedStep2[cap.verticalId][cap.eventCategoryId] = cap.allocatedCap;
           });
         }
 
@@ -199,8 +200,7 @@ export default function BudgetPlanningWizard() {
             proposal.quarterlyTargetCaps[q].forEach((cap) => {
               if (!loadedQStep2[q][cap.verticalId])
                 loadedQStep2[q][cap.verticalId] = {};
-              const matrixKey = `${cap.eventCategoryId}_${cap.campaignTypeId}`;
-              loadedQStep2[q][cap.verticalId][matrixKey] = cap.allocatedCap;
+              loadedQStep2[q][cap.verticalId][cap.eventCategoryId] = cap.allocatedCap;
             });
           });
         }
@@ -411,8 +411,7 @@ export default function BudgetPlanningWizard() {
               updatedProposal.quarterlyTargetCaps[q].forEach((cap) => {
                 if (!loadedQStep2[q][cap.verticalId])
                   loadedQStep2[q][cap.verticalId] = {};
-                const matrixKey = `${cap.eventCategoryId}_${cap.campaignTypeId}`;
-                loadedQStep2[q][cap.verticalId][matrixKey] = cap.allocatedCap;
+                loadedQStep2[q][cap.verticalId][cap.eventCategoryId] = cap.allocatedCap;
               });
             });
           }
@@ -541,14 +540,12 @@ export default function BudgetPlanningWizard() {
           const targetCapsArray = [];
           const sourceMatrix = isQuarterActiveEdit ? quarterlyStep2Matrix[activePeriod] : step2Matrix;
           
-          Object.entries(sourceMatrix).forEach(([vId, ecCtMap]) => {
-            Object.entries(ecCtMap).forEach(([ecCtKey, cap]) => {
+          Object.entries(sourceMatrix).forEach(([vId, ecMap]) => {
+            Object.entries(ecMap).forEach(([ecId, cap]) => {
               if (cap > 0) {
-                const [ecId, ctId] = ecCtKey.split("_");
                 targetCapsArray.push({
                   verticalId: vId,
                   eventCategoryId: Number(ecId),
-                  campaignTypeId: ctId,
                   allocatedCap: cap,
                 });
               }
@@ -580,8 +577,7 @@ export default function BudgetPlanningWizard() {
                 updatedProposal.quarterlyTargetCaps[q].forEach((cap) => {
                   if (!loadedQStep2[q][cap.verticalId])
                     loadedQStep2[q][cap.verticalId] = {};
-                  const matrixKey = `${cap.eventCategoryId}_${cap.campaignTypeId}`;
-                  loadedQStep2[q][cap.verticalId][matrixKey] = cap.allocatedCap;
+                  loadedQStep2[q][cap.verticalId][cap.eventCategoryId] = cap.allocatedCap;
                 });
               });
             }
@@ -590,14 +586,8 @@ export default function BudgetPlanningWizard() {
 
           // Cascade Reset
           const updatedAllocations = allocations.filter((alloc) => {
-            const oldAmount =
-              savedStep2Matrix[alloc.verticalId]?.[
-                `${alloc.eventCategoryId}_${alloc.campaignTypeId}`
-              ];
-            const newAmount =
-              step2Matrix[alloc.verticalId]?.[
-                `${alloc.eventCategoryId}_${alloc.campaignTypeId}`
-              ] || 0;
+            const oldAmount = savedStep2Matrix[alloc.verticalId]?.[alloc.eventCategoryId];
+            const newAmount = step2Matrix[alloc.verticalId]?.[alloc.eventCategoryId] || 0;
             return oldAmount === newAmount; // Keep if unchanged
           });
 
@@ -815,7 +805,6 @@ export default function BudgetPlanningWizard() {
             <Step2EventCampaignMatrix
               verticals={verticals}
               eventCategories={eventCategories}
-              campaignTypes={campaignTypes}
               step2Matrix={
                 activePeriod === "Annual"
                   ? step2Matrix
@@ -840,7 +829,6 @@ export default function BudgetPlanningWizard() {
               periodId={periodId}
               verticals={verticals}
               eventCategories={eventCategories}
-              campaignTypes={campaignTypes}
               taskTypes={taskTypes}
               states={states}
               step2Matrix={

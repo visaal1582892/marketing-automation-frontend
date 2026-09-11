@@ -9,7 +9,7 @@ export const REQUESTOR_NAV_LINKS = [
   {
     to: '/requestor/review-center',
     label: 'Review Center',
-    icon: 'check',
+    icon: 'eye',
     right: Rights.VIEW_REQUESTOR_QC_QUEUE,
   },
 ]
@@ -41,13 +41,13 @@ export const MANAGER_NAV_LINKS = [
   {
     to: '/manager/task-management',
     label: 'Task Management',
-    icon: 'fileText',
+    icon: 'layers',
     anyRight: [Rights.ACCESS_MANAGER_TOOLS, Rights.VIEW_TEAM_TASKS],
   },
   {
     to: '/tasks/approvals',
     label: 'Task Approvals',
-    icon: 'check',
+    icon: 'userCheck',
     anyRight: [Rights.REVIEW_MANAGER_QC, Rights.APPROVE_TEAM_TASKS],
   },
   {

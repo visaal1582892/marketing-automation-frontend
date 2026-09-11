@@ -9,6 +9,7 @@ import { useToast } from '../../components/Toast'
 import AppSelect from '../../components/AppSelect'
 import SingleSelectDropdown from '../../components/SingleSelectDropdown'
 import MultiSelectDropdown from '../../components/MultiSelectDropdown'
+import OverflowPillList from '../../components/OverflowPillList'
 import BackToMaster from '../../components/admin/BackToMaster'
 import { TableStatusRow } from '../../components/dataTable'
 
@@ -119,8 +120,7 @@ export default function RoleManagementPage() {
       <BackToMaster />
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg
-                           bg-slate-50 text-slate-600 ring-1 ring-slate-200">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-brand-100">
             <Icon name="shield" className="h-5 w-5" />
           </span>
           <div className="min-w-0">
@@ -201,7 +201,13 @@ const MasterRow = memo(function MasterRow({ row, onEdit }) {
     <tr className={`transition hover:bg-slate-50/60 ${!active ? 'bg-slate-50/50 opacity-75' : ''}`}>
       <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{row.roleId}</td>
       <td className={`px-4 py-2.5 font-medium text-slate-800 ${!active ? 'line-through text-slate-400' : ''}`}>{row.roleName}</td>
-      <td className="px-4 py-2.5 text-xs text-slate-600 max-w-xs truncate" title={row.rightsList}>{row.rightsList || <span className="text-slate-400 italic">None</span>}</td>
+      <td className="px-4 py-2.5">
+        <OverflowPillList
+          items={row.rightsList ? row.rightsList.split(',').map(s => s.trim()) : []}
+          maxVisible={2}
+          color="brand"
+        />
+      </td>
       <td className="px-4 py-2.5"><StatusPill active={active} /></td>
       <td className="px-4 py-2.5 text-right">
          <button onClick={() => onEdit(row)} title="Edit"

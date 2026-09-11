@@ -28,6 +28,7 @@ export default function ConfigurableApprovalHistory({ taskId }) {
             <div className={`absolute -left-[5px] top-1 h-2 w-2 rounded-full ${
               lvl.status === 'APPROVED' ? 'bg-emerald-400' :
               lvl.status === 'REJECTED' ? 'bg-rose-400' :
+              lvl.status === 'REWORK' ? 'bg-amber-400' :
               lvl.status === 'SKIPPED' ? 'bg-slate-300' :
               'bg-blue-400'
             }`} />

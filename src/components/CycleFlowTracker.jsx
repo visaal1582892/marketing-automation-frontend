@@ -78,26 +78,39 @@ export default function CycleFlowTracker({ cycle, isHistorical = false }) {
     hasOutcome = true
   }
   
-  if (!hasOutcome) {
-    if (cycle.lastReworkAction === 'MARKETING_REWORK' || cycle.lastReworkAction === 'REQUESTOR_REWORK') {
-      steps.push({
-        id: 'rework',
-        label: cycle.lastReworkAction === 'MARKETING_REWORK' ? 'MANAGER REWORK' : 'REQUESTOR REWORK',
-        ts: cycle.submittedAt,
-        formattedTs: cycle.submittedAt ? fmtDateTime(cycle.submittedAt) : null,
-        icon: <Icon name="refresh" className="h-4 w-4" />,
-        styles: { dot: 'bg-amber-500', line: 'bg-amber-200', text: 'text-amber-700', card: 'bg-amber-50 border-amber-200' }
-      })
-    } else if (cycle.status === 'REJECTED') {
-       steps.push({
-        id: 'rejected',
-        label: 'REJECTED',
-        ts: cycle.submittedAt,
-        formattedTs: cycle.submittedAt ? fmtDateTime(cycle.submittedAt) : null,
-        icon: <Icon name="x" className="h-4 w-4" />,
-        styles: { dot: 'bg-rose-500', line: 'bg-rose-200', text: 'text-rose-700', card: 'bg-rose-50 border-rose-200' }
-      })
-    }
+  // 5. Rework or Rejection Node
+  const isRejectedAction = cycle.lastReworkAction === 'REJECTED' || cycle.status === 'REJECTED'
+  const isReworkAction = !isRejectedAction && (cycle.lastReworkAction === 'MARKETING_REWORK' || cycle.lastReworkAction === 'REQUESTOR_REWORK' || cycle.reworkAt)
+  const isFullyApproved = !!cycle.requestorApprovedAt
+
+  if (isRejectedAction && !hasOutcome) {
+    const rejectTime = cycle.reworkAt || cycle.submittedAt
+    steps.push({
+      id: 'rejected',
+      label: 'REJECTED',
+      reviewerName: cycle.reworkReviewerName,
+      comments: cycle.reworkComments,
+      ts: rejectTime,
+      formattedTs: rejectTime ? fmtDateTime(rejectTime) : null,
+      icon: <Icon name="x" className="h-4 w-4" />,
+      styles: { dot: 'bg-rose-500', line: 'bg-rose-200', text: 'text-rose-700', card: 'bg-rose-50 border-rose-200' }
+    })
+  } else if (isReworkAction && !isFullyApproved) {
+    const isMarketing = cycle.lastReworkAction === 'MARKETING_REWORK' || (!cycle.lastReworkAction && !cycle.managerApprovedAt)
+    const levelText = isMarketing && cycle.reworkLevel ? ` (Level ${cycle.reworkLevel})` : ''
+    const reworkTime = cycle.reworkAt || cycle.submittedAt
+
+    steps.push({
+      id: 'rework',
+      label: isMarketing ? `MARKETING REWORK${levelText}` : 'REQUESTOR REWORK',
+      sublabel: isMarketing && cycle.reworkLevel ? `Approval Level ${cycle.reworkLevel}` : null,
+      reviewerName: cycle.reworkReviewerName,
+      comments: cycle.reworkComments,
+      ts: reworkTime,
+      formattedTs: reworkTime ? fmtDateTime(reworkTime) : null,
+      icon: <Icon name="refresh" className="h-4 w-4" />,
+      styles: { dot: 'bg-amber-500', line: 'bg-amber-200', text: 'text-amber-700', card: 'bg-amber-50 border-amber-200' }
+    })
   }
 
   const dimClass = isHistorical ? 'opacity-60' : 'opacity-100'

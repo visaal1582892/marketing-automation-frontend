@@ -75,4 +75,5 @@ export const Rights = {
   REJECT_BUDGET:                  'REJECT_BUDGET',
   TERMINATE_BUDGET:               'TERMINATE_BUDGET',
   VIEW_DEPT_BUDGET:               'VIEW_DEPT_BUDGET',
+  APPROVE_BUDGET_OVERRUN:         'APPROVE_BUDGET_OVERRUN',
 }

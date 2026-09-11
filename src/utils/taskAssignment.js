@@ -35,6 +35,9 @@ export function deriveAssignmentOutcome(entry, index, total) {
   if (entry.lastReworkAction === 'REQUESTOR_REWORK') {
     return { label: 'Sent for Rework (Requestor)', tone: 'amber' }
   }
+  if (entry.lastReworkAction === 'REJECTED') {
+    return { label: 'Rejected', tone: 'rose' }
+  }
 
   if (entry.requestorApprovedAt) return { label: 'Completed', tone: 'emerald' }
   if (entry.managerApprovedAt && !entry.requestorApprovedAt) return { label: 'Manager approved', tone: 'blue' }
@@ -53,6 +56,7 @@ const OUTCOME_TONE = {
   amber:   'bg-amber-50 text-amber-700 ring-amber-200',
   brand:   'bg-brand-50 text-brand-700 ring-brand-200',
   slate:   'bg-slate-100 text-slate-600 ring-slate-200',
+  rose:    'bg-rose-50 text-rose-700 ring-rose-200',
 }
 
 export function outcomeBadgeClass(tone) {

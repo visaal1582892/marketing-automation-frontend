@@ -214,7 +214,7 @@ function PendingTable({ campaigns, onAction, onViewBrief }) {
       <table className="min-w-[900px] divide-y divide-slate-200 text-sm sm:min-w-full">
         <thead className="bg-slate-50">
           <tr>
-            {['#', 'Objective', 'Requestor', 'Department', 'Campaign Type', 'Priority', 'Submitted', 'Actions'].map((h) => (
+            {['#', 'Objective', 'Requestor', 'Department', 'Event Category', 'Priority', 'Submitted', 'Actions'].map((h) => (
               <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
             ))}
           </tr>
@@ -226,7 +226,7 @@ function PendingTable({ campaigns, onAction, onViewBrief }) {
               <td className="px-4 py-3 font-medium text-slate-800">{c.businessObjective || ''}</td>
               <td className="px-4 py-3 text-slate-600">{c.requestorName}</td>
               <td className="px-4 py-3 text-slate-600">{c.departmentName || ''}</td>
-              <td className="px-4 py-3 text-slate-500 text-xs">{c.campaignTypeName || ''}</td>
+              <td className="px-4 py-3 text-slate-500 text-xs">{c.eventCategoryName || ''}</td>
               <td className="px-4 py-3"><PriorityBadge v={c.priority} /></td>
               <td className="px-4 py-3 text-slate-500 text-xs">{fmtDateTime(c.createdAt)}</td>
               <td className="px-4 py-3 text-right">
