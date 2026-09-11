@@ -533,8 +533,8 @@ export default function CampaignFormComponent({
 
   // Form state
   const [form, setForm] = useState({
-    businessVerticalId: initialData.businessVerticalId || '',
-    eventCategoryId: initialData.eventCategoryId ? String(initialData.eventCategoryId) : '',
+    businessVerticalId: initialData.businessVerticalId || '5', // Defaulted to 5 for testing
+    eventCategoryId: initialData.eventCategoryId ? String(initialData.eventCategoryId) : '1', // Defaulted to 1 for testing
     departmentId: initialData.departmentId || '',
     businessObjective: '',
     businessObjectiveOther: '',
@@ -1140,7 +1140,8 @@ export default function CampaignFormComponent({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                {/* Hidden for testing purposes */}
+                <div className="hidden">
                   <div>
                     <FieldLabel required>Business Vertical</FieldLabel>
                     <SingleSelectDropdown
