@@ -25,5 +25,5 @@ export function formatCurrency(amount) {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0
-  }).format(num)
+  }).format(num).replace('₹', '₹ ')
 }

@@ -16,12 +16,26 @@ import Step1VerticalCaps from "../../components/budget/Step1VerticalCaps";
 import Step2EventCampaignMatrix from "../../components/budget/Step2EventCampaignMatrix";
 import Step3TaskStateMatrix from "../../components/budget/Step3TaskStateMatrix";
 import Modal from "../../components/Modal";
+import SingleSelectDropdown from "../../components/SingleSelectDropdown";
 
 export default function BudgetPlanningWizard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const proposalType = searchParams.get("proposalType") || "INITIAL_BUDGET";
+  const parentProposalId = searchParams.get("parentProposalId") || null;
+  const urlFinancialYear = searchParams.get("financialYear") || null;
+
+  // Helper to preserve query params during navigation
+  const navigateWithParams = (path, options) => {
+    const qs = searchParams.toString();
+    const finalPath = qs ? (path.includes('?') ? `${path}&${qs}` : `${path}?${qs}`) : path;
+    navigate(finalPath, options);
+  };
+
   const toast = useToast();
   const { hasRight } = useAuth();
-  const canPropose = hasRight(Rights.PROPOSE_BUDGET);
+  const canPropose = hasRight(Rights.BUDGET_CREATE);
+  const canEditFutureQuarters = hasRight(Rights.BUDGET_EDIT_FUTURE_QUARTERS);
   const { proposalId: urlProposalId, stepId } = useParams();
   const [proposalId, setProposalId] = useState(urlProposalId || null);
   const currentStep = stepId === "step2" ? 2 : stepId === "step3" ? 3 : 1;
@@ -30,28 +44,13 @@ export default function BudgetPlanningWizard() {
   const [freezing, setFreezing] = useState(false);
   const [proposalStatus, setProposalStatus] = useState(null);
 
-  const [isQuarterEditMode, setIsQuarterEditMode] = useState(false);
 
-  const [searchParams] = useSearchParams();
+  const [isFutureQuartersEditMode, setIsFutureQuartersEditMode] = useState(false);
+
   const urlReadOnly = searchParams.get("readOnly") === "true";
+  const editFutureQuarters = searchParams.get("editFutureQuarters") === "true";
+  const fromApprovals = searchParams.get("fromApprovals") === "true" || searchParams.get("source") === "approvals";
 
-  const isReadOnly =
-    urlReadOnly
-      ? true
-      : !canPropose
-        ? true
-      : proposalStatus === "ACTIVE"
-        ? !isQuarterEditMode
-        : currentStep === 1
-          ? proposalStatus &&
-            proposalStatus !== "DRAFT" &&
-            proposalStatus !== "NEEDS_REVISION" &&
-            proposalStatus !== "REJECTED"
-          : proposalStatus &&
-            proposalStatus !== "APPROVED" &&
-            proposalStatus !== "DRAFT" &&
-            proposalStatus !== "NEEDS_REVISION" &&
-            proposalStatus !== "REJECTED";
 
   // Master Data State
   const [verticals, setVerticals] = useState([]);
@@ -81,6 +80,12 @@ export default function BudgetPlanningWizard() {
   });
   const [step2Matrix, setStep2Matrix] = useState({}); // { verticalId: { ecId_ctId: targetAmount } }
   const [savedStep2Matrix, setSavedStep2Matrix] = useState({});
+  const [savedQuarterlyStep2Matrix, setSavedQuarterlyStep2Matrix] = useState({
+    Q1: {},
+    Q2: {},
+    Q3: {},
+    Q4: {},
+  });
   const [allocations, setAllocations] = useState({}); // { comboId: { taskTypeId_stateCode: allocatedAmount } }
 
   // Quarterly state for Step 2 & 3
@@ -100,9 +105,99 @@ export default function BudgetPlanningWizard() {
     Q4: [],
   });
 
+  let isActivePeriodLocked = false;
+  if (isFutureQuartersEditMode) {
+    if (activePeriod === "Annual") {
+      isActivePeriodLocked = true;
+    } else {
+      const qPeriod = quarterlyPeriods[activePeriod];
+      if (qPeriod) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const parts = qPeriod.startDate.split("-");
+        const start = new Date(parts[0], parts[1] - 1, parts[2]);
+        start.setHours(0, 0, 0, 0);
+        const daysUntil = (start - today) / (1000 * 60 * 60 * 24);
+        if (daysUntil < 0) {
+          isActivePeriodLocked = true;
+        }
+      }
+    }
+  }
+
+  const isReadOnly =
+    urlReadOnly
+      ? true
+      : !canPropose
+        ? true
+        : proposalStatus === "ACTIVE"
+          ? (isFutureQuartersEditMode ? isActivePeriodLocked : true)
+          : currentStep === 1
+            ? proposalStatus &&
+            proposalStatus !== "DRAFT" &&
+            proposalStatus !== "NEEDS_REVISION" &&
+            proposalStatus !== "REJECTED"
+            : proposalStatus &&
+            proposalStatus !== "APPROVED" &&
+            proposalStatus !== "DRAFT" &&
+            proposalStatus !== "NEEDS_REVISION" &&
+            proposalStatus !== "REJECTED";
+
+
+
+  // Auto-activate future quarters edit mode when navigated via URL param
   useEffect(() => {
-    setIsQuarterEditMode(false);
-  }, [currentStep, activePeriod]);
+    if (editFutureQuarters) {
+      setIsFutureQuartersEditMode(true);
+    }
+  }, [editFutureQuarters]);
+
+  // Approve/Reject modal state (for viewing from approvals page)
+  const [approveRejectModal, setApproveRejectModal] = useState({
+    isOpen: false,
+    action: null, // 'approve' | 'reject'
+    comments: '',
+    commentsError: false,
+  });
+
+  const openApproveRejectModal = (action) => {
+    setApproveRejectModal({ isOpen: true, action, comments: '', commentsError: false });
+  };
+
+  const handleApproveReject = async () => {
+    if (approveRejectModal.action === 'reject' && !approveRejectModal.comments.trim()) {
+      setApproveRejectModal(prev => ({ ...prev, commentsError: true }));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      if (approveRejectModal.action === 'approve') {
+        await budgetPlanningApi.approveProposal(proposalId, false);
+        toast.success('Budget proposal approved successfully');
+      } else {
+        await budgetPlanningApi.rejectProposal(proposalId, { reason: approveRejectModal.comments });
+        toast.success('Budget proposal rejected');
+      }
+      setApproveRejectModal({ isOpen: false, action: null, comments: '', commentsError: false });
+      navigateWithParams(fromApprovals ? '/budget/approvals' : '/budget-planning');
+    } catch (err) {
+      // Handle override active scenario
+      if (approveRejectModal.action === 'approve' && err.response?.status === 409 && err.response?.data?.message === 'ACTIVE_PROPOSAL_EXISTS') {
+        try {
+          await budgetPlanningApi.approveProposal(proposalId, true);
+          toast.success('Budget proposal approved (Old Active Terminated)');
+          setApproveRejectModal({ isOpen: false, action: null, comments: '', commentsError: false });
+          navigateWithParams(fromApprovals ? '/budget/approvals' : '/budget-planning');
+        } catch (innerErr) {
+          toast.error(innerErr?.response?.data?.message || 'Failed to approve with override');
+        }
+      } else {
+        toast.error(err?.response?.data?.message || err?.message || `Failed to ${approveRejectModal.action}`);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -205,6 +300,7 @@ export default function BudgetPlanningWizard() {
           });
         }
         setQuarterlyStep2Matrix(loadedQStep2);
+        setSavedQuarterlyStep2Matrix(loadedQStep2);
 
         // Hydrate allocations from groupedAllocations
         setAllocations(proposal.groupedAllocations || []);
@@ -232,7 +328,7 @@ export default function BudgetPlanningWizard() {
             // If they have allocations too, maybe they are just editing step 3
             targetStep = "step3";
           }
-          navigate(`/budget-planning/wizard/${urlProposalId}/${targetStep}`, {
+          navigateWithParams(`/budget-planning/wizard/${urlProposalId}/${targetStep}`, {
             replace: true,
           });
         }
@@ -266,12 +362,12 @@ export default function BudgetPlanningWizard() {
     if (currentStep > 1) {
       if (!canPropose && proposalStatus !== "ACTIVE") {
         toast.error("Steps 2 and 3 are locked until the planner completes them.");
-        navigate(`/budget-planning/wizard/${proposalId || ""}/step1`, { replace: true });
+        navigateWithParams(`/budget-planning/wizard/${proposalId || ""}/step1`, { replace: true });
         return;
       }
       if (canPropose && proposalStatus !== "APPROVED" && proposalStatus !== "ACTIVE") {
         toast.error("Steps 2 and 3 are locked until Step 1 is approved by the approver.");
-        navigate(`/budget-planning/wizard/${proposalId || ""}/step1`, { replace: true });
+        navigateWithParams(`/budget-planning/wizard/${proposalId || ""}/step1`, { replace: true });
         return;
       }
     }
@@ -283,17 +379,17 @@ export default function BudgetPlanningWizard() {
       toast.error(
         "Please freeze the annual budget and set vertical caps first.",
       );
-      navigate(`/budget-planning/wizard/${proposalId || ""}/step1`, {
+      navigateWithParams(`/budget-planning/wizard/${proposalId || ""}/step1`, {
         replace: true,
       });
       return;
     }
     if (currentStep === 3) {
       if (
-        Math.round(totalAllocatedStep2) !== Math.round(totalAllocatedCaps) ||
-        totalAllocatedCaps === 0
+        Math.round(totalAllocatedStep2 * 100) !== Math.round(totalAllocatedCaps * 100) ||
+        (proposalType !== "TOP_UP" && totalAllocatedCaps === 0)
       ) {
-        navigate(`/budget-planning/wizard/${proposalId || ""}/step2`, {
+        navigateWithParams(`/budget-planning/wizard/${proposalId || ""}/step2`, {
           replace: true,
         });
         return;
@@ -344,14 +440,18 @@ export default function BudgetPlanningWizard() {
     setFreezing(true);
     try {
       const proposal = await budgetPlanningApi.freezeAnnualBudget({
+        proposalId,
         financialYear,
         totalAnnualBudget,
+        proposalType,
+        parentProposalId
       });
-      setProposalId(proposal.id);
+      const newProposalId = proposal.proposalId || proposal.id;
+      setProposalId(newProposalId);
       setPeriodId(proposal.periodId);
       setIsFrozen(true);
       setSavedTotalAnnualBudget(totalAnnualBudget);
-      navigate(`/budget-planning/wizard/${proposal.id}/step1`, {
+      navigateWithParams(`/budget-planning/wizard/${newProposalId}/step1`, {
         replace: true,
       });
     } catch (err) {
@@ -392,48 +492,12 @@ export default function BudgetPlanningWizard() {
       if (proposalStatus === "APPROVED") {
         await budgetPlanningApi.submitOperationalPlan(proposalId);
         toast.success("Operational Plan Activated Successfully!");
-
-        // Refetch and hydrate to unlock quarters immediately
-        const updatedProposal =
-          await budgetPlanningApi.getProposalById(proposalId);
-        if (updatedProposal) {
-          setProposalStatus(updatedProposal.status);
-          const isGenerated =
-            updatedProposal.quarterlyTargetCaps &&
-            Object.keys(updatedProposal.quarterlyTargetCaps).some(
-              (q) => updatedProposal.quarterlyTargetCaps[q].length > 0,
-            );
-          setHasGeneratedQuarters(isGenerated);
-
-          const loadedQStep2 = { Q1: {}, Q2: {}, Q3: {}, Q4: {} };
-          if (updatedProposal.quarterlyTargetCaps) {
-            Object.keys(updatedProposal.quarterlyTargetCaps).forEach((q) => {
-              updatedProposal.quarterlyTargetCaps[q].forEach((cap) => {
-                if (!loadedQStep2[q][cap.verticalId])
-                  loadedQStep2[q][cap.verticalId] = {};
-                loadedQStep2[q][cap.verticalId][cap.eventCategoryId] = cap.allocatedCap;
-              });
-            });
-          }
-          setQuarterlyStep2Matrix(loadedQStep2);
-          setQuarterlyAllocations(
-            updatedProposal.quarterlyGroupedAllocations || {
-              Q1: [],
-              Q2: [],
-              Q3: [],
-              Q4: [],
-            },
-          );
-
-          setSubmitting(false);
-          return; // Prevent navigating away so user can view dropdown
-        }
       } else {
         await budgetPlanningApi.submitProposal(proposalId);
         toast.success("Budget Proposal Submitted Successfully!");
       }
 
-      navigate("/budget-planning");
+      navigateWithParams("/budget-planning");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to submit budget. Please try again.");
     } finally {
@@ -444,7 +508,7 @@ export default function BudgetPlanningWizard() {
   const handleNext = async () => {
     if (currentStep === 1) {
       if (isReadOnly) {
-        navigate(`/budget-planning/wizard/${proposalId}/step2`);
+        navigateWithParams(`/budget-planning/wizard/${proposalId}/step2`);
         return;
       }
 
@@ -470,7 +534,7 @@ export default function BudgetPlanningWizard() {
         JSON.stringify(verticalCaps) !== JSON.stringify(savedVerticalCaps);
 
       if (!isCapsChanged) {
-        navigate(`/budget-planning/wizard/${proposalId}/step2`);
+        navigateWithParams(`/budget-planning/wizard/${proposalId}/step2`);
         return;
       }
 
@@ -509,8 +573,14 @@ export default function BudgetPlanningWizard() {
         setSavedStep2Matrix({});
         setAllocations({});
 
-        toast.success("Budget Submitted for Approval!");
-        navigate("/budget-planning");
+        if (!proposalStatus || proposalStatus === "DRAFT" || proposalStatus === "REJECTED") {
+          await budgetPlanningApi.submitProposal(proposalId);
+          toast.success("Budget Submitted for Approval!");
+          navigateWithParams("/budget-planning");
+        } else {
+          toast.success("Vertical Caps Saved!");
+          navigateWithParams(`/budget-planning/wizard/${proposalId}/step2`);
+        }
       } catch (err) {
         const errMsg =
           err.response?.data?.message ||
@@ -520,27 +590,44 @@ export default function BudgetPlanningWizard() {
       }
     } else if (currentStep === 2) {
       if (isReadOnly) {
-        navigate(`/budget-planning/wizard/${proposalId}/step3`);
+        navigateWithParams(`/budget-planning/wizard/${proposalId}/step3`);
         return;
       }
 
-      if (Math.round(totalAllocatedStep2) !== Math.round(totalAllocatedCaps)) {
+      // Determine which matrix and caps to use based on active period
+      const currentMatrix = activePeriod === "Annual" ? step2Matrix : quarterlyStep2Matrix[activePeriod];
+      const currentCaps = activePeriod === "Annual" ? verticalCaps : quarterlyCaps[activePeriod];
+      const currentSavedMatrix = activePeriod === "Annual" ? savedStep2Matrix : savedQuarterlyStep2Matrix[activePeriod];
+
+      // Compute totals for the current period
+      const currentTotalAllocated = Object.values(currentMatrix).reduce(
+        (sum, matrix) => sum + Object.values(matrix).reduce((mSum, val) => mSum + (val || 0), 0), 0
+      );
+      const currentTotalCaps = Object.values(currentCaps).reduce((sum, cap) => sum + (Number(cap) || 0), 0);
+
+      if (Math.round(currentTotalAllocated * 100) !== Math.round(currentTotalCaps * 100)) {
         toast.error(
-          `Please allocate the full vertical caps amount (₹${totalAllocatedCaps.toLocaleString()}) in the matrix.`,
+          `Please allocate the full vertical caps amount (₹${currentTotalCaps.toLocaleString()}) in the matrix.`,
         );
         return;
       }
 
-      const isMatrixChanged =
-        JSON.stringify(step2Matrix) !== JSON.stringify(savedStep2Matrix);
-      const isFirstTimeEntry = Object.keys(savedStep2Matrix).length === 0;
+      const isMatrixChanged = JSON.stringify(currentMatrix) !== JSON.stringify(currentSavedMatrix);
+      const isFirstTimeEntry = Object.keys(currentSavedMatrix).length === 0;
 
-      const saveTargetsAndProceed = async (isQuarterActiveEdit = false) => {
+      if (!isMatrixChanged) {
+        navigateWithParams(`/budget-planning/wizard/${proposalId}/step3`);
+        return;
+      }
+
+      // Determine if editing a specific quarter (either via unlock or future quarters mode)
+      const isQuarterEdit = proposalStatus === "ACTIVE" && isFutureQuartersEditMode && activePeriod !== "Annual";
+      const isFutureQuartersEdit = isQuarterEdit && isFutureQuartersEditMode;
+
+      const saveTargetsAndProceed = async () => {
         try {
           const targetCapsArray = [];
-          const sourceMatrix = isQuarterActiveEdit ? quarterlyStep2Matrix[activePeriod] : step2Matrix;
-          
-          Object.entries(sourceMatrix).forEach(([vId, ecMap]) => {
+          Object.entries(currentMatrix).forEach(([vId, ecMap]) => {
             Object.entries(ecMap).forEach(([ecId, cap]) => {
               if (cap > 0) {
                 targetCapsArray.push({
@@ -552,17 +639,21 @@ export default function BudgetPlanningWizard() {
             });
           });
 
-          const payloadPeriodId = isQuarterActiveEdit ? quarterlyPeriods[activePeriod].periodId : periodId;
+          const payloadPeriodId = isQuarterEdit ? quarterlyPeriods[activePeriod].periodId : periodId;
           const payload = {
             periodId: payloadPeriodId,
             targetCaps: targetCapsArray,
           };
 
-          await budgetPlanningApi.saveTargetCaps(proposalId, payload);
+          // Route to the correct API based on mode
+          if (isFutureQuartersEdit) {
+            await budgetPlanningApi.updateFutureQuartersTargets(proposalId, payload);
+          } else {
+            await budgetPlanningApi.saveTargetCaps(proposalId, payload);
+          }
 
-          // Refetch to sync backend-generated quarter targets
-          const updatedProposal =
-            await budgetPlanningApi.getProposalById(proposalId);
+          // Refetch to sync
+          const updatedProposal = await budgetPlanningApi.getProposalById(proposalId);
           if (updatedProposal) {
             const isGenerated =
               updatedProposal.quarterlyTargetCaps &&
@@ -582,19 +673,39 @@ export default function BudgetPlanningWizard() {
               });
             }
             setQuarterlyStep2Matrix(loadedQStep2);
+            setSavedQuarterlyStep2Matrix(loadedQStep2);
           }
 
-          // Cascade Reset
-          const updatedAllocations = allocations.filter((alloc) => {
-            const oldAmount = savedStep2Matrix[alloc.verticalId]?.[alloc.eventCategoryId];
-            const newAmount = step2Matrix[alloc.verticalId]?.[alloc.eventCategoryId] || 0;
-            return oldAmount === newAmount; // Keep if unchanged
-          });
+          // Cascade Reset: clear Step 3 allocations affected by this change
+          if (isQuarterEdit) {
+            // For quarter edits, clear ALL allocations for that quarter (backend already does this)
+            setQuarterlyAllocations(prev => ({
+              ...prev,
+              [activePeriod]: []
+            }));
+          } else {
+            // For annual edits, reset allocations for changed combinations
+            const updatedAllocations = allocations.filter((alloc) => {
+              const oldAmount = savedStep2Matrix[alloc.verticalId]?.[alloc.eventCategoryId];
+              const newAmount = step2Matrix[alloc.verticalId]?.[alloc.eventCategoryId] || 0;
+              return oldAmount === newAmount;
+            });
+            setAllocations(updatedAllocations);
+          }
 
-          setAllocations(updatedAllocations);
-          setSavedStep2Matrix(step2Matrix);
+          // Update saved state
+          if (isQuarterEdit) {
+            const qMatrix = quarterlyStep2Matrix[activePeriod];
+            setSavedQuarterlyStep2Matrix(prev => ({
+              ...prev,
+              [activePeriod]: qMatrix
+            }));
+          } else {
+            setSavedStep2Matrix(step2Matrix);
+          }
+
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-          navigate(`/budget-planning/wizard/${proposalId}/step3`);
+          navigateWithParams(`/budget-planning/wizard/${proposalId}/step3`);
         } catch (err) {
           const errMsg =
             err.response?.data?.message ||
@@ -605,39 +716,33 @@ export default function BudgetPlanningWizard() {
         }
       };
 
-      console.log("Calling saveTargetCaps API to ensure quarter generation...");
-      const isActiveQuarterEdit = proposalStatus === "ACTIVE" && isQuarterEditMode && activePeriod !== "Annual";
-
-      if (isActiveQuarterEdit) {
+      if (isQuarterEdit && !isFirstTimeEntry) {
         setConfirmDialog({
-            isOpen: true,
-            title: "Warning: Destructive Action",
-            message: "Modifying these Target Caps will permanently reset all Step 3 Task Allocations for this quarter. Do you wish to proceed?",
-            onConfirm: () => saveTargetsAndProceed(true),
-            onCancel: () => setConfirmDialog(prev => ({...prev, isOpen: false}))
+          isOpen: true,
+          title: "Warning: Destructive Action",
+          message: "Step 3 data will be cleared. If you click Continue, Step 3 details will be cleared and you will need to fill them again. Do you wish to proceed?",
+          onConfirm: saveTargetsAndProceed,
+          onCancel: () => setConfirmDialog(prev => ({ ...prev, isOpen: false }))
         });
         return;
       }
 
       if (isFirstTimeEntry) {
-        saveTargetsAndProceed(false);
-      } else if (isMatrixChanged) {
+        saveTargetsAndProceed();
+      } else {
         setConfirmDialog({
           isOpen: true,
           title: "Confirm Matrix Modification",
           message:
-            "Modifying the matrix will reset the Task & State distributions for the changed targets. Continue?",
-          onConfirm: () => saveTargetsAndProceed(false),
+            "Step 3 data will be cleared for the modified combinations. If you click Continue, those Step 3 details will be cleared and you will need to fill them again.",
+          onConfirm: saveTargetsAndProceed,
           onCancel: () => {
             setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
           },
         });
-      } else {
-        // Force the save even if nothing changed to guarantee backend generation
-        saveTargetsAndProceed(false);
       }
     } else {
-      navigate(
+      navigateWithParams(
         `/budget-planning/wizard/${proposalId}/step${Math.min(3, currentStep + 1)}`,
       );
     }
@@ -655,134 +760,148 @@ export default function BudgetPlanningWizard() {
     );
 
   return (
-    <div className="max-w-7xl mx-auto py-8 sm:px-6 lg:px-8 space-y-6">
-      <div className="flex items-center justify-between mb-2">
+    <div className="max-w-7xl mx-auto h-full flex flex-col gap-4">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 shrink-0">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate("/budget-planning")}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition font-medium text-sm border border-transparent hover:border-slate-200"
-            title="Back to Budget Planning"
+            onClick={() => navigateWithParams(fromApprovals ? "/budget/approvals" : "/budget-planning")}
+            className="flex items-center justify-center h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-brand-600 hover:border-brand-200 shadow-sm transition-all"
+            title={fromApprovals ? "Back to Budget Approvals" : "Back to Budget Planning"}
           >
-            <Icon name="arrowLeft" className="h-4 w-4" />
-            <span>Back</span>
+            <Icon name="arrowLeft" className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight leading-tight">
             Budget Planning
           </h1>
         </div>
         {proposalStatus === "ACTIVE" &&
           (currentStep === 2 || currentStep === 3) && (
-            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg shadow-sm">
-              <Icon name="eye" className="h-5 w-5 text-amber-600" />
-              <label className="text-sm font-semibold text-amber-800">
-                View Mode:
-              </label>
-              <select
-                className="rounded-md border border-amber-300 bg-white px-3 py-1 text-sm font-medium text-amber-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200 transition"
-                value={activePeriod}
-                onChange={(e) => setActivePeriod(e.target.value)}
-              >
-                <option value="Annual">Annual</option>
-                <option value="Q1">Q1</option>
-                <option value="Q2">Q2</option>
-                <option value="Q3">Q3</option>
-                <option value="Q4">Q4</option>
-              </select>
-              {proposalStatus === "ACTIVE" && activePeriod !== "Annual" && (currentStep === 2 || currentStep === 3) && (
+            <div className={`flex items-center gap-2 sm:gap-3 px-3 py-2 rounded-lg shadow-sm border ${isFutureQuartersEditMode ? 'bg-violet-50 border-violet-200' : 'bg-white border-slate-200'} w-full md:w-auto`}>
+
+              <div className="flex items-center gap-2 px-1 shrink-0">
+                {isFutureQuartersEditMode ? (
+                  <>
+                    <Icon name="pencil" className="h-5 w-5 text-violet-600 shrink-0" />
+                    <span className="text-sm font-semibold text-violet-800 shrink-0">Edit Mode</span>
+                  </>
+                ) : null}
+
+                {isFutureQuartersEditMode && <div className="h-5 w-px bg-slate-200 mx-1"></div>}
+
+                <label className={`text-sm font-semibold shrink-0 ${isFutureQuartersEditMode ? 'text-violet-800' : 'text-slate-700'}`}>
+                  Period:
+                </label>
+              </div>
+
+              <div className="w-full sm:w-48 z-10 flex-1">
+                <SingleSelectDropdown
+                  value={activePeriod}
+                  onChange={(val) => setActivePeriod(val)}
+                  options={[
+                    { value: "Annual", label: "Annual" },
+                    ...["Q1", "Q2", "Q3", "Q4"].map((q) => {
+                      const qPeriod = quarterlyPeriods[q];
+                      let lockIcon = "";
+                      if (qPeriod && isFutureQuartersEditMode) {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const parts = qPeriod.startDate.split("-");
+                        const start = new Date(parts[0], parts[1] - 1, parts[2]);
+                        start.setHours(0, 0, 0, 0);
+                        const daysUntil = (start - today) / (1000 * 60 * 60 * 24);
+                        lockIcon = daysUntil < 0 ? " 🔒" : "";
+                      }
+                      return { value: q, label: `${q}${lockIcon}` };
+                    })
+                  ]}
+                />
+              </div>
+              {activePeriod !== "Annual" && (
                 (() => {
                   const qPeriod = quarterlyPeriods[activePeriod];
                   if (!qPeriod) return null;
-                  
-                  // Use timezone-stripped dates for precise calendar comparison
+
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
-                  const startDateParts = qPeriod.startDate.split('-');
+                  const startDateParts = qPeriod.startDate.split("-");
                   const startDate = new Date(startDateParts[0], startDateParts[1] - 1, startDateParts[2]);
                   startDate.setHours(0, 0, 0, 0);
-                  
+
                   const daysUntil = (startDate - today) / (1000 * 60 * 60 * 24);
-                  
-                  if (daysUntil >= 0 && daysUntil <= 30) {
-                    if (!isQuarterEditMode) {
+
+                  if (isFutureQuartersEditMode) {
+                    if (daysUntil < 0) {
                       return (
-                        <button 
-                          className="ml-2 flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 transition"
-                          onClick={() => setIsQuarterEditMode(true)}
-                        >
-                          <Icon name="unlock" className="h-4 w-4" />
-                          Unlock Quarter
-                        </button>
-                      );
-                    } else {
-                      return (
-                        <span className="ml-2 flex items-center gap-1.5 rounded-md bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-800 border border-emerald-300">
-                          <Icon name="unlock" className="h-4 w-4" />
-                          Unlocked
+                        <span className="ml-2 flex items-center gap-1 text-xs font-medium text-slate-500">
+                          <Icon name="lock" className="h-3.5 w-3.5" />
+                          Past quarter — locked
                         </span>
                       );
                     }
-                  } else {
                     return (
-                      <span className="ml-2 text-xs text-slate-500 italic">
-                        (Locked: 0-30 days before start)
+                      <span className="ml-2 flex items-center gap-1 text-xs font-medium text-emerald-600">
+                        <Icon name="check" className="h-3.5 w-3.5" />
+                        Editable
                       </span>
                     );
                   }
+
+                  return null;
                 })()
               )}
             </div>
           )}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-200 bg-slate-50/50">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+        <div className="border-b border-slate-200 bg-slate-50/50 shrink-0">
           <nav aria-label="Progress" className="flex">
             {[1, 2, 3].map((step, idx) => {
               const isTabDisabled = (step > 1 && (
                 (!canPropose && proposalStatus !== "ACTIVE") ||
                 (canPropose && proposalStatus !== "APPROVED" && proposalStatus !== "ACTIVE")
-              )) || (step === 3 && (Math.round(totalAllocatedStep2) !== Math.round(totalAllocatedCaps) || totalAllocatedCaps === 0));
+              )) || (step === 3 && (Math.round(totalAllocatedStep2 * 100) !== Math.round(totalAllocatedCaps * 100) || (proposalType !== "TOP_UP" && totalAllocatedCaps === 0)));
               return (
-              <button
-                key={step}
-                onClick={() =>
-                  !isTabDisabled && navigate(
-                    proposalId
-                      ? `/budget-planning/wizard/${proposalId}/step${step}`
-                      : `/budget-planning/wizard/step${step}`,
-                  )
-                }
-                disabled={isTabDisabled}
-                className={`relative flex-1 flex items-center justify-center py-4 text-sm font-medium transition
-                  ${
-                    currentStep === step
+                <button
+                  key={step}
+                  onClick={() =>
+                    !isTabDisabled && navigateWithParams(
+                      proposalId
+                        ? `/budget-planning/wizard/${proposalId}/step${step}${window.location.search}`
+                        : `/budget-planning/wizard/step${step}${window.location.search}`,
+                    )
+                  }
+                  disabled={isTabDisabled}
+                  className={`relative flex-1 flex items-center justify-center py-4 text-sm font-medium transition
+                  ${currentStep === step
                       ? "text-brand-600 bg-white border-b-2 border-brand-500"
                       : isTabDisabled
                         ? "text-slate-400 bg-slate-50 cursor-not-allowed border-b-2 border-transparent"
                         : "text-slate-500 hover:text-slate-700 hover:bg-slate-50/80 border-b-2 border-transparent"
-                  }
+                    }
                   ${idx !== 2 ? "border-r border-slate-200" : ""}
                 `}
-              >
-                <span
-                  className={`mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 
-                  ${currentStep === step ? "border-brand-600 text-brand-600 bg-brand-50" : "border-slate-300"}`}
                 >
-                  {step}
-                </span>
+                  <span
+                    className={`mr-1.5 sm:mr-2 flex h-5 w-5 sm:h-6 sm:w-6 text-[10px] sm:text-sm shrink-0 items-center justify-center rounded-full border-2 
+                  ${currentStep === step ? "border-brand-600 text-brand-600 bg-brand-50" : "border-slate-300"}`}
+                  >
+                    {step}
+                  </span>
 
-                {step === 1
-                  ? "Vertical Caps"
-                  : step === 2
-                    ? "Target Matrix"
-                    : "Task Distribution"}
-              </button>
+                  <span className="hidden sm:inline">
+                    {step === 1 ? "Vertical Caps" : step === 2 ? "Target Matrix" : "Task Distribution"}
+                  </span>
+                  <span className="sm:hidden text-[11px] font-semibold">
+                    {step === 1 ? "Caps" : step === 2 ? "Matrix" : "Tasks"}
+                  </span>
+                </button>
               );
             })}
           </nav>
         </div>
 
-        <div className="p-6 bg-slate-50/30">
+        <div className="p-4 sm:p-6 bg-slate-50/30 flex-1 flex flex-col min-h-0 overflow-hidden">
           {currentStep === 1 && (
             <Step1VerticalCaps
               financialYear={financialYear}
@@ -799,6 +918,8 @@ export default function BudgetPlanningWizard() {
               onUnfreeze={handleUnfreeze}
               freezing={freezing}
               isReadOnly={isReadOnly}
+              proposalType={proposalType}
+              urlFinancialYear={urlFinancialYear}
             />
           )}
           {currentStep === 2 && (
@@ -810,8 +931,14 @@ export default function BudgetPlanningWizard() {
                   ? step2Matrix
                   : quarterlyStep2Matrix[activePeriod]
               }
-              setStep2Matrix={setStep2Matrix}
-              setQuarterlyStep2Matrix={setQuarterlyStep2Matrix}
+              setStep2Matrix={
+                activePeriod === "Annual"
+                  ? setStep2Matrix
+                  : (updater) => setQuarterlyStep2Matrix(prev => ({
+                    ...prev,
+                    [activePeriod]: typeof updater === 'function' ? updater(prev[activePeriod] || {}) : updater
+                  }))
+              }
               verticalCaps={
                 activePeriod === "Annual"
                   ? verticalCaps
@@ -819,8 +946,6 @@ export default function BudgetPlanningWizard() {
               }
               isReadOnly={isReadOnly}
               activePeriod={activePeriod}
-              quarterlyStep2Matrix={quarterlyStep2Matrix}
-              annualStep2Matrix={step2Matrix}
             />
           )}
           {currentStep === 3 && (
@@ -841,7 +966,14 @@ export default function BudgetPlanningWizard() {
                   ? allocations
                   : quarterlyAllocations[activePeriod]
               }
-              setAllocations={setAllocations}
+              setAllocations={
+                activePeriod === "Annual"
+                  ? setAllocations
+                  : (updater) => setQuarterlyAllocations(prev => ({
+                    ...prev,
+                    [activePeriod]: typeof updater === 'function' ? updater(prev[activePeriod] || []) : updater
+                  }))
+              }
               setQuarterlyAllocations={setQuarterlyAllocations}
               isReadOnly={isReadOnly}
               activePeriod={activePeriod}
@@ -850,74 +982,108 @@ export default function BudgetPlanningWizard() {
               quarterlyAllocations={quarterlyAllocations}
               annualAllocations={allocations}
               onMatrixSaved={() => fetchProposalData(urlProposalId)}
-              isQuarterEditMode={isQuarterEditMode}
+
+              isFutureQuartersEditMode={isFutureQuartersEditMode}
               quarterlyPeriods={quarterlyPeriods}
             />
           )}
         </div>
 
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50/50">
-          {canPropose ? (
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-t border-slate-200 bg-slate-50/50 gap-4">
+          {/* Previous button - hide when viewing from approvals */}
+          {!fromApprovals && canPropose ? (
             <button
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition
-                ${
-                  currentStep === 1
-                    ? "text-slate-300 cursor-not-allowed"
-                    : "text-slate-600 hover:bg-white hover:text-slate-800 border border-slate-200 hover:shadow-sm bg-white"
+              className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition
+                ${currentStep === 1
+                  ? "text-slate-300 cursor-not-allowed"
+                  : "text-slate-600 hover:bg-white hover:text-slate-800 border border-slate-200 hover:shadow-sm bg-white"
                 }`}
               onClick={() =>
-                navigate(
+                navigateWithParams(
                   `/budget-planning/wizard/${proposalId}/step${Math.max(1, currentStep - 1)}`,
                 )
               }
               disabled={currentStep === 1}
             >
-              <Icon name="chevronLeft" className="h-4 w-4" /> Previous
+              <Icon name="chevronLeft" className="h-4 w-4" /> <span>Previous</span>
             </button>
           ) : (
-            <div /> 
+            <div />
           )}
 
-          <div className="flex items-center gap-3">
-            {currentStep === 3 ? (
-              canPropose && !isReadOnly && (
+          <div className="flex items-center justify-end gap-3">
+            {/* Approve/Reject buttons when viewing from approvals page */}
+            {fromApprovals && proposalStatus === "PENDING_APPROVAL" ? (
+              <>
                 <button
-                  className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 transition disabled:opacity-50"
-                  onClick={handleSubmit}
+                  className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-5 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-100 transition disabled:opacity-50"
+                  onClick={() => openApproveRejectModal('reject')}
                   disabled={submitting}
                 >
-                  {submitting
-                    ? proposalStatus === "APPROVED"
-                      ? "Activating..."
-                      : "Submitting..."
-                    : proposalStatus === "APPROVED"
-                      ? "Activate Operational Plan"
-                      : proposalStatus === "NEEDS_REVISION" ||
-                          proposalStatus === "REJECTED"
-                        ? "Resubmit Proposal"
-                        : "Submit Proposal"}
-                  {!submitting && <Icon name="check" className="h-4 w-4" />}
+                  <Icon name="xCircle" className="h-4 w-4" /> Reject
                 </button>
-              )
-            ) : canPropose && proposalStatus !== "PENDING_APPROVAL" ? (
-              <button
-                className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleNext}
-                disabled={
-                  currentStep !== 1 && currentStep === 2 ? false : false
-                } // Adjust if you have step 2 validations later
-              >
-                {currentStep === 1 && !isReadOnly
-                  ? "Submit for Approval"
-                  : "Next"}{" "}
-                <Icon
-                  name={
-                    currentStep === 1 && !isReadOnly ? "check" : "chevronRight"
-                  }
-                  className="h-4 w-4"
-                />
-              </button>
-            ) : null}
+                <button
+                  className="flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 transition disabled:opacity-50"
+                  onClick={() => openApproveRejectModal('approve')}
+                  disabled={submitting}
+                >
+                  <Icon name="checkCircle" className="h-4 w-4" /> Approve
+                </button>
+              </>
+            ) : (
+              <>
+                {currentStep === 3 ? (
+                  canPropose && !isReadOnly && (
+                    <div className="flex items-center gap-3">
+                      {proposalType === "TOP_UP" && totalAllocatedCaps === 0 && (
+                        <span className="text-sm font-semibold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-md border border-rose-100">
+                          A Top-Up must contain an allocation greater than ₹0.
+                        </span>
+                      )}
+                      <button
+                        className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 transition disabled:opacity-50"
+                        onClick={isFutureQuartersEditMode ? () => navigateWithParams("/budget-planning") : handleSubmit}
+                        disabled={submitting || (proposalType === "TOP_UP" && totalAllocatedCaps === 0)}
+                      >
+                        {isFutureQuartersEditMode ? (
+                          "Finish Editing"
+                        ) : submitting ? (
+                          proposalStatus === "APPROVED"
+                            ? "Activating..."
+                            : "Submitting..."
+                        ) : proposalStatus === "APPROVED" ? (
+                          "Activate Operational Plan"
+                        ) : proposalStatus === "NEEDS_REVISION" ||
+                          proposalStatus === "REJECTED" ? (
+                          "Resubmit Proposal"
+                        ) : (
+                          "Submit Proposal"
+                        )}
+                        {!submitting && <Icon name="check" className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  )
+                ) : canPropose && proposalStatus !== "PENDING_APPROVAL" ? (
+                  <button
+                    className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleNext}
+                    disabled={
+                      currentStep !== 1 && currentStep === 2 ? false : false
+                    }
+                  >
+                    {currentStep === 1 && !isReadOnly
+                      ? (!proposalStatus || proposalStatus === "DRAFT" || proposalStatus === "REJECTED" ? "Submit for Approval" : "Next")
+                      : "Next"}{" "}
+                    <Icon
+                      name={
+                        currentStep === 1 && !isReadOnly ? "check" : "chevronRight"
+                      }
+                      className="h-4 w-4"
+                    />
+                  </button>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -951,6 +1117,66 @@ export default function BudgetPlanningWizard() {
       >
         <div className="py-2 text-sm text-slate-600">
           {confirmDialog.message}
+        </div>
+      </Modal>
+
+      {/* Approve/Reject Modal (when viewing from approvals page) */}
+      <Modal
+        open={approveRejectModal.isOpen}
+        onClose={() => setApproveRejectModal({ isOpen: false, action: null, comments: '', commentsError: false })}
+        title={
+          approveRejectModal.action === 'approve' ? 'Approve Budget Proposal' : 'Reject Budget Proposal'
+        }
+        footer={
+          <>
+            <button
+              onClick={() => setApproveRejectModal({ isOpen: false, action: null, comments: '', commentsError: false })}
+              className="rounded-md px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-50"
+              disabled={submitting}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleApproveReject}
+              className={`rounded-md px-5 py-2 text-sm font-semibold text-white shadow-sm transition disabled:opacity-50 ${approveRejectModal.action === 'approve'
+                ? 'bg-emerald-600 hover:bg-emerald-700'
+                : 'bg-red-600 hover:bg-red-700'
+                }`}
+              disabled={submitting}
+            >
+              {submitting ? 'Processing...' : approveRejectModal.action === 'approve' ? 'Confirm Approve' : 'Confirm Reject'}
+            </button>
+          </>
+        }
+      >
+        <div className="py-3 text-sm text-slate-600">
+          <p className="mb-4">
+            {approveRejectModal.action === 'approve'
+              ? 'You are about to approve this budget proposal. It will become active.'
+              : 'You are about to reject this budget proposal. The planner will be notified.'
+            }
+          </p>
+          <div className="space-y-1">
+            <label className="font-semibold text-slate-700 block">
+              Remarks {approveRejectModal.action === 'reject' && <span className="text-red-500">*</span>}
+            </label>
+            <textarea
+              className={`w-full p-3 border rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm ${approveRejectModal.commentsError ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-300'
+                }`}
+              rows="3"
+              placeholder={
+                approveRejectModal.action === 'reject'
+                  ? 'Please provide a reason for rejection...'
+                  : 'Optional remarks...'
+              }
+              value={approveRejectModal.comments}
+              onChange={(e) => {
+                setApproveRejectModal(prev => ({ ...prev, comments: e.target.value }));
+                if (e.target.value.trim()) setApproveRejectModal(prev => ({ ...prev, commentsError: false }));
+              }}
+            />
+            {approveRejectModal.commentsError && <p className="text-xs text-red-600 mt-1">Remarks are required for rejection.</p>}
+          </div>
         </div>
       </Modal>
     </div>

@@ -6,17 +6,24 @@ const ActionMenuContext = createContext({ onClose: () => {} })
 
 export function ActionMenu({ children, align = 'right', triggerIcon = 'moreVertical', className = '' }) {
   const [isOpen, setIsOpen] = useState(false)
-  const [coords, setCoords] = useState({ top: 0, left: 0, right: 0 })
+  const [coords, setCoords] = useState({ triggerTop: 0, triggerBottom: 0, left: 0, right: 0, showAbove: false })
   const triggerRef = useRef(null)
   const menuRef = useRef(null)
 
   const updateCoords = () => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
+      
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      const showAbove = spaceBelow < 250 && spaceAbove > spaceBelow
+
       setCoords({
-        top: rect.bottom + window.scrollY + 4,
+        triggerTop: rect.top + window.scrollY,
+        triggerBottom: rect.bottom + window.scrollY,
         left: rect.left + window.scrollX,
         right: window.innerWidth - (rect.right + window.scrollX),
+        showAbove: showAbove
       })
     }
   }
@@ -86,13 +93,15 @@ export function ActionMenu({ children, align = 'right', triggerIcon = 'moreVerti
               ref={menuRef}
               style={{
                 position: 'absolute',
-                top: `${coords.top}px`,
+                ...(coords.showAbove
+                  ? { bottom: `${document.documentElement.scrollHeight - coords.triggerTop + 4}px` }
+                  : { top: `${coords.triggerBottom + 4}px` }),
                 ...(align === 'right'
                   ? { right: `${coords.right}px` }
                   : { left: `${coords.left}px` }),
                 zIndex: 9999,
               }}
-              className="min-w-[140px] rounded-lg border border-slate-200/80 bg-white/95 py-1.5 shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 overflow-hidden"
+              className={`min-w-[140px] rounded-lg border border-slate-200/80 bg-white/95 py-1.5 shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 overflow-hidden ${coords.showAbove ? 'origin-bottom' : 'origin-top'}`}
             >
               {children}
             </div>
@@ -126,6 +135,9 @@ export function ActionMenuItem({ onClick, icon, label, danger = false, variant, 
   } else if (variant === 'warning') {
     colorCls = 'text-amber-700 hover:bg-amber-50 hover:text-amber-800 active:bg-amber-100'
     iconCls = 'text-amber-500 group-hover:text-amber-600'
+  } else if (variant === 'purple') {
+    colorCls = 'text-violet-700 hover:bg-violet-50 hover:text-violet-800 active:bg-violet-100'
+    iconCls = 'text-violet-500 group-hover:text-violet-600'
   }
 
   return (

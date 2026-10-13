@@ -79,6 +79,7 @@ export default function TeamTaskTracker() {
                 <th className="px-6 py-4">Total Tasks</th>
                 <th className="px-6 py-4">Newly Assigned</th>
                 <th className="px-6 py-4">In Progress</th>
+                <th className="px-6 py-4">Rework</th>
                 <th className="px-6 py-4">Marketing QC</th>
                 <th className="px-6 py-4">Requestor QC</th>
                 <th className="px-6 py-4">Completed</th>
@@ -88,13 +89,13 @@ export default function TeamTaskTracker() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-slate-400">
+                  <td colSpan={9} className="px-6 py-8 text-center text-slate-400">
                     Loading stats...
                   </td>
                 </tr>
               ) : stats.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-slate-400">
+                  <td colSpan={9} className="px-6 py-8 text-center text-slate-400">
                     No team members found.
                   </td>
                 </tr>
@@ -112,6 +113,9 @@ export default function TeamTaskTracker() {
                     </td>
                     <td className="px-6 py-4 text-slate-600">
                       {member.inProgress}
+                    </td>
+                    <td className="px-6 py-4 text-amber-600 font-medium">
+                      {member.rework}
                     </td>
                     <td className="px-6 py-4 text-slate-600">
                       {member.marketingQc}

@@ -151,25 +151,25 @@ const MY_WORKSPACE_NAV_LINKS = [
     to: '/my-tasks',
     label: 'My Tasks',
     icon: 'clipboard',
-    right: Rights.VIEW_MY_TASKS,
+    right: Rights.TASK_READ_OWN,
   },
   {
     to: '/requestor/review-center',
     label: 'Review Center',
     icon: 'eye',
-    right: Rights.VIEW_REQUESTOR_QC_QUEUE,
+    right: Rights.REQUESTOR_QC_READ,
   },
   {
     to: '/campaigns/completed',
     label: 'Completed Tasks',
     icon: 'checkSquare',
-    right: Rights.VIEW_OWN_COMPLETED_TASKS,
+    right: Rights.CAMPAIGN_READ_OWN,
   },
   {
     to: '/collaborations',
     label: 'Collaborations',
     icon: 'users',
-    right: Rights.ACCESS_COLLABORATIONS,
+    anyRight: [Rights.COLLABORATION_START, Rights.COLLABORATION_MESSAGE, Rights.COLLABORATION_READ_ALL],
   },
 ]
 
@@ -178,19 +178,19 @@ const MANAGER_TOOLS_NAV_LINKS = [
     to: '/manager/task-management',
     label: 'Task Management',
     icon: 'layers',
-    anyRight: [Rights.ACCESS_MANAGER_TOOLS, Rights.VIEW_TEAM_TASKS],
+    anyRight: [Rights.TASK_READ_TEAM, Rights.TASK_HOLD],
   },
   {
     to: '/tasks/approvals',
     label: 'Task Approvals',
     icon: 'userCheck',
-    anyRight: [Rights.REVIEW_MANAGER_QC, Rights.APPROVE_TEAM_TASKS],
+    anyRight: [Rights.MANAGER_QC_READ, Rights.MANAGER_QC_APPROVE, Rights.TASK_READ_TEAM],
   },
   {
     to: '/manager/analytics',
     label: 'Analytics',
     icon: 'barChart',
-    anyRight: [Rights.VIEW_ANALYTICS_REPORTS, Rights.ACCESS_MANAGER_TOOLS, Rights.VIEW_TEAM_ANALYTICS],
+    anyRight: [Rights.ANALYTICS_READ_TEAM, Rights.ANALYTICS_READ_ALL, Rights.TASK_READ_TEAM],
   },
 ]
 
@@ -199,19 +199,19 @@ const ADMINISTRATION_NAV_LINKS = [
     to: '/budget-planning',
     label: 'Budget Planning',
     icon: 'dollar',
-    anyRight: BUDGET_RIGHTS,
+    right: Rights.BUDGET_CREATE,
   },
   {
     to: '/budget/approvals',
     label: 'Budget Approvals',
     icon: 'userCheck',
-    anyRight: [Rights.APPROVE_BUDGET_OVERRUN, Rights.APPROVE_BUDGET],
+    anyRight: [Rights.BUDGET_OVERRUN_APPROVE, Rights.BUDGET_APPROVE],
   },
   {
     to: '/admin/master',
     label: 'Master Data',
     icon: 'cog',
-    right: Rights.MANAGE_MASTER_DATA,
+    right: Rights.MASTER_DATA_UPDATE,
   },
 ]
 
@@ -262,8 +262,8 @@ export default function AppLayout() {
 
   // Sidebar is always collapsed by default; it expands while the cursor is inside it.
   // Main content keeps the collapsed offset permanently to avoid layout shifts on hover.
-  const collapsed    = !hovered
-  const sidebarWidth = hovered ? 'w-64' : 'w-[72px]'
+  const collapsed    = !(hovered || mobileOpen)
+  const sidebarWidth = (hovered || mobileOpen) ? 'w-64' : 'w-[72px]'
   const padded       = 'lg:pl-[72px]'
   // Expanded sidebar overlaps main header — sit above header, still below modals
   const sidebarZ     = hovered || mobileOpen ? 'z-dropdown' : 'z-sidebar'

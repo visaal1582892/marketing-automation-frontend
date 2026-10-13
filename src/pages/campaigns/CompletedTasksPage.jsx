@@ -16,7 +16,7 @@ import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
 import { useAuth } from '../../auth/AuthContext'
 import { Rights } from '../../constants/rights'
 import useDebounce from '../../hooks/useDebounce'
-import StoreIdDisplay from '../../components/StoreIdDisplay'
+import StoreIdsDisplay from '../../components/StoreIdsDisplay'
 import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
 import { formatTaskId } from '../../utils/formatters'
 
@@ -25,7 +25,7 @@ const completedCellCls = 'min-w-0 overflow-hidden px-4 py-3'
 /** Sticky Actions column — solid bg so fixed column obvious */
 const ACTIONS_STICKY_HEADER = 'sticky right-0 z-30 bg-slate-100'
 const ACTIONS_STICKY_BODY = 'sticky right-0 z-[1] bg-slate-50'
-const COMPLETED_TABLE_COLS = [116, 100, 116, 300, 256, 176, 140, 80]
+const COMPLETED_TABLE_COLS = [116, 144, 116, 300, 256, 176, 140, 80]
 const COMPLETED_TABLE_MIN_WIDTH = COMPLETED_TABLE_COLS.reduce((s, w) => s + w, 0)
 
 const filterWrapCls = 'min-w-0 w-full [&_.app-select__control]:!min-h-[28px] [&_.app-select__control]:!h-[28px]'
@@ -54,7 +54,7 @@ export default function CompletedTasksPage() {
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
   const { user, hasRight }  = useAuth()
   
-  const canAddFollowup = hasRight(Rights.ADD_FOLLOWUP_TASKS)
+  const canAddFollowup = hasRight(Rights.CAMPAIGN_UPDATE_OWN)
 
   const PAGE_SIZE = 20
 
@@ -176,7 +176,7 @@ export default function CompletedTasksPage() {
             <thead className="sticky top-0 z-20 bg-slate-50">
               <tr className="bg-slate-50">
                 <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign</th>
-                <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Store ID</th>
+                <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Store Ids</th>
                 <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task ID</th>
                 <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task Name</th>
                 <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Task Type</th>
@@ -297,7 +297,7 @@ const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, canAddFollowu
         </span>
       </td>
       <td className={completedCellCls}>
-        <StoreIdDisplay storeId={t.storeId} customStoreIds={t.customStoreIds} />
+        <StoreIdsDisplay storeIds={t.storeId} customStoreId={t.customStoreIds} />
       </td>
       <td className={completedCellCls}>
         <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">

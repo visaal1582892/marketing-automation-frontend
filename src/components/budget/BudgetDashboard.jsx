@@ -120,7 +120,7 @@ export default function BudgetDashboard({
           <h2 className="text-base font-semibold text-slate-900">Budget Proposals</h2>
           <p className="text-xs text-slate-500">Financial year planning and approvals</p>
         </div>
-        <HasRight right={Rights.PROPOSE_BUDGET}>
+        <HasRight right={Rights.BUDGET_CREATE}>
           <button
             type="button"
             onClick={onNew}
@@ -168,7 +168,7 @@ export default function BudgetDashboard({
                       {p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : '—'}
                     </td>
                     <td className="px-5 py-3">
-                      <HasRight right={Rights.PROPOSE_BUDGET}>
+                      <HasRight right={Rights.BUDGET_CREATE}>
                         <RowMenu
                           proposal={p}
                           onClone={onClone}

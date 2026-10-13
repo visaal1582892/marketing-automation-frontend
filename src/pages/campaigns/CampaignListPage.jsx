@@ -18,7 +18,7 @@ import useDebounce from '../../hooks/useDebounce'
 import PosStoreMultiSelect from '../../components/PosStoreMultiSelect'
 import PosLocationMultiSelect from '../../components/PosLocationMultiSelect'
 import MultiSelectDropdown from '../../components/MultiSelectDropdown'
-import StoreIdDisplay from '../../components/StoreIdDisplay'
+import StoreIdsDisplay from '../../components/StoreIdsDisplay'
 import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
 import Modal from '../../components/Modal'
 import { parseTargetLocations, serializeTargetLocations } from '../../utils/targetLocations'
@@ -97,7 +97,7 @@ const BUDGET_LABELS = {
   ABOVE_10L: '₹10L+',
 }
 
-const REQUEST_TABLE_COLS = [110, 90, 100, 120, 130, 130, 110, 80]
+const REQUEST_TABLE_COLS = [110, 144, 100, 120, 130, 130, 110, 80]
 const REQUEST_TABLE_MIN_WIDTH = REQUEST_TABLE_COLS.reduce((s, w) => s + w, 0)
 const requestorCellCls = 'min-w-0 overflow-hidden px-4 py-3'
 
@@ -140,7 +140,7 @@ const CampaignRow = memo(function CampaignRow({
         </div>
       </td>
       <td className={requestorCellCls}>
-        <StoreIdDisplay storeId={c.storeId} customStoreIds={c.customStoreIds} stores={c.stores} />
+        <StoreIdsDisplay storeIds={(c.stores && c.stores.length > 0) ? c.stores : (c.storeId || c.stores)} customStoreId={c.customStoreIds} />
       </td>
       <td className={requestorCellCls}><PriorityBadge priority={c.priority} /></td>
       <td className={requestorCellCls}>
@@ -400,7 +400,7 @@ function RequestorCampaignView({ onTotalChange, onNewRequest }) {
               <thead className="sticky top-0 z-20 bg-slate-50">
                 <tr className="bg-slate-50">
                   <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Campaign</th>
-                  <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Store ID</th>
+                  <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Store Ids</th>
                   <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Priority</th>
                   <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Status</th>
                   <th className="min-w-0 border-b border-slate-100 px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Tasks</th>
@@ -646,8 +646,8 @@ export default function CampaignListPage() {
       : null
   )
 
-  const canCreateCampaign = hasRight(Rights.CREATE_CAMPAIGN)
-  const isRequestorView = hasRight(Rights.VIEW_OWN_CAMPAIGNS)
+  const canCreateCampaign = hasRight(Rights.CAMPAIGN_CREATE)
+  const isRequestorView = hasRight(Rights.CAMPAIGN_READ_OWN)
 
   const load = async (silent = false) => {
     if (silent) setRefreshing(true)

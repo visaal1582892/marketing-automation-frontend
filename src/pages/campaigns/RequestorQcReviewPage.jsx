@@ -10,6 +10,7 @@ import DateRangePicker from '../../components/DateRangePicker'
 import Pagination from '../../components/Pagination'
 import useDebounce from '../../hooks/useDebounce'
 import { useAuth } from '../../auth/AuthContext'
+import { Rights } from '../../constants/rights'
 import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBadges'
 import TimelineNodeFlow from '../../components/TimelineNodeFlow'
 import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
@@ -18,6 +19,8 @@ import { formatTaskId } from '../../utils/formatters'
 const PAGE_SIZE = 20
 
 export default function RequestorQcReviewPage() {
+  const { hasRight } = useAuth()
+  const canViewAssignee = hasRight(Rights.VIEW_ASSIGNEE)
   const location  = useLocation()
   const toast     = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
@@ -197,6 +200,7 @@ export default function RequestorQcReviewPage() {
             <FlatTaskCard
               key={t.taskId}
               task={t}
+              canViewAssignee={canViewAssignee}
               onApprove={() => open(t, 'APPROVE')}
               onReject={() => open(t, 'REJECTED')}
               onRework={() => open(t, 'REWORK')}
@@ -221,6 +225,7 @@ export default function RequestorQcReviewPage() {
         <ReviewModal
           task={reviewing}
           campaign={reviewingCampaign}
+          canViewAssignee={canViewAssignee}
           action={action}
           setAction={setAction}
           comments={comments}
@@ -250,7 +255,7 @@ export default function RequestorQcReviewPage() {
 
 // ─── Task Card ───────────────────────────────────────────────────────────────
 
-function FlatTaskCard({ task, onApprove, onReject, onRework, onView, onViewAssets }) {
+function FlatTaskCard({ task, canViewAssignee, onApprove, onReject, onRework, onView, onViewAssets }) {
   const { user } = useAuth()
   const currentUserId = user?.userId ?? user?.id
   const fmt = ts => new Date(ts).toLocaleString('en-IN', {
@@ -303,9 +308,11 @@ function FlatTaskCard({ task, onApprove, onReject, onRework, onView, onViewAsset
               {task.quantity && (
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">Qty: {task.quantity}</span>
               )}
-              <span>
-                by <span className="font-semibold text-slate-700">{task.assigneeName || `User ${task.assignedTo}`}</span>
-              </span>
+              {canViewAssignee && (
+                <span>
+                  by <span className="font-semibold text-slate-700">{task.assigneeName || `User ${task.assignedTo}`}</span>
+                </span>
+              )}
               {task.requestorName && (
                 <span>· Req: <span className="font-semibold text-slate-700">{task.requestorName}</span></span>
               )}
@@ -351,7 +358,7 @@ function FlatTaskCard({ task, onApprove, onReject, onRework, onView, onViewAsset
 
 // ─── Review Modal ─────────────────────────────────────────────────────────────
 
-function ReviewModal({ task, campaign, action, setAction, comments, setComments, saving, onCancel, onConfirm, onViewBrief }) {
+function ReviewModal({ task, campaign, canViewAssignee, action, setAction, comments, setComments, saving, onCancel, onConfirm, onViewBrief }) {
   const [showAssets, setShowAssets] = useState(false)
   const labels = { APPROVE: 'Approve Task', REWORK: 'Request Rework', REJECTED: 'Reject Task' }
   const tones = {
@@ -379,18 +386,22 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
                   <span className="font-medium">Reviewing deliverable:</span>{' '}
                   Task {formatTaskId(task.taskId)} — {task.granularTaskName || task.taskTypeName}
                 </div>
-                <div>
-                  <span className="font-medium">Creator:</span>{' '}
-                  {task.assigneeName || `User ${task.assignedTo}`}
-                  {task.currentCycleLoggedMinutes != null && ` • Time spent on this cycle: ${Math.floor(task.currentCycleLoggedMinutes / 60)} hrs ${task.currentCycleLoggedMinutes % 60} mins`}
-                </div>
+                {canViewAssignee && (
+                  <div>
+                    <span className="font-medium">Creator:</span>{' '}
+                    {task.assigneeName || `User ${task.assignedTo}`}
+                    {task.currentCycleLoggedMinutes != null && ` • Time spent on this cycle: ${Math.floor(task.currentCycleLoggedMinutes / 60)} hrs ${task.currentCycleLoggedMinutes % 60} mins`}
+                  </div>
+                )}
               </div>
             </>
           ) : (
             <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
               <div><span className="font-medium">Task:</span> {task.granularTaskName || task.taskTypeName}</div>
               <div><span className="font-medium">Campaign:</span> {task.campaignId}</div>
-              <div><span className="font-medium">Creator:</span> {task.assigneeName || `User ${task.assignedTo}`}</div>
+              {canViewAssignee && (
+                <div><span className="font-medium">Creator:</span> {task.assigneeName || `User ${task.assignedTo}`}</div>
+              )}
             </div>
           )}
 

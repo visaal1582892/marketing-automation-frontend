@@ -16,10 +16,11 @@ const managerApi = {
   holdTask:             (taskId)     => api.post(`${BASE}/tasks/${taskId}/hold`),
   unholdTask:           (taskId)     => api.post(`${BASE}/tasks/${taskId}/unhold`),
   cancelTask:           (taskId)     => api.post(`${BASE}/tasks/${taskId}/cancel`),
-  getConfigurableApprovalHistory: (taskId) => api.get(`${BASE}/tasks/${taskId}/configurable-approval-history`),
+  getConfigurableApprovalHistory: (taskId) => api.get(`/tasks/${taskId}/configurable-approval-history`),
   heldTasks:            ()           => api.get(`${BASE}/tasks/held`),
   eligibleUsersForTask: (taskId)     => api.get(`${BASE}/tasks/${taskId}/eligible-users`),
   assignHeldTask:       (taskId, userId) => api.post(`${BASE}/tasks/${taskId}/assign`, { userId }),
+  updateTaskPriorityBudget: (taskId, data) => api.patch(`${BASE}/tasks/${taskId}/priority-budget`, data),
 
   // ── Capacity dashboard ─────────────────────────────────────────────────────
   capacity: (roleId) => api.get(`${BASE}/capacity`, { params: roleId ? { roleId } : {} }),

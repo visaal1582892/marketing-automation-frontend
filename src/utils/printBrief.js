@@ -474,7 +474,7 @@ export function printBrief(campaign, filterTaskId = null) {
               <div class="task-name">${safe(t.granularTaskName || 'Task')}</div>
               <div class="task-meta">
                 TASK #${t.taskId}
-                ${t.assigneeName ? ` · Assigned to ${safe(t.assigneeName)}` : ' · Unassigned'}
+                ${t.assigneeName ? (t.assigneeName === 'Assigned' ? ' · Assigned' : ` · Assigned to ${safe(t.assigneeName)}`) : ' · Unassigned'}
                 ${t.totalTimeLoggedMinutes != null ? ` · ${t.totalTimeLoggedMinutes} min logged` : ''}
               </div>
             </div>

@@ -902,7 +902,6 @@ export default function CampaignFormComponent({
       if (!form.keyMessage?.trim()) newErrs.keyMessage = 'Key Message is required'
     }
 
-    if (!form.priority) newErrs.priority = 'Priority is required'
     if (!form.budgetTier) newErrs.budgetTier = 'Budget Tier is required'
     if (!form.kpiType) newErrs.kpiType = 'KPI Type is required'
     if (!form.expectedOutput) newErrs.expectedOutput = 'Expected Output is required'
@@ -1267,12 +1266,7 @@ export default function CampaignFormComponent({
 
               {/* 4 – Budget & KPIs */}
               <SectionCard id="budget" title="Budget & KPIs" icon="trendingUp" accent="emerald">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <FieldLabel required>Priority</FieldLabel>
-                    <SingleSelectDropdown value={form.priority} onChange={v => setField('priority', v)}
-                      options={[{ value: 'HIGH', label: 'High' }, { value: 'MEDIUM', label: 'Medium' }, { value: 'LOW', label: 'Low' }]} hasError={!!errors.priority} />
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <FieldLabel required>Budget Tier</FieldLabel>
                     <SingleSelectDropdown value={form.budgetTier}

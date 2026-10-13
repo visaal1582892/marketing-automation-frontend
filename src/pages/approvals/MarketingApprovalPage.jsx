@@ -7,7 +7,6 @@ import Icon from '../../components/Icon'
 import { EmptyState, ActionModal, HistoryTable } from './DeptApprovalPage'
 import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
-import PriorityEditor from '../../components/PriorityEditor'
 
 export default function MarketingApprovalPage() {
   const toast     = useToast()
@@ -72,7 +71,7 @@ export default function MarketingApprovalPage() {
       loadPending()
     } catch (e) {
       if (e?.response?.status === 409) {
-        showToast('No available user yet — free a slot and retry.', 'error')
+        showToast('No available user yet â€” free a slot and retry.', 'error')
       } else {
         showToast(e?.response?.data?.message || 'Unhold failed. Please retry.', 'error')
       }
@@ -125,10 +124,10 @@ export default function MarketingApprovalPage() {
       const res = await managerApi.campaignCapacity(campaign.campaignId)
       const report = res.data
       if (report.canRoute) {
-        // All clear — proceed to normal confirm modal
+        // All clear â€” proceed to normal confirm modal
         openAction(campaign, 'approve')
       } else {
-        // Team is full — show busy modal
+        // Team is full â€” show busy modal
         setCapacityModal({ campaign, report })
       }
     } catch {
@@ -148,7 +147,7 @@ export default function MarketingApprovalPage() {
     setHoldingTaskId(taskId)
     try {
       await managerApi.holdTask(taskId)
-      showToast('Task held — slot freed.', 'success')
+      showToast('Task held â€” slot freed.', 'success')
       // Re-fetch capacity for the same campaign
       const res = await managerApi.campaignCapacity(capacityModal.campaign.campaignId)
       const report = res.data
@@ -170,7 +169,7 @@ export default function MarketingApprovalPage() {
     try {
       if (action === 'approve') {
         await campaignsApi.marketingApprove(selected.campaignId)
-        showToast('Request approved — routing to execution team.', 'success')
+        showToast('Request approved â€” routing to execution team.', 'success')
       } else {
         if (!reason.trim()) { showToast('Please provide a rejection reason.', 'error'); setSaving(false); return }
         await campaignsApi.marketingReject(selected.campaignId, reason)
@@ -222,7 +221,7 @@ export default function MarketingApprovalPage() {
 
       {tab === 'pending' && (
         loading ? (
-          <p className="text-center text-slate-400 py-12 text-sm">Loading…</p>
+          <p className="text-center text-slate-400 py-12 text-sm">Loadingâ€¦</p>
         ) : pending.length === 0 ? (
           <EmptyState message="No requests awaiting marketing approval." />
         ) : (
@@ -235,13 +234,6 @@ export default function MarketingApprovalPage() {
                 onReject={() => openAction(c, 'reject')}
                 onViewBrief={() => setBriefCampaignId(c.campaignId)}
                 checkingCapacity={capacityLoading === c.campaignId}
-                onPriorityChanged={(updated) => {
-                  setPending(prev => prev.map(p =>
-                    p.campaignId === updated.campaignId ? { ...p, ...updated } : p
-                  ))
-                  showToast(`Priority updated to ${updated.priority}.`, 'success')
-                }}
-                onPriorityError={(msg) => showToast(msg, 'error')}
               />
             ))}
           </div>
@@ -255,7 +247,7 @@ export default function MarketingApprovalPage() {
             <FilterPill label={`All (${historyCounts.all})`}           active={historyFilter === 'ALL'}      onClick={() => setHistoryFilter('ALL')} />
             <FilterPill label={`Approved (${historyCounts.approved})`} active={historyFilter === 'APPROVED'} onClick={() => setHistoryFilter('APPROVED')} />
             <FilterPill label={`Rejected (${historyCounts.rejected})`} active={historyFilter === 'REJECTED'} onClick={() => setHistoryFilter('REJECTED')} />
-            {/* Held Tasks pill — visually distinct with amber colour */}
+            {/* Held Tasks pill â€” visually distinct with amber colour */}
             <FilterPill
               label={`On Hold (${historyCounts.held})`}
               active={historyFilter === 'HELD'}
@@ -267,7 +259,7 @@ export default function MarketingApprovalPage() {
           {/* -- Held Tasks view -- */}
           {historyFilter === 'HELD' ? (
             loadingHeld ? (
-              <p className="text-center text-slate-400 py-12 text-sm">Loading held tasks…</p>
+              <p className="text-center text-slate-400 py-12 text-sm">Loading held tasksâ€¦</p>
             ) : heldTasks.length === 0 ? (
               <div className="rounded-xl border border-slate-200 bg-white py-14 text-center">
                 <Icon name="pause" className="mx-auto h-9 w-9 text-slate-300 mb-3" />
@@ -292,9 +284,9 @@ export default function MarketingApprovalPage() {
           ) : (
             /* -- Approved / Rejected history view -- */
             loadingHistory ? (
-              <p className="text-center text-slate-400 py-12 text-sm">Loading history…</p>
+              <p className="text-center text-slate-400 py-12 text-sm">Loading historyâ€¦</p>
             ) : filteredHistory.length === 0 ? (
-              <EmptyState message="No decisions yet — campaigns you approve or reject will appear here." />
+              <EmptyState message="No decisions yet â€” campaigns you approve or reject will appear here." />
             ) : (
               <HistoryTable
                 campaigns={filteredHistory}
@@ -322,7 +314,7 @@ export default function MarketingApprovalPage() {
         />
       )}
 
-      {/* Busy-team modal — shown when capacity check fails */}
+      {/* Busy-team modal â€” shown when capacity check fails */}
       {capacityModal && (
         <BusyTeamModal
           campaign={capacityModal.campaign}
@@ -375,7 +367,7 @@ function BusyTeamModal({ campaign: c, report, holdingTaskId, onHoldTask, onAppro
               <h3 className="text-base font-semibold text-slate-900">No Team Members Available</h3>
             </div>
             <p className="mt-1 text-xs text-slate-500 ml-9">
-              Some roles needed for <span className="font-medium text-slate-700">#{c.campaignId} — {c.businessObjective}</span> have no active members.
+              Some roles needed for <span className="font-medium text-slate-700">#{c.campaignId} â€” {c.businessObjective}</span> have no active members.
               Please add users to the required roles, then approve.
             </p>
           </div>
@@ -384,7 +376,7 @@ function BusyTeamModal({ campaign: c, report, holdingTaskId, onHoldTask, onAppro
           </button>
         </div>
 
-        {/* Body — one card per role */}
+        {/* Body â€” one card per role */}
         <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
           {(report.roles || []).map((role) => (
             <RoleCapacityCard
@@ -416,7 +408,7 @@ function BusyTeamModal({ campaign: c, report, holdingTaskId, onHoldTask, onAppro
             <button
               onClick={onApprove}
               disabled={!report.canRoute}
-              title={report.canRoute ? 'Team members available — approve now' : 'Add team members to required roles first'}
+              title={report.canRoute ? 'Team members available â€” approve now' : 'Add team members to required roles first'}
               className={`flex items-center gap-1.5 rounded-lg px-5 py-2 text-sm font-semibold text-white transition
                 ${report.canRoute
                   ? 'bg-green-600 hover:bg-green-700'
@@ -451,7 +443,7 @@ function RoleCapacityCard({ role, holdingTaskId, onHoldTask }) {
             {role.blocked ? 'Blocked' : 'Available'}
           </span>
           <span className="text-xs text-slate-500">
-              Needs {role.requiredSlots} assignee{role.requiredSlots !== 1 ? 's' : ''} · {role.availableSlots} member{role.availableSlots !== 1 ? 's' : ''} available
+              Needs {role.requiredSlots} assignee{role.requiredSlots !== 1 ? 's' : ''} Â· {role.availableSlots} member{role.availableSlots !== 1 ? 's' : ''} available
           </span>
         </div>
         <Icon
@@ -539,7 +531,7 @@ function UserRow({ user, holdingTaskId, onHoldTask }) {
                            hover:bg-amber-100 transition disabled:opacity-60"
               >
                 {holdingTaskId === t.taskId
-                  ? <><Icon name="refresh" className="h-3 w-3 animate-spin" /> Holding…</>
+                  ? <><Icon name="refresh" className="h-3 w-3 animate-spin" /> Holdingâ€¦</>
                   : <><Icon name="pause" className="h-3 w-3" /> Hold</>}
               </button>
             </div>
@@ -554,21 +546,21 @@ function UserRow({ user, holdingTaskId, onHoldTask }) {
 // Campaign card (with split Approve / Reject buttons)
 // ---------------------------------------------------------------------------
 
-function CampaignCard({ campaign: c, onApprove, onReject, onViewBrief, checkingCapacity, onPriorityChanged, onPriorityError }) {
+function CampaignCard({ campaign: c, onApprove, onReject, onViewBrief, checkingCapacity }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="flex items-start justify-between p-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono text-slate-400">#{c.campaignId}</span>
-            <span className="text-sm font-semibold text-slate-800">{c.businessObjective || '—'}</span>
-            <PriorityEditor
-              campaignId={c.campaignId}
-              value={c.priority}
-              editable
-              onChanged={onPriorityChanged}
-              onError={onPriorityError}
-            />
+            <span className="text-sm font-semibold text-slate-800">{c.businessObjective || 'â€”'}</span>
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
+              c.priority === 'HIGH' ? 'bg-rose-50 text-rose-700 ring-rose-200' :
+              c.priority === 'LOW' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' :
+              'bg-yellow-50 text-yellow-700 ring-yellow-200'
+            }`}>
+              {c.priority || 'MEDIUM'}
+            </span>
             {c.flaggedInconsistency && (
               <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
                 <Icon name="alertCircle" className="h-3 w-3 mr-0.5" /> Flagged
@@ -582,7 +574,7 @@ function CampaignCard({ campaign: c, onApprove, onReject, onViewBrief, checkingC
             </span>
             <span className="flex items-center gap-1">
               <Icon name="building" className="h-3.5 w-3.5" />
-              {c.departmentName || '—'}
+              {c.departmentName || 'â€”'}
             </span>
             {c.deptDecisionByName && (
               <span className="flex items-center gap-1">
@@ -681,14 +673,14 @@ function PriorityDot({ priority }) {
 }
 
 // ---------------------------------------------------------------------------
-// HeldTaskRow — shown inside the "On Hold" filter of My Decisions tab
+// HeldTaskRow â€” shown inside the "On Hold" filter of My Decisions tab
 // ---------------------------------------------------------------------------
 
 function HeldTaskRow({ task: t, busy, onUnhold, onViewBrief }) {
   return (
     <div className="rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-3 p-4">
-        {/* Left — task info */}
+        {/* Left â€” task info */}
         <div className="flex-1 min-w-[220px]">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono text-slate-400">#{t.taskId}</span>
@@ -723,11 +715,11 @@ function HeldTaskRow({ task: t, busy, onUnhold, onViewBrief }) {
           </div>
           <div className="mt-1 text-xs text-slate-400">
             Campaign #{t.campaignId}
-            {t.requestorName && <> · {t.requestorName}</>}
+            {t.requestorName && <> Â· {t.requestorName}</>}
           </div>
         </div>
 
-        {/* Right — actions */}
+        {/* Right â€” actions */}
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onViewBrief}
@@ -744,7 +736,7 @@ function HeldTaskRow({ task: t, busy, onUnhold, onViewBrief }) {
                        disabled:opacity-60 flex items-center gap-1.5"
           >
             {busy
-              ? <><Icon name="refresh" className="h-3.5 w-3.5 animate-spin" /> Re-routing…</>
+              ? <><Icon name="refresh" className="h-3.5 w-3.5 animate-spin" /> Re-routingâ€¦</>
               : <><Icon name="check" className="h-3.5 w-3.5" /> Unhold &amp; Route</>}
           </button>
         </div>
@@ -753,4 +745,4 @@ function HeldTaskRow({ task: t, busy, onUnhold, onViewBrief }) {
   )
 }
 
-function fmtEnum(v) { return v ? v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—' }
+function fmtEnum(v) { return v ? v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'â€”' }

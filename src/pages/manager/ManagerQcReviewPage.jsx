@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import managerApi from '../../api/manager'
 import campaignsApi from '../../api/campaigns'
 import tasksApi from '../../api/tasks'
@@ -8,6 +8,8 @@ import Icon from '../../components/Icon'
 import RequestBriefDrawer, { RequestSummaryCard } from '../../components/RequestBriefDrawer'
 import AssetPanel from '../../components/AssetPanel'
 import { useAuth } from '../../auth/AuthContext'
+import { useAuthRights } from '../../auth/useAuthRights'
+import { Rights } from '../../constants/rights'
 import ConfigurableApprovalHistory from "../../components/ConfigurableApprovalHistory"
 import DateRangePicker from '../../components/DateRangePicker'
 import Pagination from '../../components/Pagination'
@@ -21,30 +23,30 @@ import BudgetImpactWarningModal from '../../components/budget/BudgetImpactWarnin
 const PAGE_SIZE = 12
 
 export default function ManagerQcReviewPage() {
-  const location  = useLocation()
-  const toast     = useToast()
+  const location = useLocation()
+  const toast = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
-  const { user }  = useAuth()
+  const { user } = useAuth()
 
-  const [tasks,         setTasks]        = useState([])
+  const [tasks, setTasks] = useState([])
   const [totalElements, setTotalElements] = useState(0)
-  const [totalPages,    setTotalPages]   = useState(0)
-  const [loading,       setLoading]      = useState(true)
-  const [page,          setPage]         = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(0)
 
-  const [reviewing,         setReviewing]         = useState(null)
+  const [reviewing, setReviewing] = useState(null)
   const [reviewingCampaign, setReviewingCampaign] = useState(null)
-  const [action,   setAction]   = useState('APPROVED')
+  const [action, setAction] = useState('APPROVED')
   const [comments, setComments] = useState('')
-  const [saving,   setSaving]   = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  const [briefCampaignId,  setBriefCampaignId]  = useState(null)
-  const [briefTaskId,      setBriefTaskId]      = useState(null)
+  const [briefCampaignId, setBriefCampaignId] = useState(null)
+  const [briefTaskId, setBriefTaskId] = useState(null)
   const [assetPreviewTask, setAssetPreviewTask] = useState(null)
 
-  const [search,    setSearch]    = useState('')
+  const [search, setSearch] = useState('')
   const [fDateFrom, setFDateFrom] = useState(null)
-  const [fDateTo,   setFDateTo]   = useState(null)
+  const [fDateTo, setFDateTo] = useState(null)
 
   const dSearch = useDebounce(search, 350)
 
@@ -56,9 +58,9 @@ export default function ManagerQcReviewPage() {
     const params = {
       queueType: 'MANAGER',
       page, size: PAGE_SIZE,
-      ...(dSearch   && { search:   dSearch   }),
+      ...(dSearch && { search: dSearch }),
       ...(fDateFrom && { dateFrom: fDateFrom }),
-      ...(fDateTo   && { dateTo:   fDateTo   }),
+      ...(fDateTo && { dateTo: fDateTo }),
     }
     tasksApi.myApprovals(params)
       .then(res => {
@@ -73,7 +75,7 @@ export default function ManagerQcReviewPage() {
 
   useEffect(() => { fetchTasks() }, [fetchTasks, location.key])
 
-  const load    = () => fetchTasks()
+  const load = () => fetchTasks()
   const refresh = () => fetchTasks(true)
 
   const open = (task, act = 'APPROVED') => {
@@ -92,15 +94,16 @@ export default function ManagerQcReviewPage() {
 
   const [budgetWarningStates, setBudgetWarningStates] = useState([])
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false)
+  const [contextualTopUpRequired, setContextualTopUpRequired] = useState(false)
 
   const executeReview = async () => {
     setSaving(true)
     try {
       await managerApi.reviewTask(reviewing.taskId, { action, comments: comments.trim() || null })
       const map = {
-        APPROVED:     'Task approved — moved to next workflow step.',
+        APPROVED: 'Task approved — moved to next workflow step.',
         MARKETING_REWORK: 'Sent back to creator for rework.',
-        REJECTED:     'Task rejected and campaign closed.',
+        REJECTED: 'Task rejected and campaign closed.',
       }
       showToast(map[action] || 'Review submitted', 'success')
       close()
@@ -108,7 +111,12 @@ export default function ManagerQcReviewPage() {
       refresh()
     } catch (e) {
       const msg = e?.response?.data?.message || 'Action failed'
-      showToast(msg, 'error')
+      if (msg.includes('FINAL_STAGE_BUDGET_DEFICIT')) {
+        setContextualTopUpRequired(true)
+        showToast('Budget exhausted. You must request a Top-Up before final approval.', 'error')
+      } else {
+        showToast(msg, 'error')
+      }
     } finally {
       setSaving(false)
     }
@@ -122,25 +130,40 @@ export default function ManagerQcReviewPage() {
     }
 
     if (action === 'APPROVED' && reviewing.needsPaymentTracking) {
-        setSaving(true)
-        try {
-            const budgetRes = await tasksApi.checkBudget(reviewing.taskId);
-            if (budgetRes.data?.overallStatus === 'HARD_BLOCK') {
-                showToast(`State budget exhausted for state ${budgetRes.data.blockedState} for this quarter. Please request a TopUp.`, 'error');
-                setSaving(false)
-                return;
-            }
-            if (budgetRes.data?.overallStatus === 'SOFT_OVERRUN') {
-                setBudgetWarningStates(budgetRes.data.stateResults.filter(s => s.status === 'SOFT_OVERRUN'));
-                setIsBudgetModalOpen(true);
-                setSaving(false)
-                return; // pause flow
-            }
-        } catch (e) {
-            showToast('Failed to perform budget check.', 'error');
+      setSaving(true)
+      try {
+        const budgetRes = await tasksApi.checkBudget(reviewing.taskId);
+        const isFinal = reviewing.currentApprovalLevel != null && reviewing.totalApprovalLevels != null && reviewing.currentApprovalLevel >= reviewing.totalApprovalLevels;
+
+        if (budgetRes.data?.overallStatus === 'HARD_BLOCK') {
+          if (isFinal) {
+            // Final level: budget exhausted — show error, require topup
+            showToast(`State budget exhausted for state ${budgetRes.data.blockedState} for this quarter. Please request a TopUp.`, 'error');
+          } else {
+            // Previous level: show warning modal, allow "Proceed Anyway"
+            setBudgetWarningStates(budgetRes.data.stateResults.filter(s => s.status === 'HARD_BLOCK'));
+            setIsBudgetModalOpen(true);
             setSaving(false)
-            return;
+            return; // pause flow
+          }
+          setSaving(false)
+          return;
         }
+        if (budgetRes.data?.overallStatus === 'SOFT_OVERRUN') {
+          if (!isFinal) {
+            // Previous level: show warning modal, allow "Proceed Anyway"
+            setBudgetWarningStates(budgetRes.data.stateResults.filter(s => s.status === 'SOFT_OVERRUN'));
+            setIsBudgetModalOpen(true);
+            setSaving(false)
+            return; // pause flow
+          }
+          // Final level: modal handles topup internally, just proceed
+        }
+      } catch (e) {
+        showToast('Failed to perform budget check.', 'error');
+        setSaving(false)
+        return;
+      }
     }
 
     executeReview()
@@ -230,9 +253,9 @@ export default function ManagerQcReviewPage() {
               key={t.taskId}
               task={t}
               onApprove={() => open(t, 'APPROVED')}
-              onReject={()    => open(t, 'REJECTED')}
-              onRework={()   => open(t, 'MARKETING_REWORK')}
-              onView={()     => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}
+              onReject={() => open(t, 'REJECTED')}
+              onRework={() => open(t, 'MARKETING_REWORK')}
+              onView={() => { setBriefCampaignId(t.campaignId); setBriefTaskId(t.taskId) }}
               onViewAssets={() => setAssetPreviewTask(t)}
             />
           ))}
@@ -261,6 +284,13 @@ export default function ManagerQcReviewPage() {
           onCancel={close}
           onConfirm={submitReview}
           onViewBrief={() => { setBriefCampaignId(reviewing.campaignId); setBriefTaskId(reviewing.taskId) }}
+          showToast={showToast}
+          contextualTopUpRequired={contextualTopUpRequired}
+          onTopUpComplete={() => {
+            setContextualTopUpRequired(false)
+            close()
+            refresh()
+          }}
         />
       )}
 
@@ -392,10 +422,10 @@ function FlatTaskCard({ task, onApprove, onRework, onView, onViewAssets }) {
  */
 function CampaignGroup({ group, onApprove, onRework, onView, onViewAssets }) {
   const { campaignId, items } = group
-  const sample    = items[0] || {}
+  const sample = items[0] || {}
   const requestor = sample.requestorName
-  const priority  = sample.campaignPriority
-  const deadline  = sample.campaignDeadline
+  const priority = sample.campaignPriority
+  const deadline = sample.campaignDeadline
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -432,7 +462,7 @@ function CampaignGroup({ group, onApprove, onRework, onView, onViewAssets }) {
             key={t.taskId}
             task={t}
             onApprove={() => onApprove(t)}
-            onRework={()  => onRework(t)}
+            onRework={() => onRework(t)}
             onViewAssets={() => onViewAssets(t)}
           />
         ))}
@@ -443,7 +473,7 @@ function CampaignGroup({ group, onApprove, onRework, onView, onViewAssets }) {
 
 function TaskRow({ task, onApprove, onRework, onViewAssets }) {
   const assetCount = 0 // assets are loaded on demand in the modal / preview
-  const hasAssets  = true // always show the button — let the modal handle empty state
+  const hasAssets = true // always show the button — let the modal handle empty state
 
   return (
     <div className="px-5 py-4 space-y-3">
@@ -518,23 +548,61 @@ function TaskRow({ task, onApprove, onRework, onViewAssets }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ReviewModal({ task, campaign, action, setAction, comments, setComments, saving, onCancel, onConfirm, onViewBrief }) {
-  const labels = { APPROVED: 'Approve & Deliver', MARKETING_REWORK: 'Send for Rework', REJECTED: 'Reject Task' }
-  const tones = {
-    APPROVED:     'bg-green-600 hover:bg-green-700',
-    MARKETING_REWORK: 'bg-amber-600 hover:bg-amber-700',
-    REJECTED:     'bg-red-600 hover:bg-red-700',
-  }
+function ReviewModal({ task, campaign, action, setAction, comments, setComments, saving, onCancel, onConfirm, onViewBrief, showToast, onTopUpComplete, contextualTopUpRequired }) {
+  const navigate = useNavigate()
+  const { hasAnyRight } = useAuthRights()
+  const canRequestTopUp = hasAnyRight([Rights.BUDGET_TOPUP_CREATE])
 
+  const labels = { APPROVED: 'Approve & Deliver', MARKETING_REWORK: 'Send for Rework', REJECTED: 'Reject Task', REQUEST_TOPUP: 'Request Top Up' }
+  const tones = {
+    APPROVED: 'bg-green-600 hover:bg-green-700',
+    MARKETING_REWORK: 'bg-amber-600 hover:bg-amber-700',
+    REJECTED: 'bg-red-600 hover:bg-red-700',
+    REQUEST_TOPUP: 'bg-blue-600 hover:bg-blue-700',
+  }
 
   const [showAssets, setShowAssets] = useState(false)
 
+  // Budget info
+  const [budgetCheck, setBudgetCheck] = useState(null)
+  const [loadingBudget, setLoadingBudget] = useState(false)
+
+  // Determine if this is the final approval level
+  // currentApprovalLevel is the current level number (1-based); totalApprovalLevels is the total count
+  const isFinalLevel = task.currentApprovalLevel != null && task.totalApprovalLevels != null && task.currentApprovalLevel >= task.totalApprovalLevels
+
+  // Determine if budget has an overrun at final level
+  const isBudgetOverrun = budgetCheck && (budgetCheck.overallStatus === 'SOFT_OVERRUN' || budgetCheck.overallStatus === 'HARD_BLOCK')
+  // At final level with overrun, hide "Approve & Deliver" and show only "Request Top Up" (but always allow Rework/Reject)
+  const showSubmitButton = action !== 'APPROVED' || !isFinalLevel || !isBudgetOverrun
+
+  // Load budget check when modal opens for APPROVED action
+  useEffect(() => {
+    if (action !== 'APPROVED' || !task?.taskId || !task.needsPaymentTracking) return
+    setLoadingBudget(true)
+    tasksApi.checkBudget(task.taskId)
+      .then(res => {
+        setBudgetCheck(res.data)
+      })
+      .catch(() => { })
+      .finally(() => setLoadingBudget(false))
+  }, [task.taskId, action, task.needsPaymentTracking]) // eslint-disable-line react-hooks/exhaustive-deps
+
+
+
+  const formatCurrency = (val) => {
+    const num = Number(val) || 0
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(num).replace('₹', '₹ ')
+  }
+
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/50 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-y-auto max-h-[92vh] flex flex-col">
+      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl overflow-y-auto max-h-[92vh] flex flex-col">
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-slate-900">{labels[action]}</h3>
+            <h3 className="text-base font-semibold text-slate-900">
+              {labels[action]}
+            </h3>
             <button onClick={onCancel} className="rounded p-1 text-slate-400 hover:bg-slate-100 transition">
               <Icon name="x" className="h-4 w-4" />
             </button>
@@ -565,67 +633,104 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
             </div>
           )}
 
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onViewBrief}
-              className="text-xs text-brand-600 hover:underline flex items-center gap-1"
-            >
-              <Icon name="eye" className="h-3 w-3" /> View full request brief
-            </button>
-            <span className="text-slate-300">|</span>
-            <button
-              type="button"
-              onClick={() => setShowAssets(true)}
-              className="text-xs text-brand-600 hover:underline flex items-center gap-1"
-            >
-              <Icon name="paperclip" className="h-3 w-3" /> Assets
-            </button>
-          </div>
-
-          {task.submissionNotes && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Submission Notes</span>
-              <p className="mt-0.5 text-slate-700 whitespace-pre-wrap">{task.submissionNotes}</p>
-            </div>
+          {/* Budget Visibility Section */}
+          {task.needsPaymentTracking && action === 'APPROVED' && (
+            <BudgetVisibilitySection
+              budgetCheck={budgetCheck}
+              loadingBudget={loadingBudget}
+              formatCurrency={formatCurrency}
+              isFinalLevel={isFinalLevel}
+            />
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <ActionRadio v="APPROVED"     active={action} setActive={setAction} label="Approve" />
-            <ActionRadio v="MARKETING_REWORK" active={action} setActive={setAction} label="Rework" />
-            <ActionRadio v="REJECTED" active={action} setActive={setAction} label="Reject" />
-          </div>
+          <>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onViewBrief}
+                className="text-xs text-brand-600 hover:underline flex items-center gap-1"
+              >
+                <Icon name="eye" className="h-3 w-3" /> View full request brief
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                type="button"
+                onClick={() => setShowAssets(true)}
+                className="text-xs text-brand-600 hover:underline flex items-center gap-1"
+              >
+                <Icon name="paperclip" className="h-3 w-3" /> Assets
+              </button>
+            </div>
 
+            {task.submissionNotes && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Submission Notes</span>
+                <p className="mt-0.5 text-slate-700 whitespace-pre-wrap">{task.submissionNotes}</p>
+              </div>
+            )}
 
+            <div className="grid grid-cols-3 gap-3">
+              <ActionRadio v="APPROVED" active={action} setActive={setAction} label="Approve" />
+              <ActionRadio v="MARKETING_REWORK" active={action} setActive={setAction} label="Rework" />
+              <ActionRadio v="REJECTED" active={action} setActive={setAction} label="Reject" />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Comments {action !== 'APPROVED' && <span className="text-red-500">*</span>}
-            </label>
-            <textarea
-              rows={3}
-              value={comments}
-              onChange={(e) => setComments(e.target.value)}
-              placeholder={action === 'APPROVED' ? 'Optional praise / sign-off…' : 'Be specific about what needs to change…'}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500 resize-none"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Comments {action !== 'APPROVED' && <span className="text-red-500">*</span>}
+              </label>
+              <textarea
+                rows={3}
+                value={comments}
+                onChange={(e) => setComments(e.target.value)}
+                placeholder={action === 'APPROVED' ? 'Optional praise / sign-off…' : 'Be specific about what needs to change…'}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-500 resize-none"
+              />
+            </div>
 
-          <div className="flex justify-end gap-3 pt-1">
-            <button
-              onClick={onCancel}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={saving}
-              className={`rounded-lg px-5 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${tones[action]}`}
-            >
-              {saving ? 'Saving…' : labels[action]}
-            </button>
-          </div>
+            <div className="flex justify-end gap-3 pt-1">
+              <button
+                onClick={onCancel}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+
+              {/* Hard block message/button */}
+              {isFinalLevel && isBudgetOverrun && action === 'APPROVED' && (
+                canRequestTopUp ? (
+                  <button
+                    onClick={() => {
+                      onCancel();
+                      navigate('/budget-planning');
+                    }}
+                    className="rounded-lg px-5 py-2 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 transition shadow-sm"
+                  >
+                    Request Top-Up
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    className="rounded-lg px-5 py-2 text-sm font-semibold text-slate-500 bg-slate-200 cursor-not-allowed"
+                    title="Budget exhausted. A Top-Up must be approved by the Budget Manager first."
+                  >
+                    Budget Exhausted
+                  </button>
+                )
+              )}
+
+              {/* Submit button: shown when budget is OK or not at final level, OR action is Rework/Reject */}
+              {showSubmitButton && (
+                <button
+                  onClick={onConfirm}
+                  disabled={saving}
+                  className={`rounded-lg px-5 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${tones[action]}`}
+                >
+                  {saving ? 'Saving…' : labels[action]}
+                </button>
+              )}
+            </div>
+          </>
         </div>
       </div>
 
@@ -639,16 +744,84 @@ function ReviewModal({ task, campaign, action, setAction, comments, setComments,
   )
 }
 
+/** Budget visibility section — shows per-state budget impact */
+function BudgetVisibilitySection({ budgetCheck, loadingBudget, formatCurrency, isFinalLevel }) {
+  if (loadingBudget) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 flex items-center gap-2">
+        <Icon name="refresh-cw" className="h-4 w-4 animate-spin text-emerald-500" />
+        Loading budget impact…
+      </div>
+    )
+  }
+
+  if (!budgetCheck || !budgetCheck.stateResults || budgetCheck.stateResults.length === 0) {
+    return (
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 flex items-center gap-2">
+        <Icon name="check-circle" className="h-4 w-4" />
+        Budget available for all states — no overrun detected.
+      </div>
+    )
+  }
+
+  const hasIssue = budgetCheck.stateResults.some(s => s.status !== 'OK')
+
+  return (
+    <div className={`rounded-lg border p-4 ${hasIssue ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+      <h4 className={`text-sm font-bold mb-3 flex items-center gap-2 ${hasIssue ? 'text-amber-800' : 'text-emerald-800'}`}>
+        {hasIssue
+          ? <Icon name="alert-triangle" className="h-4 w-4" />
+          : <Icon name="check-circle" className="h-4 w-4" />
+        }
+        Budget Impact Summary (Per-State)
+      </h4>
+      <div className="space-y-2">
+        {budgetCheck.stateResults.map((s, i) => {
+          const isOverrun = s.status === 'SOFT_OVERRUN'
+          const isBlocked = s.status === 'HARD_BLOCK'
+          return (
+            <div key={i} className="flex justify-between items-center bg-white rounded-lg border border-slate-200 px-3 py-2 text-xs">
+              <span className="font-semibold text-slate-700">{s.stateCode}</span>
+              <div className="flex items-center gap-4">
+                <span className="text-slate-500">
+                  Available: <span className="font-bold text-slate-700">{formatCurrency(s.availableBefore)}</span>
+                </span>
+                <span className="text-slate-500">
+                  Expense: <span className="font-bold">{formatCurrency(s.thisPosAmount)}</span>
+                </span>
+                <span className="text-slate-500">
+                  After: <span className={`font-bold ${isOverrun || isBlocked ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {formatCurrency(s.availableAfter)}
+                  </span>
+                </span>
+                {isBlocked && <span className="font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200">EXHAUSTED</span>}
+                {isOverrun && <span className="font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">OVERRUN</span>}
+                {!isOverrun && !isBlocked && <span className="text-emerald-600 font-semibold">OK</span>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {hasIssue && (
+        <p className="mt-3 text-xs text-amber-700">
+          ⚠️ Budget overrun detected for the above state(s).
+          {isFinalLevel
+            ? ' Use "Request Top Up" to add budget before approving.'
+            : ' You may still proceed with approval — budget will be reconciled at the final approval level.'}
+        </p>
+      )}
+    </div>
+  )
+}
 function ActionRadio({ v, active, setActive, label }) {
   const isActive = v === active
   return (
     <button
       onClick={() => setActive(v)}
-      className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
-        isActive
-          ? 'border-brand-500 bg-brand-50 text-brand-700'
-          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-      }`}
+      className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${isActive
+        ? 'border-brand-500 bg-brand-50 text-brand-700'
+        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+        }`}
     >
       {label}
     </button>
@@ -668,7 +841,7 @@ function TaskTimeline({ task }) {
       formattedTs: (task.assignedAt || task.createdAt) ? fmtDate(task.assignedAt || task.createdAt) : null,
       icon: (
         <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
-          <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm4 1.5a4.5 4.5 0 0 1 1 2.833V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-.667A4.5 4.5 0 0 1 4 9.5h8Z"/>
+          <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm4 1.5a4.5 4.5 0 0 1 1 2.833V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-.667A4.5 4.5 0 0 1 4 9.5h8Z" />
         </svg>
       ),
       styles: { dot: 'bg-slate-500', line: 'bg-slate-300', text: 'text-slate-600', card: 'bg-slate-50 border-slate-200' },
@@ -679,7 +852,7 @@ function TaskTimeline({ task }) {
       formattedTs: task.acceptedAt ? fmtDate(task.acceptedAt) : null,
       icon: (
         <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
-          <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.78-1.72a.75.75 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25Z"/>
+          <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.78-1.72a.75.75 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25Z" />
         </svg>
       ),
       styles: { dot: 'bg-blue-500', line: 'bg-blue-200', text: 'text-blue-700', card: 'bg-blue-50 border-blue-200' },
@@ -690,7 +863,7 @@ function TaskTimeline({ task }) {
       formattedTs: task.submittedAt ? fmtDate(task.submittedAt) : null,
       icon: (
         <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
-          <path d="M.5 9.9a.5.5 0 0 1 .5.5V13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.6a.5.5 0 0 1 1 0V13a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.6a.5.5 0 0 1 .5-.5Z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3Z"/>
+          <path d="M.5 9.9a.5.5 0 0 1 .5.5V13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.6a.5.5 0 0 1 1 0V13a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.6a.5.5 0 0 1 .5-.5Z" /><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3Z" />
         </svg>
       ),
       styles: { dot: 'bg-emerald-500', line: 'bg-emerald-200', text: 'text-emerald-700', card: 'bg-emerald-50 border-emerald-200' },

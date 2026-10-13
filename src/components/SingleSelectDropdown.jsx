@@ -107,7 +107,7 @@ export default function SingleSelectDropdown({ value, onChange, options = [], pl
   };
 
   return (
-    <div className="relative w-full" ref={containerRef}>
+    <div className="relative w-full min-w-0" ref={containerRef}>
       <button
         type="button"
         disabled={disabled}
@@ -116,13 +116,13 @@ export default function SingleSelectDropdown({ value, onChange, options = [], pl
           setIsOpen(!isOpen);
           if (!isOpen) setSearchQuery('');
         }}
-        className={`w-full flex items-center justify-between gap-2 rounded-lg border px-3 py-2
-          text-sm shadow-sm transition text-left bg-white
+        className={`w-full min-w-0 flex items-center justify-between gap-1.5 sm:gap-2 rounded-lg border px-2.5 sm:px-3 py-1.5 sm:py-2
+          text-xs sm:text-sm shadow-sm transition text-left bg-white
           ${disabled ? 'bg-slate-50 border-slate-200 cursor-not-allowed opacity-70' :
             hasError ? 'border-red-400 ring-1 ring-red-200' :
             isOpen ? 'border-brand-500 ring-1 ring-brand-200' : 'border-slate-300 hover:border-slate-400'}`}
       >
-        <span className={`block truncate ${selected ? 'text-slate-800' : 'text-slate-400'}`}>
+        <span className={`block truncate min-w-0 overflow-hidden text-ellipsis whitespace-nowrap ${selected ? 'text-slate-800' : 'text-slate-400'}`}>
           {selected ? selected.label : placeholder}
         </span>
         <Icon name="chevron" className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`} />

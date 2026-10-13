@@ -390,7 +390,7 @@ export default function UserManagementPage() {
         toast.error('Failed to load roles.')
 
       if (capRes.status === 'fulfilled')
-        setCapabilities(capRes.value.map(x => ({ id: x.id, name: x.name })))
+        setCapabilities(capRes.value.map(x => ({ id: x.code || x.id, name: x.name })))
       else
         toast.error('Failed to load capabilities.')
 

@@ -12,9 +12,10 @@ import { ReassignedBadge, TimeLoggedBadge } from '../../components/AssignmentBad
 import RequestBriefDrawer from '../../components/RequestBriefDrawer'
 import AssetPreviewModal from '../../components/AssetPreviewModal'
 import { useAuth } from '../../auth/AuthContext'
+import { Rights } from '../../constants/rights'
 import AppSelect from '../../components/AppSelect'
 import DateRangePicker from '../../components/DateRangePicker'
-import StoreIdDisplay from '../../components/StoreIdDisplay'
+import StoreIdsDisplay from '../../components/StoreIdsDisplay'
 import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
 import { DATA_TABLE_CLASS, DataTableColGroup, TableStatusRow, dataTableStyle } from '../../components/dataTable'
 import { formatTaskId } from '../../utils/formatters'
@@ -144,9 +145,127 @@ function FilterTd({ children, sticky = false }) {
   )
 }
 
-// ─── Edit modal ───────────────────────────────────────────────────────────────
+// ─── Edit Priority & Budget modal ─────────────────────────────────────────────
 
+function EditPriorityBudgetModal({ task: t, onClose, onSave, saving }) {
+  const [priority, setPriority] = useState(t.campaignPriority || 'MEDIUM')
+  const [budgetTier, setBudgetTier] = useState(t.campaignBudgetTier || 'NO_BUDGET_ORGANIC')
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSave(t.taskId, priority, budgetTier)
+  }
+
+  return (
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/40">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-600">
+              {formatTaskId(t.taskId)}
+            </span>
+            <h3 className="text-sm font-semibold text-slate-900 mt-0.5">
+              Edit Budget & Priority: {t.granularTaskName || t.taskTypeName || 'Task'}
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 transition"
+            aria-label="Close"
+          >
+            <Icon name="x" className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="px-5 py-5 space-y-4">
+            {/* Priority Selection */}
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+                Priority <span className="text-rose-500">*</span>
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {PRIORITY_OPTIONS.map((p) => {
+                  const isSelected = priority === p
+                  return (
+                    <button
+                      type="button"
+                      key={p}
+                      onClick={() => setPriority(p)}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-semibold transition ${
+                        isSelected
+                          ? p === 'HIGH'
+                            ? 'border-rose-400 bg-rose-50 text-rose-700 ring-2 ring-rose-300'
+                            : p === 'MEDIUM'
+                            ? 'border-amber-400 bg-amber-50 text-amber-700 ring-2 ring-amber-300'
+                            : 'border-emerald-400 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-300'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          p === 'HIGH' ? 'bg-rose-500' : p === 'MEDIUM' ? 'bg-amber-500' : 'bg-emerald-500'
+                        }`}
+                      />
+                      {p}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Budget Tier Selection */}
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+                Budget Tier <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={budgetTier}
+                onChange={(e) => setBudgetTier(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800
+                           focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+              >
+                {BUDGET_OPTIONS.map((b) => (
+                  <option key={b.value} value={b.value}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-white transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition disabled:opacity-50"
+            >
+              {saving && <Icon name="refresh" className="h-4 w-4 animate-spin" />}
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 // ─── Unhold modal — choose auto-route OR manual assign ────────────────────────
 // For TASK-OTHER tasks, auto-route is not shown — manual assignment only.
@@ -360,10 +479,14 @@ export default function TaskManagementPage() {
   const [loading, setLoading] = useState(true)
   const [refreshSeed, setRefreshSeed] = useState(0)
   const [heldCount, setHeldCount] = useState(0)
-  const { user } = useAuth()
+  const { user, hasRight } = useAuth()
+  const canUpdatePriorityBudget = hasRight(Rights.TASK_PRIORITY_BUDGET_UPDATE)
+  const canViewAssignee = hasRight(Rights.VIEW_ASSIGNEE)
   const [briefId, setBriefId] = useState(null)
   const [briefTaskId, setBriefTaskId] = useState(null)
   const [assetPreviewTask, setAssetPreviewTask] = useState(null)
+  const [editingPriorityBudgetTask, setEditingPriorityBudgetTask] = useState(null)
+  const [savingPriorityBudget, setSavingPriorityBudget] = useState(false)
 
   // ── Per-column filter state (raw — bound directly to inputs) ──────────────
   // Pre-populate status from URL query param (e.g. ?status=REWORK from dashboard)
@@ -499,6 +622,25 @@ export default function TaskManagementPage() {
     setBriefTaskId(task.taskId)
   }, [])
   const cbSetAssets = useCallback((task) => setAssetPreviewTask(task), [])
+  const cbSetEditPriorityBudget = useCallback((task) => setEditingPriorityBudgetTask(task), [])
+
+  const handleSavePriorityBudget = async (taskId, priority, budgetTier) => {
+    setSavingPriorityBudget(true)
+    try {
+      await managerApi.updateTaskPriorityBudget(taskId, { priority, budgetTier })
+      toast.success('Priority and budget updated successfully')
+      setTasks(prev => prev.map(t => t.taskId === taskId ? {
+        ...t,
+        campaignPriority: priority,
+        campaignBudgetTier: budgetTier
+      } : t))
+      setEditingPriorityBudgetTask(null)
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to update priority and budget')
+    } finally {
+      setSavingPriorityBudget(false)
+    }
+  }
 
   // ── Hold ─────────────────────────────────────────────────────────────────────
   const [holdingId, setHoldingId] = useState(null)
@@ -656,7 +798,7 @@ export default function TaskManagementPage() {
                 <Th>Task</Th>
                 <Th>Parent Task</Th>
                 <Th>Campaign</Th>
-                <Th>Store ID</Th>
+                <Th>Store Ids</Th>
                 <Th>Requestor</Th>
                 <Th>Assignee</Th>
                 <Th>Task</Th>
@@ -710,11 +852,14 @@ export default function TaskManagementPage() {
                   task={t}
                   alt={i % 2 === 1}
                   holding={holdingId === t.taskId}
+                  canUpdatePriorityBudget={canUpdatePriorityBudget}
+                  canViewAssignee={canViewAssignee}
                   onHold={cbHold}
                   onUnhold={cbOpenUnhold}
                   onCancel={cbSetCancel}
                   onViewBrief={cbSetBrief}
                   onViewAssets={cbSetAssets}
+                  onEditPriorityBudget={cbSetEditPriorityBudget}
                   toast={toast}
                 />
               ))}
@@ -785,6 +930,16 @@ export default function TaskManagementPage() {
           acting={actingCancel}
         />
       )}
+
+      {/* Edit priority & budget modal */}
+      {editingPriorityBudgetTask && (
+        <EditPriorityBudgetModal
+          task={editingPriorityBudgetTask}
+          onClose={() => setEditingPriorityBudgetTask(null)}
+          onSave={handleSavePriorityBudget}
+          saving={savingPriorityBudget}
+        />
+      )}
     </div>
   )
 }
@@ -807,7 +962,7 @@ function Th({ children, align = 'left', sticky = false, title }) {
 
 // ─── Data row ─────────────────────────────────────────────────────────────────
 
-const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onViewBrief, onViewAssets, toast }) => {
+const TaskRow = memo(({ task: t, alt, holding, canUpdatePriorityBudget, canViewAssignee, onHold, onUnhold, onCancel, onViewBrief, onViewAssets, onEditPriorityBudget, toast }) => {
   // Hold: ASSIGNED or REWORK (manager can pause and reassign)
   const canHold = t.status === 'ASSIGNED' || t.status === 'REWORK'
   // Unhold: only HELD
@@ -846,7 +1001,7 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
       </td>
 
       <td className={`${cellCls} text-xs text-slate-600`}>
-        <StoreIdDisplay storeId={t.storeId} customStoreIds={t.customStoreIds} className="block font-medium text-slate-700" />
+        <StoreIdsDisplay storeIds={t.storeId} customStoreId={t.customStoreIds} />
       </td>
 
       <td className={`${cellCls} text-slate-600`}>
@@ -856,13 +1011,21 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
       </td>
 
       <td className={cellCls}>
-        {t.assigneeName
-          ? <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full bg-slate-100 px-2 py-0.5
-                             text-xs font-medium text-slate-700" title={t.assigneeName}>
-            <Icon name="users" className="h-3 w-3 shrink-0 text-slate-400" />
-            <span className="truncate">{t.assigneeName}</span>
-          </span>
-          : <span className="text-slate-300">Unassigned</span>}
+        {canViewAssignee
+          ? (t.assigneeName
+              ? <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full bg-slate-100 px-2 py-0.5
+                                 text-xs font-medium text-slate-700" title={t.assigneeName}>
+                <Icon name="users" className="h-3 w-3 shrink-0 text-slate-400" />
+                <span className="truncate">{t.assigneeName}</span>
+              </span>
+              : <span className="text-slate-300">Unassigned</span>)
+          : ((t.isAssigned || (t.assigneeName && t.assigneeName !== 'Unassigned'))
+              ? <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full bg-slate-100 px-2 py-0.5
+                                 text-xs font-medium text-slate-700">
+                <Icon name="users" className="h-3 w-3 shrink-0 text-slate-400" />
+                <span>Assigned</span>
+              </span>
+              : <span className="text-slate-300">Unassigned</span>)}
       </td>
 
       <td className={`${cellCls} text-slate-600`}>
@@ -948,6 +1111,9 @@ const TaskRow = memo(({ task: t, alt, holding, onHold, onUnhold, onCancel, onVie
             <ActionMenuItem icon="eye" label="View Brief" onClick={() => onViewBrief(t)} />
             {t.status === 'COMPLETED' && (
               <ActionMenuItem icon="fileText" label="View Assets" onClick={() => onViewAssets(t)} />
+            )}
+            {canUpdatePriorityBudget && t.status === 'ASSIGNED' && (
+              <ActionMenuItem icon="edit" label="Edit Budget & Priority" onClick={() => onEditPriorityBudget(t)} />
             )}
             {canHold && (
               <ActionMenuItem icon="pause" label="Hold Task" onClick={() => onHold(t)} disabled={holding} />

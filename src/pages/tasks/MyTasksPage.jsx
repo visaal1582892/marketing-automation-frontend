@@ -19,6 +19,7 @@ import { normalizeSnapshot, formatWorkingElapsed } from '../../utils/workingHour
 import ActionMenu, { ActionMenuItem } from '../../components/ActionMenu'
 import { formatTaskId } from '../../utils/formatters'
 import BudgetImpactWarningModal from '../../components/budget/BudgetImpactWarningModal'
+import StoreIdsDisplay from '../../components/StoreIdsDisplay'
 
 /**
  * Module 3 — Employee Dashboard.
@@ -33,7 +34,7 @@ export default function MyTasksPage() {
   const toast    = useToast()
   const showToast = (msg, type = 'info') => toast[type]?.(msg)
   const { user, hasRight } = useAuth()
-  const canAddFollowup = hasRight(Rights.ADD_FOLLOWUP_TASKS)
+  const canAddFollowup = hasRight(Rights.CAMPAIGN_UPDATE_OWN)
 
   const VALID_FILTERS = ['OPEN', 'QC', 'DONE', 'HELD', 'CANCELLED', 'ALL']
   const initialFilter = () => {
@@ -314,13 +315,8 @@ export default function MyTasksPage() {
         setSavingId(submitting.taskId)
         try {
             const budgetRes = await tasksApi.checkBudget(submitting.taskId);
-            if (budgetRes.data?.overallStatus === 'HARD_BLOCK') {
-                showToast(`State budget exhausted for state ${budgetRes.data.blockedState} for this quarter. Please request a TopUp.`, 'error');
-                setSavingId(null)
-                return;
-            }
-            if (budgetRes.data?.overallStatus === 'SOFT_OVERRUN') {
-                setBudgetWarningStates(budgetRes.data.stateResults.filter(s => s.status === 'SOFT_OVERRUN'));
+            if (budgetRes.data?.overallStatus === 'HARD_BLOCK' || budgetRes.data?.overallStatus === 'SOFT_OVERRUN') {
+                setBudgetWarningStates(budgetRes.data.stateResults.filter(s => s.status === 'SOFT_OVERRUN' || s.status === 'HARD_BLOCK'));
                 setIsBudgetModalOpen(true);
                 setSavingId(null)
                 return; // pause flow
@@ -672,7 +668,12 @@ function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFligh
           </div>
           <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
             <span>Campaign {task.campaignId} · {task.taskTypeName || '—'}</span>
-            {task.storeId       && <span>• Store: <span className="font-medium text-slate-700">{task.storeId}</span></span>}
+            {(task.storeId || task.customStoreIds) && (
+              <span className="inline-flex items-center gap-1">
+                <span>• Store:</span>
+                <StoreIdsDisplay storeIds={task.storeId} customStoreId={task.customStoreIds} />
+              </span>
+            )}
             {task.contactNumber && <span>• <span className="font-medium text-slate-700">{task.contactNumber}</span></span>}
             {task.platformName && <span>• {task.platformName}</span>}
             {task.formatName   && <span>• {task.formatName}</span>}
@@ -1071,13 +1072,7 @@ function PoTrackingSection({ task, campaign, savedEntries, onEntriesSaved, isMan
          return
       }
 
-      if (budgetCheckData.overallStatus === 'HARD_BLOCK') {
-         toast.error?.(`Budget for ${budgetCheckData.blockedState} is exhausted for this quarter. A Top-Up must be approved before any new POs can be submitted for this state.`)
-         setSavingPos(false)
-         return
-      }
-
-      if (budgetCheckData.overallStatus === 'SOFT_OVERRUN') {
+      if (budgetCheckData.overallStatus === 'HARD_BLOCK' || budgetCheckData.overallStatus === 'SOFT_OVERRUN') {
          // Show an alert or toast, but we still proceed with saving
          toast.error?.(`Warning: Saving these POs will exceed the remaining budget. This task will be routed to Budget Review.`)
       }
@@ -1119,13 +1114,7 @@ function PoTrackingSection({ task, campaign, savedEntries, onEntriesSaved, isMan
          return
       }
 
-      if (budgetCheckData.overallStatus === 'HARD_BLOCK') {
-         toast.error?.(`Budget for ${budgetCheckData.blockedState} is exhausted for this quarter. A Top-Up must be approved before any new POs can be submitted for this state.`)
-         setSavingPos(false)
-         return
-      }
-
-      if (budgetCheckData.overallStatus === 'SOFT_OVERRUN') {
+      if (budgetCheckData.overallStatus === 'HARD_BLOCK' || budgetCheckData.overallStatus === 'SOFT_OVERRUN') {
          toast.error?.(`Warning: Saving these POs will exceed the remaining budget. This task will be routed to Budget Review.`)
       }
 

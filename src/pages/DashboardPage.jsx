@@ -23,16 +23,16 @@ import TeamTaskTracker from '../components/dashboard/TeamTaskTracker'
 export default function DashboardPage() {
   const { user, hasRight, hasAnyRight } = useAuth()
 
-  const showOpsWidgets      = hasRight(Rights.ACCESS_MANAGER_TOOLS)
-  const showTeamLeaderWidgets = hasRight(Rights.VIEW_TEAM_TASKS) && !hasRight(Rights.ACCESS_MANAGER_TOOLS)
+  const showOpsWidgets      = hasRight(Rights.TASK_READ_TEAM)
+  const showTeamLeaderWidgets = hasRight(Rights.TASK_READ_TEAM) && !hasRight(Rights.MANAGER_QC_READ)
 
   const showAdminExtras = hasAnyRight(...ADMIN_CONFIG_RIGHTS)
 
-  const showWorkerWidgets = hasRight(Rights.VIEW_MY_TASKS)
+  const showWorkerWidgets = hasRight(Rights.TASK_READ_OWN)
 
   const showRequestWidgets = hasAnyRight(...REQUESTOR_RIGHTS)
 
-  const canSubmitRequest = hasRight(Rights.CREATE_CAMPAIGN)
+  const canSubmitRequest = hasRight(Rights.CAMPAIGN_CREATE)
 
   const [campaigns,            setCampaigns]            = useState([])
   const [tasks,                setTasks]                = useState([])
@@ -186,7 +186,7 @@ export default function DashboardPage() {
         {/* Right: actions */}
         <div className="flex items-center gap-3">
           {/* QC queue shortcut — Marketing Manager only */}
-          {hasRight(Rights.REVIEW_MANAGER_QC) && (
+          {hasRight(Rights.MANAGER_QC_READ) && (
             <Link
               to="/tasks/approvals"
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200

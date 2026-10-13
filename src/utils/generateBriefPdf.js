@@ -383,7 +383,7 @@ export async function generateBriefPdf(campaign) {
       // Assignee
       font('normal', 7.5)
       ink(C.sub)
-      txt(t.assigneeName ? `Assigned to: ${t.assigneeName}` : 'Unassigned', ML + 4, y)
+      txt(t.assigneeName ? (t.assigneeName === 'Assigned' ? 'Assigned' : `Assigned to: ${t.assigneeName}`) : 'Unassigned', ML + 4, y)
       if (t.totalTimeLoggedMinutes != null) {
         txt(`${t.totalTimeLoggedMinutes} min logged`, PW - MR, y, { align: 'right' })
       }

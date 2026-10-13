@@ -70,7 +70,7 @@ export default function App() {
               <Route
                 path="/campaigns/new"
                 element={
-                  <ProtectedRoute requireRight={Rights.CREATE_CAMPAIGN}>
+                  <ProtectedRoute requireRight={Rights.CAMPAIGN_CREATE}>
                     <CampaignFormPage />
                   </ProtectedRoute>
                 }
@@ -78,7 +78,7 @@ export default function App() {
               <Route
                 path="/campaigns/completed"
                 element={
-                  <ProtectedRoute requireRight={Rights.VIEW_OWN_COMPLETED_TASKS}>
+                  <ProtectedRoute requireRight={Rights.CAMPAIGN_READ_OWN}>
                     <CompletedTasksPage />
                   </ProtectedRoute>
                 }
@@ -86,7 +86,7 @@ export default function App() {
               <Route
                 path="/campaigns/:id"
                 element={
-                  <ProtectedRoute requireRight={Rights.VIEW_CAMPAIGN_DETAIL}>
+                  <ProtectedRoute requireAnyRight={[Rights.CAMPAIGN_READ_OWN, Rights.CAMPAIGN_READ_TEAM, Rights.CAMPAIGN_READ_ALL]}>
                     <CampaignDetailPage />
                   </ProtectedRoute>
                 }
@@ -94,7 +94,7 @@ export default function App() {
               <Route
                 path="/campaigns/:id/edit"
                 element={
-                  <ProtectedRoute requireRight={Rights.EDIT_OWN_CAMPAIGN}>
+                  <ProtectedRoute requireRight={Rights.CAMPAIGN_UPDATE_OWN}>
                     <CampaignEditPage />
                   </ProtectedRoute>
                 }
@@ -104,7 +104,7 @@ export default function App() {
               <Route
                 path="/my-tasks"
                 element={
-                  <ProtectedRoute requireRight={Rights.VIEW_MY_TASKS}>
+                  <ProtectedRoute requireRight={Rights.TASK_READ_OWN}>
                     <MyTasksPage />
                   </ProtectedRoute>
                 }
@@ -113,7 +113,7 @@ export default function App() {
                 path="/collaborations"
                 element={
                   <ProtectedRoute
-                    requireRight={Rights.ACCESS_COLLABORATIONS}
+                    requireAnyRight={[Rights.COLLABORATION_START, Rights.COLLABORATION_MESSAGE]}
                     excludeRole={[]}
                   >
                     <CollaborationsPage />
@@ -125,7 +125,7 @@ export default function App() {
               <Route
                 path="/manager/task-management"
                 element={
-                  <ProtectedRoute requireAnyRight={[Rights.ACCESS_MANAGER_TOOLS, Rights.VIEW_TEAM_TASKS]}>
+                  <ProtectedRoute requireAnyRight={[Rights.TASK_READ_TEAM, Rights.TASK_HOLD]}>
                     <TaskManagementPage />
                   </ProtectedRoute>
                 }
@@ -133,7 +133,7 @@ export default function App() {
               <Route
                 path="/tasks/approvals"
                 element={
-                  <ProtectedRoute requireAnyRight={[Rights.REVIEW_MANAGER_QC, Rights.APPROVE_TEAM_TASKS]}>
+                  <ProtectedRoute requireAnyRight={[Rights.MANAGER_QC_READ, Rights.MANAGER_QC_APPROVE, Rights.TASK_READ_TEAM]}>
                     <ManagerQcReviewPage />
                   </ProtectedRoute>
                 }
@@ -141,7 +141,7 @@ export default function App() {
               <Route
                 path="/requestor/review-center"
                 element={
-                  <ProtectedRoute requireRight={Rights.VIEW_REQUESTOR_QC_QUEUE}>
+                  <ProtectedRoute requireRight={Rights.REQUESTOR_QC_READ}>
                     <RequestorQcReviewPage />
                   </ProtectedRoute>
                 }
@@ -150,7 +150,7 @@ export default function App() {
                 path="/manager/analytics"
                 element={
                   <ProtectedRoute
-                    requireAnyRight={[Rights.VIEW_ANALYTICS_REPORTS, Rights.ACCESS_MANAGER_TOOLS, Rights.VIEW_TEAM_ANALYTICS]}
+                    requireAnyRight={[Rights.ANALYTICS_READ_TEAM, Rights.ANALYTICS_READ_ALL, Rights.TASK_READ_TEAM]}
                   >
                     <AnalyticsPage />
                   </ProtectedRoute>
@@ -161,7 +161,7 @@ export default function App() {
               <Route
                 path="/budget-planning"
                 element={
-                  <ProtectedRoute requireAnyRight={BUDGET_RIGHTS}>
+                  <ProtectedRoute requireRight={Rights.BUDGET_CREATE}>
                     <BudgetProposalListPage />
                   </ProtectedRoute>
                 }
@@ -169,7 +169,7 @@ export default function App() {
               <Route
                 path="/budget-planning/wizard/:proposalId?/:stepId?"
                 element={
-                  <ProtectedRoute requireAnyRight={BUDGET_RIGHTS}>
+                  <ProtectedRoute requireAnyRight={[Rights.BUDGET_CREATE, Rights.BUDGET_READ_ALL]}>
                     <BudgetPlanningWizard />
                   </ProtectedRoute>
                 }
@@ -177,7 +177,7 @@ export default function App() {
               <Route
                 path="/budget/approvals"
                 element={
-                  <ProtectedRoute requireAnyRight={[Rights.APPROVE_BUDGET_OVERRUN, Rights.APPROVE_BUDGET]}>
+                  <ProtectedRoute requireAnyRight={[Rights.BUDGET_OVERRUN_APPROVE, Rights.BUDGET_APPROVE]}>
                     <BudgetApprovalsPage />
                   </ProtectedRoute>
                 }
@@ -187,7 +187,7 @@ export default function App() {
               <Route
                 path="/admin/master"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
+                  <ProtectedRoute requireRight={Rights.MASTER_DATA_UPDATE}>
                     <MasterHubPage />
                   </ProtectedRoute>
                 }
@@ -195,7 +195,7 @@ export default function App() {
               <Route
                 path="/admin/roles"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_SYSTEM_SETTINGS}>
+                  <ProtectedRoute requireRight={Rights.SYSTEM_SETTINGS_UPDATE}>
                     <RoleManagementPage />
                   </ProtectedRoute>
                 }
@@ -203,7 +203,7 @@ export default function App() {
               <Route
                 path="/admin/master/budget/event-categories"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
+                  <ProtectedRoute requireRight={Rights.MASTER_DATA_UPDATE}>
                     <EventCategoryMasterPage />
                   </ProtectedRoute>
                 }
@@ -211,7 +211,7 @@ export default function App() {
               <Route
                 path="/admin/master/event-task-types"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
+                  <ProtectedRoute requireRight={Rights.MASTER_DATA_UPDATE}>
                     <EventTaskTypeMappingMasterPage />
                   </ProtectedRoute>
                 }
@@ -220,7 +220,7 @@ export default function App() {
               <Route
                 path="/admin/master/capabilities"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
+                  <ProtectedRoute requireRight={Rights.MASTER_DATA_UPDATE}>
                     <CapabilityMasterPage />
                   </ProtectedRoute>
                 }
@@ -228,7 +228,7 @@ export default function App() {
               <Route
                 path="/admin/master/:slug"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_MASTER_DATA}>
+                  <ProtectedRoute requireRight={Rights.MASTER_DATA_UPDATE}>
                     <MasterTablePage />
                   </ProtectedRoute>
                 }
@@ -236,7 +236,7 @@ export default function App() {
               <Route
                 path="/admin/granular-tasks"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_GRANULAR_TASKS}>
+                  <ProtectedRoute requireRight={Rights.GRANULAR_TASK_UPDATE}>
                     <GranularTaskPage />
                   </ProtectedRoute>
                 }
@@ -244,7 +244,7 @@ export default function App() {
               <Route
                 path="/admin/users"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_USERS}>
+                  <ProtectedRoute requireRight={Rights.USER_UPDATE}>
                     <UserManagementPage />
                   </ProtectedRoute>
                 }
@@ -252,7 +252,7 @@ export default function App() {
               <Route
                 path="/admin/questions"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_QUESTION_LIBRARY}>
+                  <ProtectedRoute requireRight={Rights.SYSTEM_SETTINGS_UPDATE}>
                     <QuestionMasterPage />
                   </ProtectedRoute>
                 }
@@ -260,7 +260,7 @@ export default function App() {
               <Route
                 path="/admin/working-hours"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_SYSTEM_SETTINGS}>
+                  <ProtectedRoute requireRight={Rights.SYSTEM_SETTINGS_UPDATE}>
                     <WorkingHoursPage />
                   </ProtectedRoute>
                 }
@@ -268,7 +268,7 @@ export default function App() {
               <Route
                 path="/admin/approval-flows"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_SYSTEM_SETTINGS}>
+                  <ProtectedRoute requireRight={Rights.ROUTING_CONFIG_UPDATE}>
                     <ApprovalFlowMasterPage />
                   </ProtectedRoute>
                 }
@@ -276,7 +276,7 @@ export default function App() {
               <Route
                 path="/admin/notification-templates"
                 element={
-                  <ProtectedRoute requireRight={Rights.MANAGE_NOTIFICATION_TEMPLATES}>
+                  <ProtectedRoute requireRight={Rights.NOTIFICATION_TMPL_UPDATE}>
                     <NotificationTemplatesPage />
                   </ProtectedRoute>
                 }

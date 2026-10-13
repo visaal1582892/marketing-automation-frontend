@@ -13,6 +13,7 @@ import CampaignStoresBrief from './CampaignStoresBrief'
 import ConfigurableApprovalHistory from "./ConfigurableApprovalHistory"
 import TaskCyclesView from './TaskCyclesView'
 import { formatTaskId } from '../utils/formatters'
+import { LinkedTaskModal } from './tasks/LinkedTaskModal'
 
 /** Drop answered comment from local campaign snapshot; recompute badge flags. */
 function campaignAfterCommentAnswered(campaign, taskId, commentId) {
@@ -41,6 +42,7 @@ export default function RequestBriefDrawer({
   const [error, setError] = useState(null)
 
   const { user, hasRight } = useAuth()
+  const canViewAssignee = hasRight(Rights.VIEW_ASSIGNEE)
   const toast = useToast()
 
   const [printing, setPrinting] = useState(false)
@@ -61,6 +63,7 @@ export default function RequestBriefDrawer({
 
   const [selectedPo, setSelectedPo] = useState(null) // { taskId, poId }
   const [statusHistoryTask, setStatusHistoryTask] = useState(null)
+  const [followupTask, setFollowupTask] = useState(null)
 
   const [markingCommentId, setMarkingCommentId] = useState(null)
   const handleMarkAnswered = useCallback(async (taskId, commentId) => {
@@ -140,10 +143,15 @@ export default function RequestBriefDrawer({
   // Marketing Managers approve/reject via QC — they must not request rework after delivery.
   const canRequestRework =
     campaign != null &&
-    hasRight(Rights.REQUEST_REQUESTOR_REWORK) &&
-    !hasRight(Rights.REVIEW_MANAGER_QC) &&
+    hasRight(Rights.REQUESTOR_QC_REJECT) &&
+    !hasRight(Rights.MANAGER_QC_READ) &&
     myUserId != null &&
     Number(campaign.requestorId) === Number(myUserId)
+
+  const canAddFollowup =
+    campaign != null &&
+    (hasRight(Rights.CAMPAIGN_UPDATE_OWN) || Number(campaign.requestorId) === Number(myUserId)) &&
+    !['REJECTED', 'CANCELLED'].includes(campaign.status)
 
   const handleRequestorRework = async () => {
     if (!reworkTask || !reworkMsg.trim()) return
@@ -674,7 +682,11 @@ export default function RequestBriefDrawer({
                                 )}
                               </div>
                               <p className="text-xs text-slate-500">
-                                {t.assigneeName ? `Assigned to ${t.assigneeName}` : 'Unassigned'}
+                                {canViewAssignee
+                                  ? (t.assigneeName && t.assigneeName !== 'Assigned' && t.assigneeName !== 'Unassigned'
+                                      ? `Assigned to ${t.assigneeName}`
+                                      : (t.assigneeName === 'Assigned' || t.isAssigned ? 'Assigned' : 'Unassigned'))
+                                  : (t.isAssigned || (t.assigneeName && t.assigneeName !== 'Unassigned') ? 'Assigned' : 'Unassigned')}
                               </p>
                               {!!t.parentTaskId && (
                                 <button
@@ -715,6 +727,16 @@ export default function RequestBriefDrawer({
                                            hover:bg-amber-100 transition shrink-0"
                                 >
                                   <Icon name="refresh" className="h-3 w-3" /> Request Rework
+                                </button>
+                              )}
+                              {canAddFollowup && t.status === 'COMPLETED' && (
+                                <button
+                                  onClick={() => setFollowupTask(t)}
+                                  className="flex items-center gap-1.5 rounded-lg border border-brand-200
+                                           bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700
+                                           hover:bg-brand-100 transition shrink-0"
+                                >
+                                  <Icon name="plus" className="h-3 w-3" /> Follow-up Task
                                 </button>
                               )}
                             </div>
@@ -856,6 +878,23 @@ export default function RequestBriefDrawer({
           <TaskStatusHistoryModal
             task={statusHistoryTask}
             onClose={() => setStatusHistoryTask(null)}
+          />
+        )}
+
+        {/* Linked/Follow-up task modal */}
+        {followupTask && (
+          <LinkedTaskModal
+            task={followupTask}
+            parentTaskId={followupTask.taskId}
+            onClose={() => setFollowupTask(null)}
+            onSuccess={async () => {
+              setFollowupTask(null)
+              try {
+                const res = await campaignsApi.getById(campaign.campaignId)
+                setCampaign(res.data)
+                onCampaignChanged?.(res.data)
+              } catch (_) {}
+            }}
           />
         )}
       </div>{/* end sliding panel */}

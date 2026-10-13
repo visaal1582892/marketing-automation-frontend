@@ -10,8 +10,11 @@ export const budgetPlanningApi = {
   saveTargetCaps: (proposalId, payload) => 
     api.put(`/budget-planning/proposals/${proposalId}/target-caps`, payload).then(r => r.data),
 
-  getProposals: () => 
-    api.get('/budget-planning/proposals').then(r => r.data),
+  getProposalsSummary: () => 
+    api.get('/budget-planning/proposals/summary').then(r => r.data),
+
+  getProposals: (params) => 
+    api.get('/budget-planning/proposals', { params }).then(r => r.data),
 
   getProposalById: (proposalId) => 
     api.get(`/budget-planning/proposals/${proposalId}`).then(r => r.data),
@@ -37,6 +40,12 @@ export const budgetPlanningApi = {
   submitOperationalPlan: (proposalId) => 
     api.post(`/budget-planning/proposals/${proposalId}/submit-operational`).then(r => r.data),
     
-  deleteProposal: (proposalId) => 
+  deleteProposal: (proposalId) =>
     api.delete(`/budget-planning/proposals/${proposalId}`).then(r => r.data),
+
+  updateFutureQuarters: (proposalId, allocations) =>
+    api.patch(`/budget-planning/proposals/${proposalId}/future-quarters`, allocations).then(r => r.data),
+
+  updateFutureQuartersTargets: (proposalId, payload) =>
+    api.patch(`/budget-planning/proposals/${proposalId}/future-quarters/targets`, payload).then(r => r.data),
 }

@@ -50,6 +50,7 @@ export default function CampaignDetailPage() {
   const toast      = useToast()
   const showToast  = (m, t = 'info') => toast[t]?.(m)
   const { user, hasRight } = useAuth()
+  const canViewAssignee = hasRight(Rights.VIEW_ASSIGNEE)
 
   const [c, setC] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -124,8 +125,8 @@ export default function CampaignDetailPage() {
   // request rework on an already-completed task.
   const myUserId = user?.userId ?? user?.id
   const isOwnerOfCampaign = user && c && myUserId != null && Number(c.requestorId) === Number(myUserId)
-  const canRequestRework = hasRight(Rights.REQUEST_REQUESTOR_REWORK) &&
-    !hasRight(Rights.REVIEW_MANAGER_QC) &&
+  const canRequestRework = hasRight(Rights.REQUESTOR_QC_REJECT) &&
+    !hasRight(Rights.MANAGER_QC_READ) &&
     isOwnerOfCampaign &&
     myUserId != null
 
@@ -420,7 +421,11 @@ export default function CampaignDetailPage() {
                       <ReassignedBadge assignmentCount={t.assignmentCount} />
                     </div>
                     <p className="text-xs text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      {t.assigneeName ? <span>Assigned to {t.assigneeName}</span> : <span>Unassigned</span>}
+                      {canViewAssignee
+                        ? (t.assigneeName && t.assigneeName !== 'Assigned' && t.assigneeName !== 'Unassigned'
+                            ? <span>Assigned to {t.assigneeName}</span>
+                            : <span>{t.assigneeName === 'Assigned' || t.isAssigned ? 'Assigned' : 'Unassigned'}</span>)
+                        : <span>{t.isAssigned || (t.assigneeName && t.assigneeName !== 'Unassigned') ? 'Assigned' : 'Unassigned'}</span>}
                       <TimeLoggedBadge task={t} currentUserId={myUserId} />
                     </p>
                   </div>

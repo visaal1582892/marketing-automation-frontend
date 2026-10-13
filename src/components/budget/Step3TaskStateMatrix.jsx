@@ -1,10 +1,37 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Icon from '../Icon';
 import SearchableSelect from '../common/SearchableSelect';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import { eventCampaignTaskApi } from '../../api/masterData';
 import { budgetPlanningApi } from '../../api/budgetPlanning';
 import { useToast } from '../Toast';
+
+const ReadOnlyStateList = ({ stateCodes = [], states = [] }) => {
+  const [expanded, setExpanded] = useState(false);
+  const displayStates = expanded ? stateCodes : stateCodes.slice(0, 2);
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 mt-1">
+      {displayStates.map(state => {
+        const sObj = states.find(s => String(s.stateCode || s.code || s.subName) === String(state));
+        const displayName = sObj ? (sObj.stateName || sObj.name || sObj.subName) : state;
+        return (
+          <span key={state} className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-700 rounded-md border border-slate-200">
+            {displayName}
+          </span>
+        );
+      })}
+      {stateCodes.length > 2 && (
+        <button 
+          onClick={() => setExpanded(!expanded)}
+          className="px-2 py-1 text-xs font-medium bg-brand-50 text-brand-700 rounded-md border border-brand-100 hover:bg-brand-100 transition-colors inline-block cursor-pointer"
+        >
+          {expanded ? "Show less" : `+${stateCodes.length - 2} more`}
+        </button>
+      )}
+    </div>
+  );
+};
 
 export default function Step3TaskStateMatrix({
   proposalId,
@@ -23,7 +50,8 @@ export default function Step3TaskStateMatrix({
   quarterlyAllocations,
   annualAllocations,
   onMatrixSaved,
-  isQuarterEditMode,
+
+  isFutureQuartersEditMode,
   quarterlyPeriods
 }) {
   const activeCombinations = useMemo(() => {
@@ -61,6 +89,30 @@ export default function Step3TaskStateMatrix({
     });
     return ids;
   });
+
+  const isLocalEdit = useRef(false);
+
+  useEffect(() => {
+    if (isLocalEdit.current) {
+      isLocalEdit.current = false;
+      return;
+    }
+    
+    setSavedComboIds(prev => {
+      const ids = new Set();
+      allocations.forEach(a => {
+        if (a.taskAllocations && a.taskAllocations.length > 0) {
+          ids.add(`${a.verticalId}_${a.eventCategoryId}`);
+        }
+      });
+      // Preserve any combinations that are currently active and being edited locally
+      // Actually, if we just sync it, it fixes the bug where switching periods doesn't update the lock state.
+      // But we shouldn't overwrite the local unlock (Edit Again) if they haven't switched periods.
+      // Let's just always sync it from allocations. If they "Edit Again", the backend allocations 
+      // haven't changed, but this effect won't fire unless allocations prop changes.
+      return ids;
+    });
+  }, [allocations]);
 
   const isCurrentCombinationFrozen = activeCombo ? savedComboIds.has(activeCombo.id) : false;
 
@@ -131,6 +183,7 @@ export default function Step3TaskStateMatrix({
   };
 
   const setTaskGroups = (taskTypeId, newGroups) => {
+    isLocalEdit.current = true;
     let currentTasks = currentComboAllocation?.taskAllocations || [];
     let updatedTasks = [...currentTasks];
     const taskIndex = updatedTasks.findIndex(ta => ta.taskTypeId === taskTypeId);
@@ -217,7 +270,9 @@ export default function Step3TaskStateMatrix({
       return { ...task, groups: validGroups };
     }).filter(task => task.groups.length > 0);
 
-    const payloadPeriodId = (isQuarterEditMode && activePeriod !== 'Annual') ? quarterlyPeriods[activePeriod].periodId : periodId;
+    const payloadPeriodId = (isFutureQuartersEditMode && activePeriod !== 'Annual')
+        ? quarterlyPeriods[activePeriod].periodId
+        : periodId;
 
     const payload = [{
       ...currentComboAllocation,
@@ -227,7 +282,11 @@ export default function Step3TaskStateMatrix({
 
     setIsSaving(true);
     try {
-      await budgetPlanningApi.saveAllocations(proposalId, payload);
+      if (isFutureQuartersEditMode) {
+        await budgetPlanningApi.updateFutureQuarters(proposalId, payload);
+      } else {
+        await budgetPlanningApi.saveAllocations(proposalId, payload);
+      }
       toast.success("Combination allocations saved successfully!");
       setSavedComboIds(prev => {
         const next = new Set(prev);
@@ -268,19 +327,12 @@ export default function Step3TaskStateMatrix({
   }
 
   return (
-    <div className="space-y-6 pb-32">
-      {isReadOnly && (
-        <div className="flex justify-end -mb-4">
-          <div className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md text-sm font-medium border border-blue-100 shadow-sm">
-            Currently viewing <span className="font-bold">{activePeriod}</span> allocations
-          </div>
-        </div>
-      )}
-      <section className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-3">
-        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">
-          Select Combination to Allocate
-        </label>
-        <div className="relative">
+    <div className="flex flex-col flex-1 min-h-0 space-y-4">
+      <div className="flex flex-col xl:flex-row gap-4 shrink-0 bg-white border border-slate-200 p-4 rounded-xl shadow-sm z-10">
+        <div className="flex-1 min-w-0">
+          <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
+            Select Combination
+          </label>
           <SearchableSelect
             options={activeCombinations.map(combo => {
               const comboAlloc = allocations.find(
@@ -297,9 +349,7 @@ export default function Step3TaskStateMatrix({
               const done = allocTotal === combo.targetAmount;
               
               const isSaved = savedComboIds.has(combo.id);
-              const prefix = isSaved 
-                ? `🔒 [SAVED] ` 
-                : (done ? `✓ ` : ``);
+              const prefix = isSaved ? `🔒 [SAVED] ` : (done ? `✓ ` : ``);
                 
               return {
                 value: combo.id,
@@ -311,30 +361,32 @@ export default function Step3TaskStateMatrix({
             placeholder="Select a combination to allocate..."
           />
         </div>
-      </section>
-
-      {activeCombo && (
-        <div className="space-y-5">
-          <div className="flex justify-between items-center bg-brand-50/50 border border-brand-100 p-4 rounded-xl shadow-sm sticky top-0 z-10 backdrop-blur-sm">
+        
+        {activeCombo && !isReadOnly && (
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 xl:border-l xl:border-slate-200 xl:pl-6">
             <div>
-              <span className="text-[10px] font-bold text-brand-600/70 uppercase tracking-wider block mb-1">Target Budget</span>
-              <p className="text-xl font-bold text-brand-900">₹{activeCombo.targetAmount.toLocaleString()}</p>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Target</span>
+              <p className="text-lg font-bold text-slate-800">₹{activeCombo.targetAmount.toLocaleString()}</p>
             </div>
-            <div className="text-right">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Allocated</span>
-              <p className="text-xl font-bold text-slate-800">₹{totalAllocated.toLocaleString()}</p>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Allocated</span>
+              <p className="text-lg font-bold text-brand-600">₹{totalAllocated.toLocaleString()}</p>
             </div>
-            <div className={`text-right ${remaining < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-              <span className="text-[10px] font-bold uppercase tracking-wider block mb-1">Remaining</span>
-              <p className="text-xl font-bold flex items-center justify-end gap-1.5">
-                {isComplete && <Icon name="check" className="h-5 w-5" />} 
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Remaining</span>
+              <p className={`text-lg font-bold flex items-center gap-1.5 ${remaining < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                {isComplete && <Icon name="check" className="h-4 w-4" />}
                 ₹{remaining.toLocaleString()}
               </p>
             </div>
           </div>
-          
-          {remaining < 0 && (
-            <div className="p-3 bg-red-50 text-red-700 text-sm font-medium rounded-lg border border-red-200 flex items-center gap-2">
+        )}
+      </div>
+
+      {activeCombo && (
+        <div className="flex flex-col flex-1 min-h-0 space-y-4 pb-4">
+          {!isReadOnly && remaining < 0 && (
+            <div className="p-3 bg-red-50 text-red-700 text-sm font-medium rounded-lg border border-red-200 flex items-center gap-2 shrink-0">
               <Icon name="alertCircle" className="h-5 w-5 shrink-0" />
               You have exceeded the target budget by ₹{Math.abs(remaining).toLocaleString()}. Please adjust allocations.
             </div>
@@ -347,11 +399,24 @@ export default function Step3TaskStateMatrix({
               No tasks mapped to this combination. Configure them in Master Data first.
             </div>
           ) : (
-            <div className="space-y-6">
-              {mappedTaskTypeIds.map(ttId => {
-                const taskDef = taskTypes.find(t => t.id?.toString() === ttId || t.taskTypeId === ttId);
-                const taskName = taskDef ? (taskDef.name || taskDef.taskName) : ttId;
-                const groups = getTaskGroups(ttId);
+            <div className="flex-1 overflow-y-auto space-y-6 min-h-0 pr-1 pb-16 custom-scrollbar">
+              {(() => {
+                const visibleTaskTypeIds = isReadOnly 
+                  ? mappedTaskTypeIds.filter(ttId => getTaskGroups(ttId).length > 0)
+                  : mappedTaskTypeIds;
+                  
+                if (visibleTaskTypeIds.length === 0 && isReadOnly) {
+                  return (
+                    <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center text-slate-500 text-sm">
+                      No tasks allocated for this combination.
+                    </div>
+                  );
+                }
+                
+                return visibleTaskTypeIds.map(ttId => {
+                  const taskDef = taskTypes.find(t => t.id?.toString() === ttId || t.taskTypeId === ttId);
+                  const taskName = taskDef ? (taskDef.name || taskDef.taskName) : ttId;
+                  const groups = getTaskGroups(ttId);
 
                 // For double dip protection, calculate globally selected states in this task
                 const allSelectedStates = new Set();
@@ -361,7 +426,7 @@ export default function Step3TaskStateMatrix({
 
                 return (
                   <div key={ttId} className="bg-white rounded-xl border border-slate-200 shadow-sm">
-                    <div className="bg-slate-50 rounded-t-xl border-b border-slate-200 px-5 py-3 flex items-center justify-between">
+                    <div className="bg-slate-50 rounded-t-xl border-b border-slate-200 px-5 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                       <h4 className="font-semibold text-slate-800">{taskName}</h4>
                       {!isCurrentCombinationFrozen && !isReadOnly && (
                         <button 
@@ -390,9 +455,9 @@ export default function Step3TaskStateMatrix({
                           const groupTotal = (group.stateCodes?.length || 0) * Number(group.budgetPerState || 0);
 
                           return (
-                            <div key={gIdx} className="grid grid-cols-12 gap-4 items-start border-b border-gray-100 pb-4 mb-4 relative">
+                            <div key={gIdx} className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start border-b border-gray-100 pb-4 mb-4 relative">
                               {/* Column 1: State Selection (Wider) */}
-                              <div className="col-span-7">
+                              <div className="col-span-1 lg:col-span-7">
                                 <div className="flex justify-between items-center mb-1">
                                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">States</label>
                                   {!isCurrentCombinationFrozen && !isReadOnly && (
@@ -415,27 +480,7 @@ export default function Step3TaskStateMatrix({
                                   )}
                                 </div>
                                 {isReadOnly ? (
-                                  <div className="flex flex-wrap items-center gap-1 mt-1">
-                                    {(group.stateCodes || []).slice(0, 2).map(state => {
-                                      const sObj = states.find(s => String(s.stateCode || s.code || s.subName) === String(state));
-                                      const displayName = sObj ? (sObj.stateName || sObj.name || sObj.subName) : state;
-                                      return (
-                                        <span key={state} className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-700 rounded-md border border-slate-200">
-                                          {displayName}
-                                        </span>
-                                      );
-                                    })}
-                                    {(group.stateCodes || []).length > 2 && (
-                                      <div className="relative group/badge cursor-pointer">
-                                        <span className="px-2 py-1 text-xs font-medium bg-red-50 text-red-700 rounded-md border border-red-100 hover:bg-red-100 transition-colors inline-block">
-                                          +{(group.stateCodes || []).length - 2}
-                                        </span>
-                                        <div className="absolute left-0 bottom-full mb-1 hidden group-hover/badge:block w-48 p-2 bg-slate-800 text-white text-xs rounded-md shadow-lg z-50">
-                                          {(group.stateCodes || []).slice(2).join(', ')}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
+                                  <ReadOnlyStateList stateCodes={group.stateCodes || []} states={states} />
                                 ) : (
                                   <MultiSelectDropdown
                                     options={stateOptions}
@@ -448,7 +493,7 @@ export default function Step3TaskStateMatrix({
                               </div>
 
                               {/* Column 2: Budget Input */}
-                              <div className="col-span-3">
+                              <div className="col-span-1 lg:col-span-3">
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Budget per State</label>
                                 <div className="relative">
                                   <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">₹</span>
@@ -466,8 +511,8 @@ export default function Step3TaskStateMatrix({
                               </div>
 
                               {/* Column 3: Row Total & Remove Button */}
-                              <div className="col-span-2 flex flex-col justify-end h-full">
-                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 text-right">Group Total</label>
+                              <div className="col-span-1 lg:col-span-2 flex flex-row lg:flex-col justify-between lg:justify-end items-center lg:items-stretch h-full">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0 lg:mb-1 text-left lg:text-right">Group Total</label>
                                 <div className="flex items-center justify-end space-x-2 h-[42px]">
                                   <span className="text-sm font-bold text-gray-900">
                                     ₹{groupTotal.toLocaleString()}
@@ -493,7 +538,8 @@ export default function Step3TaskStateMatrix({
                     </div>
                   </div>
                 );
-              })}
+              })
+              })()}
               
               <div className="flex items-center justify-end pt-4 border-t border-slate-200">
                 {!isReadOnly && (
