@@ -4,6 +4,8 @@ import collaborationApi from '../api/collaboration'
 import tasksApi from '../api/tasks'
 import api from '../api/client'
 import { useToast } from './Toast'
+import { useAuth } from '../auth/AuthContext'
+import { Rights } from '../constants/rights'
 
 // ─── File-type helpers ────────────────────────────────────────────────────────
 
@@ -70,12 +72,16 @@ async function triggerDownload(taskId, assetId, filename, onError) {
 
 // ─── Single asset row ─────────────────────────────────────────────────────────
 
-function AssetRow({ asset, taskId, currentUserId, onDeleted }) {
+function AssetRow({ asset, taskId, taskStatus, currentUserId, onDeleted }) {
+  const { user } = useAuth()
   const toast = useToast()
   const [deleting, setDeleting] = useState(false)
   const name  = displayName(asset)
   const type  = detectType(asset.url, name)
   const isOwn = currentUserId != null && Number(asset.userId) === Number(currentUserId)
+  const canDelete = Boolean(user?.hasRight?.(Rights.DELETE_MY_ASSET))
+    && isOwn
+    && (taskStatus === 'IN_PROGRESS' || taskStatus === 'REWORK')
 
   const handleDelete = async () => {
     if (!window.confirm(`Remove "${name}"?`)) return
@@ -154,8 +160,8 @@ function AssetRow({ asset, taskId, currentUserId, onDeleted }) {
         </div>
       </div>
 
-      {/* Delete — own assets only */}
-      {isOwn && (
+      {/* Delete — own assets only when task is in progress or rework */}
+      {canDelete && (
         <button
           onClick={handleDelete}
           disabled={deleting}
@@ -208,20 +214,29 @@ function UploadRow({ name, status, error }) {
  *   canUpload     — (optional) show the Add Files button and handle uploads
  *   onClose       — close handler
  */
-export default function AssetPreviewModal({ taskId, taskName, currentUserId, canUpload = false, onClose }) {
+export default function AssetPreviewModal({ taskId, taskName, taskStatus, currentUserId, canUpload = false, onClose }) {
+  const { user } = useAuth()
+  const effectiveUserId = currentUserId ?? user?.id
   const toast = useToast()
   const [assets,       setAssets]       = useState([])
   const [loading,      setLoading]      = useState(true)
   const [pendingFiles, setPendingFiles] = useState([])
   const [uploadError,  setUploadError]  = useState('')
+  const [accessDeniedError, setAccessDeniedError] = useState(null)
   const fileRef = useRef(null)
 
   const isUploading = pendingFiles.some(f => f.status === 'uploading')
 
-  const refreshAssets = () =>
-    collaborationApi.getAssets(taskId)
+  const refreshAssets = () => {
+    setAccessDeniedError(null)
+    return collaborationApi.getAssets(taskId)
       .then(res => setAssets(res.data || []))
-      .catch(() => {})
+      .catch((err) => {
+        if (err?.response?.status === 403) {
+          setAccessDeniedError(err.response?.data?.message || 'Assets are hidden until the task enters the Requestor QC phase.')
+        }
+      })
+  }
 
   useEffect(() => {
     if (!taskId) return
@@ -317,14 +332,14 @@ export default function AssetPreviewModal({ taskId, taskName, currentUserId, can
           <div className="flex items-center gap-2">
             <button
               onClick={downloadAll}
-              disabled={assets.length === 0 || isDownloadingAll}
-              title={assets.length === 0 ? 'No assets to download' : `Download all ${assets.length} asset${assets.length !== 1 ? 's' : ''} as ZIP`}
+              disabled={assets.length === 0 || isDownloadingAll || Boolean(accessDeniedError)}
+              title={accessDeniedError ? 'Access restricted' : assets.length === 0 ? 'No assets to download' : `Download all ${assets.length} asset${assets.length !== 1 ? 's' : ''} as ZIP`}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Icon name="download" className="h-3.5 w-3.5" />
               {isDownloadingAll ? 'Zipping…' : 'Download All'}
             </button>
-            {canUpload && (
+            {canUpload && !accessDeniedError && (
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={isUploading}
@@ -344,7 +359,7 @@ export default function AssetPreviewModal({ taskId, taskName, currentUserId, can
         </div>
 
         {/* Hidden file input */}
-        {canUpload && (
+        {canUpload && !accessDeniedError && (
           <input
             ref={fileRef}
             type="file"
@@ -380,6 +395,14 @@ export default function AssetPreviewModal({ taskId, taskName, currentUserId, can
         <div className="overflow-y-auto p-4 space-y-3 flex-1">
           {loading ? (
             <p className="text-center text-slate-400 text-sm py-8">Loading assets…</p>
+          ) : accessDeniedError ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+              <div className="h-10 w-10 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mb-2">
+                <Icon name="lock" className="h-5 w-5" />
+              </div>
+              <p className="text-sm font-semibold text-slate-800">Assets Restricted</p>
+              <p className="text-xs text-slate-500 mt-1 max-w-xs">{accessDeniedError}</p>
+            </div>
           ) : assets.length === 0 ? (
             <div className="text-center py-10">
               <Icon name="upload" className="mx-auto h-8 w-8 text-slate-200 mb-2" />
@@ -391,7 +414,8 @@ export default function AssetPreviewModal({ taskId, taskName, currentUserId, can
                 key={a.assetId}
                 asset={a}
                 taskId={taskId}
-                currentUserId={currentUserId}
+                taskStatus={taskStatus}
+                currentUserId={effectiveUserId}
                 onDeleted={handleDeleted}
               />
             ))

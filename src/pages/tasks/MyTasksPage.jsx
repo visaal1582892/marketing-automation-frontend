@@ -611,6 +611,9 @@ function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFligh
   // (or when the task itself is now CANCELLED).
   const campaignDead = task.campaignStatus === 'REJECTED' || task.campaignStatus === 'COMPLETED'
   const isCancelled  = task.status === 'CANCELLED' || (campaignDead && task.status !== 'COMPLETED')
+  const isQc         = ['MARKETING_REVIEW', 'REQUESTOR_REVIEW', 'QC_REVIEW', 'MANAGER_QC_REVIEW', 'REQUESTOR_QC_REVIEW'].includes(task.status)
+  const isDone       = task.status === 'COMPLETED'
+  const canShowAssets = isInProgress || isRework || isQc || isDone || isHeld || (task.fileUrls?.length > 0)
 
   return (
     <div className={`rounded-xl border bg-white shadow-sm overflow-hidden ${
@@ -756,11 +759,18 @@ function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFligh
           )}
 
           <ActionMenu align="right">
-            {!closed && (
+            {!isCancelled && (
               <ActionMenuItem
                 icon="eye"
                 label="View Brief"
                 onClick={onView}
+              />
+            )}
+            {canShowAssets && (
+              <ActionMenuItem
+                icon="paperclip"
+                label="View Assets"
+                onClick={() => setShowAssets(true)}
               />
             )}
             {isActiveWork && (
@@ -815,7 +825,7 @@ function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFligh
         )
       })()}
 
-      {(isInProgress || (task.fileUrls?.length > 0)) && (
+      {canShowAssets && (
         <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5 flex flex-wrap items-center gap-4 text-xs text-slate-600">
           <button
             onClick={() => setShowAssets(true)}
@@ -828,7 +838,7 @@ function TaskCard({ task, now, hoursSnapshot, busy, closed, isNextUp, hasInFligh
       )}
 
       {showAssets && (
-        <AssetPanel task={task} allowUpload={isInProgress} onClose={() => setShowAssets(false)} />
+        <AssetPanel task={task} allowUpload={isInProgress || isRework} onClose={() => setShowAssets(false)} />
       )}
     </div>
   )

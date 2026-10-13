@@ -5,6 +5,7 @@ import api from '../api/client'
 import Icon from './Icon'
 import { useToast } from './Toast'
 import { useAuth } from '../auth/AuthContext'
+import { Rights } from '../constants/rights'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -146,11 +147,23 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
   const currentUserId = user?.id
   const isUploading   = pendingFiles.some(f => f.status === 'uploading')
   const canUpload     = allowUpload || (CHAT_OPEN_STATUSES.includes(task.status) && task.collaborationActive)
+  const [accessDeniedError, setAccessDeniedError] = useState(null)
 
-  const refreshAssets = () =>
-    collaborationApi.getAssets(task.taskId)
+  const canDeleteAsset = (a) =>
+    Boolean(user?.hasRight?.(Rights.DELETE_MY_ASSET)) &&
+    Number(a.userId) === Number(currentUserId) &&
+    (task?.status === 'IN_PROGRESS' || task?.status === 'REWORK')
+
+  const refreshAssets = () => {
+    setAccessDeniedError(null)
+    return collaborationApi.getAssets(task.taskId)
       .then(res => setAssets(res.data || []))
-      .catch(() => {})
+      .catch((err) => {
+        if (err?.response?.status === 403) {
+          setAccessDeniedError(err.response?.data?.message || 'Assets are hidden until the task enters the Requestor QC phase.')
+        }
+      })
+  }
 
   useEffect(() => {
     refreshAssets().finally(() => setLoading(false))
@@ -342,7 +355,7 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
           </a>
         </div>
       </div>
-      {Number(a.userId) === Number(currentUserId) && (
+      {canDeleteAsset(a) && (
         <button
           onClick={() => removeAsset(a.assetId)}
           title="Remove asset"
@@ -383,14 +396,14 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
         <div className={`flex items-center gap-2 ${inline ? 'ml-auto' : ''}`}>
           <button
             onClick={downloadAll}
-            disabled={assets.length === 0 || isDownloadingAll}
-            title={assets.length === 0 ? 'No assets to download' : `Download all ${assets.length} asset${assets.length !== 1 ? 's' : ''} as ZIP`}
+            disabled={assets.length === 0 || isDownloadingAll || Boolean(accessDeniedError)}
+            title={accessDeniedError ? 'Access restricted' : assets.length === 0 ? 'No assets to download' : `Download all ${assets.length} asset${assets.length !== 1 ? 's' : ''} as ZIP`}
             className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Icon name="download" className="h-3.5 w-3.5" />
             {isDownloadingAll ? 'Zipping…' : 'Download All'}
           </button>
-          {canUpload && !inline && (
+          {canUpload && !inline && !accessDeniedError && (
             <button
               onClick={() => fileRef.current?.click()}
               disabled={isUploading}
@@ -423,7 +436,7 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
       />
 
       {/* Drag-and-drop upload zone — inline mode only */}
-      {canUpload && inline && (
+      {canUpload && inline && !accessDeniedError && (
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -475,6 +488,14 @@ export default function AssetPanel({ task, onClose, allowUpload = false, inline 
       <div className={`space-y-2 ${inline ? '' : 'overflow-y-auto p-4 flex-1'}`}>
         {loading ? (
           <p className="text-center text-slate-400 text-sm py-6">Loading…</p>
+        ) : accessDeniedError ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+            <div className="h-10 w-10 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mb-2">
+              <Icon name="lock" className="h-5 w-5" />
+            </div>
+            <p className="text-sm font-semibold text-slate-800">Assets Restricted</p>
+            <p className="text-xs text-slate-500 mt-1 max-w-xs">{accessDeniedError}</p>
+          </div>
         ) : assets.length === 0 ? (
           <div className={`text-center ${inline ? 'py-4' : 'py-10'}`}>
             {!inline && <Icon name="upload" className="mx-auto h-8 w-8 text-slate-200 mb-2" />}

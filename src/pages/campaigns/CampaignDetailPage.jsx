@@ -487,6 +487,7 @@ export default function CampaignDetailPage() {
         <AssetPreviewModal
           taskId={assetPreviewTask.taskId}
           taskName={assetPreviewTask.granularTaskName || `Task ${formatTaskId(assetPreviewTask.taskId)}`}
+          taskStatus={assetPreviewTask.status}
           currentUserId={myUserId}
           onClose={() => setAssetPreviewTask(null)}
         />

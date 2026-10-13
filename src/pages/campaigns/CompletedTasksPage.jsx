@@ -256,6 +256,7 @@ export default function CompletedTasksPage() {
         <AssetPreviewModal
           taskId={assetTask.taskId}
           taskName={assetTask.granularTaskName || `Task ${assetTask.taskId}`}
+          taskStatus={assetTask.status}
           currentUserId={user?.id}
           onClose={() => setAssetTask(null)}
         />

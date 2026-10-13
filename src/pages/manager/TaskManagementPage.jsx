@@ -883,6 +883,7 @@ export default function TaskManagementPage() {
         <AssetPreviewModal
           taskId={assetPreviewTask.taskId}
           taskName={assetPreviewTask.granularTaskName || `Task ${formatTaskId(assetPreviewTask.taskId)}`}
+          taskStatus={assetPreviewTask.status}
           currentUserId={user?.id}
           onClose={() => setAssetPreviewTask(null)}
         />
