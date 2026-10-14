@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Icon from './Icon'
+import Modal from './Modal'
 import collaborationApi from '../api/collaboration'
 import tasksApi from '../api/tasks'
 import api from '../api/client'
@@ -72,30 +73,23 @@ async function triggerDownload(taskId, assetId, filename, onError) {
 
 // ─── Single asset row ─────────────────────────────────────────────────────────
 
-function AssetRow({ asset, taskId, taskStatus, currentUserId, onDeleted }) {
-  const { user } = useAuth()
+function AssetRow({ asset, taskId, taskStatus, currentUserId, onDelete }) {
+  const { user, hasRight } = useAuth()
   const toast = useToast()
-  const [deleting, setDeleting] = useState(false)
   const name  = displayName(asset)
   const type  = detectType(asset.url, name)
-  const isOwn = currentUserId != null && Number(asset.userId) === Number(currentUserId)
-  const canDelete = Boolean(user?.hasRight?.(Rights.DELETE_MY_ASSET))
+  const effectiveUserId = currentUserId ?? user?.id ?? user?.userId ?? user?.uid
+  const isOwn = effectiveUserId != null && Number(asset.userId) === Number(effectiveUserId)
+  const statusUpper = (taskStatus || '').trim().toUpperCase()
+  const hasDeleteRight = Boolean(
+    hasRight?.(Rights.DELETE_MY_ASSET) ||
+    user?.rights?.includes?.(Rights.DELETE_MY_ASSET) ||
+    hasRight?.('DELETE_MY_ASSET') ||
+    user?.rights?.includes?.('DELETE_MY_ASSET')
+  )
+  const canDelete = hasDeleteRight
     && isOwn
-    && (taskStatus === 'IN_PROGRESS' || taskStatus === 'REWORK')
-
-  const handleDelete = async () => {
-    if (!window.confirm(`Remove "${name}"?`)) return
-    setDeleting(true)
-    try {
-      await collaborationApi.deleteAsset(taskId, asset.assetId)
-      onDeleted(asset.assetId)
-      toast.success('Asset removed.')
-    } catch (e) {
-      toast.error(e?.response?.data?.message || 'Could not remove asset.')
-    } finally {
-      setDeleting(false)
-    }
-  }
+    && (statusUpper === 'IN_PROGRESS' || statusUpper === 'REWORK')
 
   const handleDownloadError = (e) => {
     toast.error(e?.response?.data?.message || 'Download failed. Please try again.')
@@ -163,14 +157,11 @@ function AssetRow({ asset, taskId, taskStatus, currentUserId, onDeleted }) {
       {/* Delete — own assets only when task is in progress or rework */}
       {canDelete && (
         <button
-          onClick={handleDelete}
-          disabled={deleting}
+          onClick={() => onDelete(asset)}
           title="Remove asset"
-          className="rounded-lg p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0 disabled:opacity-50"
+          className="rounded-lg p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0"
         >
-          {deleting
-            ? <span className="h-3.5 w-3.5 animate-spin rounded-full border border-rose-400 border-t-transparent block" />
-            : <Icon name="trash2" className="h-3.5 w-3.5" />}
+          <Icon name="trash2" className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
@@ -216,13 +207,15 @@ function UploadRow({ name, status, error }) {
  */
 export default function AssetPreviewModal({ taskId, taskName, taskStatus, currentUserId, canUpload = false, onClose }) {
   const { user } = useAuth()
-  const effectiveUserId = currentUserId ?? user?.id
+  const effectiveUserId = currentUserId ?? user?.id ?? user?.userId ?? user?.uid
   const toast = useToast()
   const [assets,       setAssets]       = useState([])
   const [loading,      setLoading]      = useState(true)
   const [pendingFiles, setPendingFiles] = useState([])
   const [uploadError,  setUploadError]  = useState('')
   const [accessDeniedError, setAccessDeniedError] = useState(null)
+  const [deleteTarget, setDeleteTarget]           = useState(null)
+  const [deleteLoading, setDeleteLoading]         = useState(false)
   const fileRef = useRef(null)
 
   const isUploading = pendingFiles.some(f => f.status === 'uploading')
@@ -416,11 +409,73 @@ export default function AssetPreviewModal({ taskId, taskName, taskStatus, curren
                 taskId={taskId}
                 taskStatus={taskStatus}
                 currentUserId={effectiveUserId}
-                onDeleted={handleDeleted}
+                onDelete={setDeleteTarget}
               />
             ))
           )}
         </div>
+
+        {/* ── Custom Delete Confirmation Modal ── */}
+        {deleteTarget && (
+          <Modal
+            open={Boolean(deleteTarget)}
+            onClose={() => !deleteLoading && setDeleteTarget(null)}
+            title="Remove Deliverable"
+            size="sm"
+            zIndex="z-[120]"
+            footer={
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={deleteLoading}
+                  className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!deleteTarget) return
+                    const assetId = deleteTarget.assetId
+                    const targetTaskId = deleteTarget.taskId || taskId
+                    setDeleteLoading(true)
+                    try {
+                      await collaborationApi.deleteAsset(targetTaskId, assetId)
+                      handleDeleted(assetId)
+                      setDeleteTarget(null)
+                      toast.success('Asset removed.')
+                    } catch (e) {
+                      toast.error(e?.response?.data?.message || 'Could not remove asset.')
+                    } finally {
+                      setDeleteLoading(false)
+                    }
+                  }}
+                  disabled={deleteLoading}
+                  className="rounded-lg bg-rose-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50 transition shadow-sm"
+                >
+                  {deleteLoading ? 'Removing…' : 'Remove Asset'}
+                </button>
+              </div>
+            }
+          >
+            <div className="space-y-3 py-1">
+              <div className="flex items-start gap-3 rounded-xl bg-rose-50 p-3.5 border border-rose-100">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-100 text-rose-600 shrink-0 mt-0.5">
+                  <Icon name="trash2" className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-rose-900 truncate">
+                    Remove "{displayName(deleteTarget)}"?
+                  </p>
+                  <p className="text-xs text-rose-700 mt-1">
+                    This deliverable asset will be permanently removed from this task.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Modal>
+        )}
       </div>
     </div>
   )

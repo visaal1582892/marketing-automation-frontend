@@ -1,11 +1,11 @@
-﻿import { useEffect } from 'react'
+import { useEffect } from 'react'
 import Icon from './Icon'
 
 /**
  * Centered, accessible modal with backdrop blur, ESC-to-close, scroll-lock.
  * Compact density to match the rest of the UI.
  */
-export default function Modal({ open, onClose, title, children, footer, size = 'md', maxWidth }) {
+export default function Modal({ open, onClose, title, children, footer, size = 'md', maxWidth, zIndex = 'z-modal' }) {
   useEffect(() => {
     if (!open) return undefined
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -29,8 +29,8 @@ export default function Modal({ open, onClose, title, children, footer, size = '
 
   return (
     <div
-      className="fixed inset-0 z-modal flex items-center justify-center p-4
-                 bg-slate-900/45 backdrop-blur-sm"
+      className={`fixed inset-0 ${zIndex} flex items-center justify-center p-4
+                 bg-slate-900/45 backdrop-blur-sm`}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
